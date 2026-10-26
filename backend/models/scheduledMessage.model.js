@@ -15,6 +15,11 @@ const scheduledMessageSchema = new mongoose.Schema({
   sentMessage: { type: ObjectId, ref: "Message", default: null },
   // For "Remind me about this": which message the reminder points back to
   ref: { type: { messageId: String, chatId: String, isGroup: Boolean, chatName: String, _id: false }, default: null },
+  // Repeating ("every 2 minutes"): after each send, sendAt moves on by everyMinutes until `left` runs out or `until` passes
+  repeat: {
+    type: { everyMinutes: Number, until: Date, left: Number, sent: Number, _id: false },
+    default: null,
+  },
 }, { timestamps: true })
 
 scheduledMessageSchema.index({ status: 1, sendAt: 1 })

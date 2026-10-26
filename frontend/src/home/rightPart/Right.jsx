@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { AnimatePresence } from 'motion/react'
 import { LuUpload } from 'react-icons/lu'
 import ChatUser from './ChatUser'
@@ -14,6 +14,9 @@ import AiChat from '../ai/AiChat'
 import ScheduledBar from './ScheduledBar'
 import SmartReplies from './SmartReplies'
 import CatchUp from './CatchUp'
+import ChatSearch from './ChatSearch'
+import PinnedBar from './PinnedBar'
+import { loadChatTimer } from '../../utils/chatExtras'
 import Avatar from '../Avatar'
 import { LogoMark } from '../../components/ui'
 import useConversation from '../../Zustand/UserConversation'
@@ -63,9 +66,13 @@ const Welcome = () => {
 }
 
 const Right = () => {
+  const [AuthUser] = useAuth()
   const { selectedConversation, setSelectedConversation, selectionMode } = useConversation()
   const [infoOpen, setInfoOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  const [searchFor, setSearchFor] = useState(null) // chat id the search bar is open for
+  // This chat's disappearing-messages timer
+  useEffect(() => { loadChatTimer(selectedConversation) }, [selectedConversation?._id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [dragging, setDragging] = useState(false)
 
@@ -99,7 +106,11 @@ const Right = () => {
           onToggleInfo={() => setInfoOpen((v) => !v)}
           infoOpen={infoOpen}
           onClear={() => setConfirmClear(true)}
+          onSearch={() => setSearchFor((id) => (id === selectedConversation._id ? null : selectedConversation._id))}
+          searchOpen={searchFor === selectedConversation._id}
         />
+        {searchFor === selectedConversation._id && <ChatSearch onClose={() => setSearchFor(null)} />}
+        <PinnedBar key={`pin-${selectedConversation._id}`} canUnpin={!selectedConversation.announcement || selectedConversation.admins?.some((a) => String(a._id ?? a) === String(AuthUser?._id))} />
         <CatchUp key={`cu-${selectedConversation._id}`} />
         <Messages />
         <ScheduledBar key={selectedConversation._id} />

@@ -54,8 +54,11 @@ const ICON_SIZES = { xs: 'size-3.5', sm: 'size-4', md: 'size-5', lg: 'size-8' }
 
 // Picture for a group (people icon), an announcements group (megaphone) or a
 // community (stacked squares, in a rounded square so it stands out from groups).
-export const GroupAvatar = ({ name, size = 'md', announcement = false, community = false }) => {
+export const GroupAvatar = ({ name, src = null, size = 'md', announcement = false, community = false }) => {
   const Icon = community ? LuLayers : announcement ? LuMegaphone : LuUsers
+  if (src) {
+    return <img src={src} alt={name} className={`shrink-0 object-cover ring-1 ring-slate-800/10 dark:ring-white/10 ${community ? 'rounded-xl' : 'rounded-full'} ${SIZES[size]}`} />
+  }
   return (
     <div className={`flex shrink-0 items-center justify-center ${community ? 'rounded-xl' : 'rounded-full'} ${SIZES[size]} ${colorOf(name)}`}>
       <Icon className={ICON_SIZES[size]} />
@@ -63,7 +66,7 @@ export const GroupAvatar = ({ name, size = 'md', announcement = false, community
   )
 }
 
-// NexChat AI's picture
+// Nexa's picture
 export const AiAvatar = ({ size = 'md', className = '' }) => {
   const [failed, setFailed] = useState(false)
   if (failed) {

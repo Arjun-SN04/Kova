@@ -95,7 +95,24 @@ const useConversation = create((set) => ({
   scheduledVersion: 0,
   bumpScheduled: () => set((state) => ({ scheduledVersion: state.scheduledVersion + 1 })),
 
-  // Which list the sidebar shows: 'chats' | 'calls' | 'communities'
+  // Chats pinned to the top of my list (ids in pin order) and messages I starred
+  pinnedChats: [],
+  setPinnedChats: (pinnedChats) => set({ pinnedChats }),
+  starredIds: [],
+  setStarredIds: (starredIds) => set({ starredIds }),
+  setStarred: (id, on) => set((state) => ({
+    starredIds: on ? [...new Set([...state.starredIds, String(id)])] : state.starredIds.filter((s) => s !== String(id)),
+  })),
+
+  // Status (24-hour updates): { mine: [], people: [{ user, statuses, allSeen }] }
+  statusFeed: { mine: [], people: [] },
+  setStatusFeed: (statusFeed) => set({ statusFeed }),
+
+  // Disappearing-messages timer per chat id (seconds, 0 = off)
+  chatTimers: {},
+  setChatTimer: (chatId, seconds) => set((state) => ({ chatTimers: { ...state.chatTimers, [String(chatId)]: seconds } })),
+
+  // Which list the sidebar shows: 'chats' | 'calls' | 'communities' | 'starred'
   activePanel: 'chats',
   setActivePanel: (activePanel) =>
     set(() => {

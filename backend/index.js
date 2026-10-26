@@ -11,7 +11,13 @@ import groupRoutes from "./routes/group.route.js"
 import communityRoutes from "./routes/community.route.js"
 import callRoutes from "./routes/call.route.js"
 import aiRoutes from "./routes/ai.route.js"
+import googleRoutes from "./routes/google.route.js"
+import pushRoutes from "./routes/push.route.js"
+import statusRoutes from "./routes/status.route.js"
+import gifRoutes from "./routes/gif.route.js"
 import { startScheduler } from "./utils/scheduler.js"
+import { startAgenda } from "./utils/agenda.js"
+import { startDisappearing } from "./utils/disappear.js"
 import { app, server } from "./socket/socket.js"
 
 dotenv.config()
@@ -22,7 +28,7 @@ const port = process.env.PORT || 3000
 const mongo_uri = process.env.MONGODB_URI
 
 mongoose.connect(mongo_uri)
-  .then(() => { console.log("Connected to MongoDB"); startScheduler() })
+  .then(() => { console.log("Connected to MongoDB"); startScheduler(); startAgenda(); startDisappearing() })
   .catch((err) => console.log("MongoDB connection error:", err))
 
 app.use(express.json())
@@ -52,9 +58,13 @@ app.use("/groups", groupRoutes)
 app.use("/communities", communityRoutes)
 app.use("/calls", callRoutes)
 app.use("/ai", aiRoutes)
+app.use("/google", googleRoutes)
+app.use("/push", pushRoutes)
+app.use("/status", statusRoutes)
+app.use("/gifs", gifRoutes)
 
 app.get("/", (req, res) => {
-  res.send("NexChat API is running")
+  res.send("Kova API is running")
 })
 
 server.listen(port, () => {

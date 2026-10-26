@@ -9,6 +9,10 @@ import usePageTitle from '../hooks/usePageTitle'
 import { loadConversations, markSeen } from '../utils/conversations'
 import { loadCommunities } from '../utils/groups'
 import { loadCalls } from '../utils/calls'
+import { AI_CHAT } from '../utils/ai'
+import { readGoogleResult } from '../utils/google'
+import ReminderToasts from './ReminderToasts'
+import { loadStatusFeed } from '../utils/status'
 
 // Includes the 64px section rail
 const MIN_WIDTH = 360
@@ -40,13 +44,22 @@ const ChatLayout = () => {
   useEffect(() => {
     loadConversations(); loadCommunities(); loadCalls()
     axios.get('/api/ai/bot', { withCredentials: true }).then((res) => useConversation.getState().setNexaId(res.data.botId)).catch(() => {})
+    // Contacts' 24-hour status updates
+    loadStatusFeed()
+    // Pinned chats + starred messages
+    axios.get('/api/message/prefs', { withCredentials: true })
+      .then((res) => { useConversation.getState().setPinnedChats(res.data.pinnedChats); useConversation.getState().setStarredIds(res.data.starred) })
+      .catch(() => {})
+    // Back from connecting Google: open Nexa (it shows the result)
+    if (readGoogleResult()) useConversation.getState().setSelectedConversation(AI_CHAT)
   }, [])
 
   // Opening a chat marks it as read (and again when you come back to the tab)
   const openId = selectedConversation?._id
   const openIsGroup = !!selectedConversation?.isGroup
   useEffect(() => {
-    if (!openId || selectedConversation?.isCommunity || selectedConversation?.isAi) return
+    if (selectedConversation?.isAi) { clearUnread(AI_CHAT._id); return }
+    if (!openId || selectedConversation?.isCommunity) return
     clearUnread(openId)
     markSeen(openId, openIsGroup)
     const onVisible = () => document.visibilityState === 'visible' && markSeen(openId, openIsGroup)
@@ -83,6 +96,7 @@ const ChatLayout = () => {
 
   return (
     <div>
+      <ReminderToasts />
       <div className="flex h-dvh overflow-hidden bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
         <aside
           className={`${selectedConversation ? 'hidden md:flex' : 'flex'} w-full shrink-0 md:w-(--sidebar-w)`}

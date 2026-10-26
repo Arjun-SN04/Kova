@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import PollDialog from './PollDialog'
 import axios from 'axios'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuCamera, LuCheck, LuSmile, LuSparkles, LuUndo2, LuFileText, LuLoaderCircle, LuMic, LuPaperclip, LuPencil, LuReply, LuSendHorizontal, LuTrash2, LuX } from 'react-icons/lu'
+import { LuCamera, LuChartColumn, LuCheck, LuSmile, LuSparkles, LuUndo2, LuFileText, LuLoaderCircle, LuMic, LuPaperclip, LuPencil, LuReply, LuSendHorizontal, LuTrash2, LuX } from 'react-icons/lu'
 import useSendMessage from '../../context/useSendMessage'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
@@ -34,6 +35,8 @@ const TypeSent = () => {
   const [progress, setProgress] = useState(null) // 0..1 while uploading
   const fileInputRef = useRef(null)
   const [cameraOpen, setCameraOpen] = useState(false)
+  const [pollOpen, setPollOpen] = useState(false)
+  const closePoll = useCallback(() => setPollOpen(false), [])
   const voice = useVoiceRecorder()
   const [AuthUser] = useAuth()
   const inputRef = useRef(null)
@@ -489,6 +492,16 @@ const TypeSent = () => {
               </button>
             )}
             <button
+              type="button"
+              onClick={() => setPollOpen(true)}
+              disabled={!!editingMessage || busy}
+              aria-label="Create a poll"
+              title="Create a poll"
+              className="hidden size-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 sm:flex dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+            >
+              <LuChartColumn className="size-4.5" />
+            </button>
+            <button
               ref={emojiBtnRef}
               type="button"
               onClick={() => setEmojiOpen((o) => !o)}
@@ -557,6 +570,7 @@ const TypeSent = () => {
       <AnimatePresence>
         {cameraOpen && <CameraDialog onClose={() => setCameraOpen(false)} onCapture={pickFile} />}
       </AnimatePresence>
+      <PollDialog open={pollOpen} onClose={closePoll} />
 
     </div>
   )

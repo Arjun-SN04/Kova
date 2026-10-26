@@ -13,6 +13,10 @@ const groupSchema = new mongoose.Schema({
   community: { type: ObjectId, ref: "Community", default: null },
   // A community's Announcements group: everyone in it, only admins can post
   announcement: { type: Boolean, default: false },
+  // Disappearing messages in seconds (0 = off); admins set it
+  disappearAfter: { type: Number, default: 0 },
+  // Group photo on Cloudinary (null = icon)
+  avatar: { type: { url: String, publicId: String, _id: false }, default: null },
   // When each member last read the group, for unread counts: { userId: Date }
   reads: { type: Map, of: Date, default: {} },
 }, { timestamps: true })

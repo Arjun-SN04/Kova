@@ -1,12 +1,15 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
+import axios from 'axios'
 import { motion } from 'motion/react'
-import { LuCheck, LuChevronRight, LuLogOut, LuPencil, LuShield, LuShieldOff, LuTrash2, LuUserMinus, LuUserPlus, LuX } from 'react-icons/lu'
+import { LuCamera, LuCheck, LuChevronRight, LuLogOut, LuPencil, LuShield, LuShieldOff, LuTrash2, LuUserMinus, LuUserPlus, LuX } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
 import Avatar, { GroupAvatar } from '../Avatar'
 import ConfirmDialog from '../ConfirmDialog'
 import AddPeopleDialog from './AddPeopleDialog'
+import ChatSettings from '../rightPart/ChatSettings'
 import { communitiesApi, errorOf, groupsApi, isAdminOf, loadCommunities } from '../../utils/groups'
+import { compressAvatar } from '../../utils/attachments'
 
 const smallBtn = 'flex size-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white'
 
@@ -20,6 +23,27 @@ const GroupInfo = ({ group, onClose }) => {
   const [name, setName] = useState(group.name)
   const [description, setDescription] = useState(group.description || '')
   const [error, setError] = useState('')
+  const photoInput = useRef(null)
+  const [photoBusy, setPhotoBusy] = useState(false)
+
+  // Group photo: square-crop and shrink like profile photos, then upload (null = remove)
+  const changePhoto = async (file) => {
+    setPhotoBusy(true); setError('')
+    try {
+      if (file) {
+        const form = new FormData()
+        const small = await compressAvatar(file)
+        form.append('avatar', small, small.name || 'group.webp')
+        await axios.put(`/api/groups/${group._id}/avatar`, form, { withCredentials: true })
+      } else {
+        await axios.delete(`/api/groups/${group._id}/avatar`, { withCredentials: true })
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || "Couldn't update the photo")
+    } finally {
+      setPhotoBusy(false)
+    }
+  }
   const [adding, setAdding] = useState(false)
   const [pool, setPool] = useState([])
   const [confirm, setConfirm] = useState(null) // 'leave' | 'delete' | { remove: member }
@@ -98,7 +122,26 @@ const GroupInfo = ({ group, onClose }) => {
 
         <div className="flex-1 overflow-y-auto p-6">
           <div className="flex flex-col items-center text-center">
-            <GroupAvatar name={group.name} announcement={group.announcement} size="lg" />
+            <div className="relative">
+              <GroupAvatar name={group.name} src={group.avatar?.url} announcement={group.announcement} size="lg" />
+              {amAdmin && !group.announcement && (
+                <>
+                  <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) changePhoto(f) }} />
+                  <button
+                    onClick={() => photoInput.current?.click()}
+                    disabled={photoBusy}
+                    className="absolute -bottom-1 -right-1 flex size-8 items-center justify-center rounded-full bg-indigo-600 text-white shadow ring-4 ring-white transition hover:bg-indigo-500 disabled:opacity-60 dark:ring-slate-950"
+                    title={group.avatar ? 'Change group photo' : 'Add group photo'}
+                    aria-label="Change group photo"
+                  >
+                    {photoBusy ? <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <LuCamera className="size-3.5" />}
+                  </button>
+                </>
+              )}
+            </div>
+            {amAdmin && group.avatar && !group.announcement && (
+              <button onClick={() => changePhoto(null)} disabled={photoBusy} className="mt-2 text-xs text-slate-400 hover:text-red-600 hover:underline">Remove photo</button>
+            )}
             {editing ? (
               <div className="mt-4 w-full space-y-2">
                 <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900" />
@@ -130,6 +173,8 @@ const GroupInfo = ({ group, onClose }) => {
               <LuChevronRight className="size-4 text-slate-400" />
             </button>
           )}
+
+          {!group.announcement && <ChatSettings chat={group} canChangeTimer={amAdmin} />}
 
           {error && <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
 

@@ -3,8 +3,16 @@ import { Group } from "../models/group.model.js"
 import { Message } from "../models/message.model.js"
 import { Conversation } from "../models/conversation.model.js"
 import { emitToUsers } from "./notify.js"
+import { previewOf, sendPush } from "./push.js"
 
 const same = (a, b) => String(a) === String(b)
+
+// Notify people who don't have Kova open (title: the sender, or the group)
+const pushFrom = async (senderId, to, msg, groupName = null) => {
+  const sender = await User.findById(senderId).select("fullName").catch(() => null)
+  const name = sender?.fullName || "Kova"
+  sendPush(to, { title: groupName || name, body: `${groupName ? `${name.split(" ")[0]}: ` : ""}${previewOf(msg)}`, tag: groupName ? `group-${msg.groupId}` : `chat-${senderId}` }).catch(() => {})
+}
 
 // Send a text message on someone's behalf (used by Nexa and scheduled messages).
 // Applies the same rules as the app: contacts only, group members only, admins-only announcements.
@@ -22,6 +30,7 @@ export const deliverText = async ({ senderId, receiverId = null, groupId = null,
     group.updatedAt = new Date()
     await group.save()
     emitToUsers(group.members, "newMessage", msg)
+    pushFrom(senderId, group.members.filter((m) => !same(m, senderId)), msg, group.name)
     return msg
   }
 
@@ -39,5 +48,6 @@ export const deliverText = async ({ senderId, receiverId = null, groupId = null,
   conversation.messages.push(msg._id)
   await conversation.save()
   emitToUsers(self ? [senderId] : [receiverId, senderId], "newMessage", msg)
+  if (!self) pushFrom(senderId, [receiverId], msg)
   return msg
 }

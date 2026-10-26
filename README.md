@@ -747,7 +747,35 @@ NEXA_IMAGES_PER_DAY=15             # per person
 # Fallbacks: Puter FLUX (npm run puter:login fills this in), then SubNP's free API (no key)
 PUTER_AUTH_TOKEN=
 # Nexa's web search uses Groq's built-in browser_search (gpt-oss models): no extra key
+
+# Push notifications (generate once: npx web-push generate-vapid-keys)
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:you@example.com
+
+# Nexa reading photos (Groq vision model)
+GROQ_VISION_MODEL=qwen/qwen3.8-27b
+
+# GIF search in the emoji / GIF / sticker picker (free key: developers.giphy.com > Create an API key)
+# Stickers work without it (Google's animated Noto emoji)
+GIPHY_API_KEY=
+
+# Google Calendar + Tasks for Nexa (morning brief, meeting reminders, "schedule a Meet")
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:5173/api/google/callback   # production: https://<your-vercel-app>/api/google/callback
 ```
+
+### Google Calendar (optional)
+Lets each user connect their Google Calendar + Tasks in the Nexa chat (📅 button). Nexa then sends a morning brief, reminds them before meetings (with a Join button for Google Meet), and can create events with Meet links and manage tasks.
+1. [Google Cloud console](https://console.cloud.google.com/): create a project, then **APIs & Services → Library**: enable **Google Calendar API** and **Google Tasks API**.
+2. **OAuth consent screen**: External, add the scopes `calendar.events` and `tasks`. While the app is in *Testing*, add each person who will connect as a **test user** (max 100). Publishing for everyone needs Google's verification of these scopes.
+3. **Credentials → Create credentials → OAuth client ID → Web application**. Authorized redirect URIs: `http://localhost:5173/api/google/callback` and `https://<your-vercel-app>/api/google/callback`.
+4. Put the client ID, secret and redirect URI in `backend/.env` (and in Render for production).
+
+Refresh tokens are stored encrypted (AES-256-GCM, key from `GOOGLE_TOKEN_KEY` or the JWT secret).
+
+**Gmail (optional):** also enable the **Gmail API**, and on the consent screen's Data Access add `gmail.readonly` and `gmail.compose`. Users then tap **Connect Gmail** in Nexa's calendar settings. Nexa only saves drafts; it never sends mail.
 
 ### 3. Run
 Run both apps in the background with one command (ports 3000 and 5173 are freed first):
@@ -787,7 +815,7 @@ It is safe to run again.
 
 ### Backend → Render
 1. Create a Web Service (or use `render.yaml`). Root directory `backend`, build `npm install`, start `node index.js`.
-2. Set environment variables: `MONGODB_URI`, `token`, `PORT`, `FRONTEND_URL` (your Vercel URL), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER`, `GROQ_API_KEYS`, `GROQ_MODEL`, `NEXA_IMAGES_PER_DAY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` (optional: `PUTER_AUTH_TOKEN`).
+2. Set environment variables: `MONGODB_URI`, `token`, `PORT`, `FRONTEND_URL` (your Vercel URL), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER`, `GROQ_API_KEYS`, `GROQ_MODEL`, `NEXA_IMAGES_PER_DAY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` (optional: `PUTER_AUTH_TOKEN`).
 3. If the production database predates contacts, run `node scripts/migrate-contacts.js` once against it.
 
 ### Frontend → Vercel

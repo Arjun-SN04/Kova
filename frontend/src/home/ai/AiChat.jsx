@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuArrowLeft, LuBellRing, LuCheck, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImage, LuLanguages, LuLifeBuoy, LuListChecks, LuMessageCircle, LuNewspaper, LuPenLine, LuSend, LuSendHorizontal, LuSparkles, LuTrash2, LuX } from 'react-icons/lu'
+import { LuArrowLeft, LuBellRing, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImage, LuLanguages, LuLifeBuoy, LuListChecks, LuMessageCircle, LuNewspaper, LuPenLine, LuSend, LuSendHorizontal, LuSmile, LuSparkles, LuTrash2, LuX } from 'react-icons/lu'
 import { selfContact } from '../../utils/conversations'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
@@ -11,6 +11,16 @@ import { AiAvatar } from '../Avatar'
 import ConfirmDialog from '../ConfirmDialog'
 import Mermaid from './Mermaid'
 import NexaImage from './NexaImage'
+import GoogleCalendarDialog from './GoogleCalendarDialog'
+import { clearGoogleResult, peekGoogleResult } from '../../utils/google'
+import { AgendaCard, DraftCard, EventCard, ReminderCard, SnoozedCard, TaskCard } from './AgendaCards'
+import { useSocket } from '../../context/SocketProvider'
+import { compressImage, formatBytes } from '../../utils/attachments'
+import { TIMER_OPTIONS, timerLabel } from '../../utils/chatExtras'
+import MediaPicker from '../media/MediaPicker'
+import { remarkHtmlBreaks } from '../../utils/markdown'
+
+const REMARK = [remarkGfm, remarkHtmlBreaks]
 
 const api = { withCredentials: true }
 const MAX_HEIGHT = 140
@@ -22,11 +32,13 @@ const CAPABILITIES = [
   { Icon: LuClock, title: 'Schedule messages', example: 'Wish Priya happy birthday tomorrow at 9am' },
   { Icon: LuListChecks, title: 'Manage scheduled', example: 'What do I have scheduled?' },
   { Icon: LuNewspaper, title: 'Catch up on a chat', example: 'Summarize my chat with Arjun' },
+  { Icon: LuCalendarDays, title: 'Calendar & Meet', example: "What's on my calendar today?" },
+  { Icon: LuFileText, title: 'Read photos & PDFs', example: 'Summarize this PDF in 5 bullets' },
   { Icon: LuGlobe, title: 'Search the web', example: "What's today's top news?" },
   { Icon: LuImage, title: 'Create images', example: 'Draw a cozy cabin in the snow at night' },
   { Icon: LuPenLine, title: 'Write and rewrite', example: 'Make this more professional: ' },
   { Icon: LuLanguages, title: 'Translate', example: "Translate 'see you soon' to Hindi" },
-  { Icon: LuLifeBuoy, title: 'NexChat help', example: 'How do communities work?' },
+  { Icon: LuLifeBuoy, title: 'Kova help', example: 'How do communities work?' },
 ]
 const IN_CHATS = ['✨ Rewrite', 'Smart replies', 'Catch me up', 'Translate', 'Transcribe', 'Remind me', '@Nexa in groups']
 
@@ -63,6 +75,9 @@ const CapabilitiesCard = ({ onPick }) => (
 
 const timeZone = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch { return 'UTC' } })()
 const formatWhen = (date) => new Date(date).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+
+// 2 -> "2 min", 60 -> "hour", 1440 -> "day", 90 -> "90 min"
+const everyLabel = (m) => (m === 1440 ? 'day' : m === 60 ? 'hour' : m % 1440 === 0 ? `${m / 1440} days` : m % 60 === 0 ? `${m / 60} hours` : `${m} min`)
 
 const formatTime = (date) => new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
@@ -178,9 +193,11 @@ const ActionCard = ({ action, status, onCancel, onOpen }) => {
   const [busy, setBusy] = useState(false)
   const state = action.type === 'scheduled' ? status || 'pending' : action.type
   const look = {
-    pending: { Icon: LuClock, title: `Scheduled · ${formatWhen(action.sendAt)}`, tone: 'text-indigo-600 dark:text-indigo-400' },
+    pending: action.repeatEvery
+      ? { Icon: LuRepeat, title: `Repeats every ${everyLabel(action.repeatEvery)}`, tone: 'text-indigo-600 dark:text-indigo-400' }
+      : { Icon: LuClock, title: `Scheduled · ${formatWhen(action.sendAt)}`, tone: 'text-indigo-600 dark:text-indigo-400' },
     sending: { Icon: LuClock, title: 'Sending…', tone: 'text-indigo-600 dark:text-indigo-400' },
-    sent: { Icon: LuCheck, title: action.type === 'sent' ? 'Sent' : `Sent · ${formatWhen(action.sendAt)}`, tone: 'text-emerald-600 dark:text-emerald-400' },
+    sent: { Icon: LuCheck, title: action.type === 'sent' ? 'Sent' : action.repeatEvery ? 'Finished' : `Sent · ${formatWhen(action.sendAt)}`, tone: 'text-emerald-600 dark:text-emerald-400' },
     cancelled: { Icon: LuX, title: 'Cancelled', tone: 'text-slate-500 dark:text-slate-400' },
     failed: { Icon: LuCircleAlert, title: action.error ? `Couldn't send: ${action.error}` : "Couldn't send", tone: 'text-red-600 dark:text-red-400' },
   }[state] || { Icon: LuCheck, title: state, tone: 'text-slate-500' }
@@ -189,11 +206,14 @@ const ActionCard = ({ action, status, onCancel, onOpen }) => {
     <div className="mt-1.5 w-full max-w-sm rounded-xl bg-white px-3 py-2.5 text-sm shadow-xs ring-1 ring-slate-200/80 dark:bg-slate-800/70 dark:ring-slate-700/60">
       <p className={`flex items-center gap-1.5 text-xs font-medium ${look.tone}`}><look.Icon className="size-3.5" /> {look.title}</p>
       {action.to && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">To {action.to}</p>}
+      {action.repeatEvery && state === 'pending' && (
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">From {formatWhen(action.sendAt)} · {action.repeatTimes} times{action.lastAt ? `, last at ${formatWhen(action.lastAt)}` : ''}</p>
+      )}
       {action.text && <p className="mt-1 line-clamp-3 border-l-2 border-slate-200 pl-2 text-slate-700 dark:border-slate-600 dark:text-slate-200">{action.text}</p>}
       <div className="mt-2 flex gap-1.5">
         {state === 'pending' && (
           <button disabled={busy} onClick={async () => { setBusy(true); await onCancel(action.id); setBusy(false) }} className="h-7 rounded-md px-2.5 text-xs font-medium text-red-600 ring-1 ring-slate-200 transition hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:ring-slate-700 dark:hover:bg-red-500/10">
-            Cancel
+            {action.repeatEvery ? 'Stop' : 'Cancel'}
           </button>
         )}
         {action.chatId && state !== 'cancelled' && (
@@ -226,7 +246,7 @@ const Sources = ({ items }) => (
   </div>
 )
 
-const NexaBubble = ({ message, statuses, onCancel, onOpen, onPick, onAsk, onImageSaved }) => {
+const NexaBubble = memo(({ message, statuses, onCancel, onOpen, onPick, onAsk, onImageSaved, onKeep, onDelete }) => {
   if (message.actions?.some((a) => a.type === 'capabilities')) {
     return (
       <div className="mb-3 flex items-end gap-2 pb-1">
@@ -238,14 +258,17 @@ const NexaBubble = ({ message, statuses, onCancel, onOpen, onPick, onAsk, onImag
       </div>
     )
   }
-  return <NexaAnswer message={message} statuses={statuses} onCancel={onCancel} onOpen={onOpen} onAsk={onAsk} onImageSaved={onImageSaved} />
-}
+  return <NexaAnswer message={message} statuses={statuses} onCancel={onCancel} onOpen={onOpen} onAsk={onAsk} onImageSaved={onImageSaved} onKeep={onKeep} onDelete={onDelete} />
+})
 
-const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved }) => {
+const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved, onKeep, onDelete }) => {
   const [copied, setCopied] = useState(false)
   const components = useMemo(() => ({ ...md, li: listItem(onAsk) }), [onAsk])
   // Diagrams and tables get a wider bubble
   const wide = /```mermaid|^\s*\|.*\|\s*$/m.test(message.content || '')
+  // Reminders and the morning brief are shown as a card only (the text is kept for Copy)
+  const cardOnly = message.actions?.some((a) => a.type === 'agenda' || a.type === 'reminder' || (a.type === 'event' && a.reminder))
+  const greeting = (message.content || '').match(/\*\*(.+?)\*\*/)?.[1]
   const copy = async () => {
     try { await navigator.clipboard.writeText(message.content); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { /* ignore */ }
   }
@@ -253,14 +276,21 @@ const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved }
     <div className="group mb-3 flex items-end gap-2 pb-1">
       <AiAvatar size="xs" />
       <div className={`flex min-w-0 flex-col items-start ${wide ? wideBubbleWidth : bubbleWidth}`}>
-        <div className="max-w-full rounded-2xl rounded-bl-md bg-white px-3.5 py-2 text-sm leading-relaxed text-slate-800 shadow-xs ring-1 ring-slate-200/80 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700/60">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{message.content}</ReactMarkdown>
-        </div>
+        {!cardOnly && (
+          <div className="max-w-full rounded-2xl rounded-bl-md bg-white px-3.5 py-2 text-sm leading-relaxed text-slate-800 shadow-xs ring-1 ring-slate-200/80 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700/60">
+            <ReactMarkdown remarkPlugins={REMARK} components={components}>{message.content}</ReactMarkdown>
+          </div>
+        )}
         {(message.actions || []).map((a, i) => (a.type === 'image'
           ? <NexaImage key={a.id || i} messageId={message._id} action={a} fresh={isFresh(message)} onSaved={onImageSaved} />
-          : a.type === 'sources'
-            ? <Sources key={i} items={a.items || []} />
-            : <ActionCard key={i} action={a} status={a.id ? statuses[a.id] : null} onCancel={onCancel} onOpen={onOpen} />
+          : a.type === 'sources' ? <Sources key={i} items={a.items || []} />
+          : a.type === 'agenda' ? <AgendaCard key={i} action={a} greeting={greeting} />
+          : a.type === 'event' ? <EventCard key={i} action={a} messageId={message._id} onSaved={onImageSaved} />
+          : a.type === 'snoozed' ? <SnoozedCard key={i} action={a} />
+          : a.type === 'reminder' ? <ReminderCard key={i} action={a} status={statuses[a.id]} onStop={onCancel} />
+          : a.type === 'task' ? <TaskCard key={i} action={a} />
+          : a.type === 'draft' ? <DraftCard key={i} action={a} />
+          : <ActionCard key={i} action={a} status={a.id ? statuses[a.id] : null} onCancel={onCancel} onOpen={onOpen} />
         ))}
         <p className="mt-1 flex items-center gap-2 px-1 text-[11px] text-slate-400">
           {message.createdAt && formatTime(message.createdAt)}
@@ -268,6 +298,7 @@ const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved }
             {copied ? <LuCheck className="size-3" /> : <LuCopy className="size-3" />}
             {copied ? 'Copied' : 'Copy'}
           </button>
+          <MessageTools message={message} onKeep={onKeep} onDelete={onDelete} />
         </p>
       </div>
     </div>
@@ -277,16 +308,75 @@ const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved }
 // Answers from the last couple of minutes (older unfinished images wait for a click)
 const isFresh = (message) => Date.now() - new Date(message.createdAt).getTime() < 2 * 60 * 1000
 
-const MyBubble = ({ message }) => (
-  <div className="mb-3 flex justify-end pb-1">
-    <div className={`flex flex-col items-end ${bubbleWidth}`}>
-      <p className="whitespace-pre-wrap rounded-2xl rounded-br-md bg-indigo-600 px-3.5 py-2 text-sm leading-relaxed text-white">{message.content}</p>
-      <p className="mt-1 px-1 text-[11px] text-slate-400">{message.createdAt && formatTime(message.createdAt)}</p>
-    </div>
-  </div>
+// Keep (stop it disappearing) and Delete, under each message in the Nexa chat
+const MessageTools = ({ message, onKeep, onDelete, align = 'left' }) => {
+  const [confirm, setConfirm] = useState(false)
+  if (String(message._id).startsWith('temp-')) return null
+  const btn = 'inline-flex items-center gap-1 rounded px-1 transition hover:text-slate-700 dark:hover:text-slate-200'
+  return (
+    <span className={`flex items-center gap-2 ${align === 'right' ? 'order-first' : ''}`}>
+      {message.kept && <span className="inline-flex items-center gap-1 font-medium text-indigo-500"><LuBookmarkCheck className="size-3" /> Kept</span>}
+      <span className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+        <button onClick={() => onKeep(message, !message.kept)} className={btn} title={message.kept ? "Let it disappear again" : "Keep: it won't disappear"}>
+          <LuBookmark className="size-3" /> {message.kept ? "Don't keep" : 'Keep'}
+        </button>
+        {confirm ? (
+          <span className="inline-flex items-center gap-1.5">
+            <button onClick={() => onDelete(message)} className="font-medium text-red-600 hover:underline dark:text-red-400">Delete</button>
+            <button onClick={() => setConfirm(false)} className="hover:underline">Cancel</button>
+          </span>
+        ) : (
+          <button onClick={() => setConfirm(true)} className={`${btn} hover:text-red-600! dark:hover:text-red-400!`} title="Delete this message"><LuTrash2 className="size-3" /> Delete</button>
+        )}
+      </span>
+    </span>
+  )
+}
+
+// What Nexa can read
+const NEXA_FILES = 'image/jpeg,image/png,image/webp,image/gif,application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,.txt,text/csv,.csv'
+const NEXA_MAX_BYTES = 10 * 1024 * 1024
+
+const FileChip = ({ name, size, onDark }) => (
+  <span className={`flex max-w-full items-center gap-2.5 rounded-xl px-3 py-2 ${onDark ? 'bg-white/15' : 'bg-white ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700'}`}>
+    <span className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${onDark ? 'bg-white/20' : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300'}`}><LuFileText className="size-4" /></span>
+    <span className="min-w-0 text-left">
+      <span className="block truncate text-[13px] font-medium">{name}</span>
+      {size ? <span className={`block text-[11px] ${onDark ? 'text-indigo-100' : 'text-slate-400'}`}>{formatBytes(size)}</span> : null}
+    </span>
+  </span>
 )
 
-// Private chat with Nexa, NexChat's AI assistant (answers come from Groq via the server)
+const MyBubble = memo(({ message, onKeep, onDelete }) => (
+  <div className="group mb-3 flex justify-end pb-1">
+    <div className={`flex flex-col items-end gap-1 ${bubbleWidth}`}>
+      {message.attachment?.kind === 'image' && (
+        <a href={message.attachment.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl rounded-br-md ring-1 ring-slate-200 dark:ring-slate-700">
+          <img src={message.attachment.url} alt={message.attachment.name || 'Photo'} className="block max-h-72 max-w-full object-cover" />
+        </a>
+      )}
+      {message.attachment?.kind === 'sticker' && (
+        <img src={message.attachment.url} alt={message.attachment.name || 'Sticker'} className="size-32 object-contain" />
+      )}
+      {message.attachment?.kind === 'gif' && (
+        <div className="relative overflow-hidden rounded-2xl rounded-br-md ring-1 ring-slate-200 dark:ring-slate-700" style={{ aspectRatio: `${message.attachment.width || 1} / ${message.attachment.height || 1}`, width: Math.min(260, Math.round(220 * (message.attachment.width || 1) / (message.attachment.height || 1))) }}>
+          <img src={message.attachment.url} alt={message.attachment.name || 'GIF'} className="size-full object-cover" />
+          <span className="absolute bottom-1.5 left-1.5 rounded bg-black/55 px-1 text-[10px] font-bold text-white">GIF</span>
+        </div>
+      )}
+      {message.attachment && !['image', 'gif', 'sticker'].includes(message.attachment.kind) && (
+        <a href={message.attachment.url} target="_blank" rel="noreferrer" className="block max-w-full"><FileChip name={message.attachment.name} size={message.attachment.size} /></a>
+      )}
+      {message.content && <p className="whitespace-pre-wrap rounded-2xl rounded-br-md bg-indigo-600 px-3.5 py-2 text-sm leading-relaxed text-white">{message.content}</p>}
+      <p className="mt-1 flex items-center gap-2 px-1 text-[11px] text-slate-400">
+        <MessageTools message={message} onKeep={onKeep} onDelete={onDelete} align="right" />
+        {message.createdAt && formatTime(message.createdAt)}
+      </p>
+    </div>
+  </div>
+))
+
+// Private chat with Nexa, Kova's AI assistant (answers come from Groq via the server)
 const AiChat = () => {
   const [AuthUser] = useAuth()
   const { setSelectedConversation, contacts, groups, scheduledVersion } = useConversation()
@@ -297,6 +387,12 @@ const AiChat = () => {
   const [text, setText] = useState('')
   const [error, setError] = useState('')
   const [confirmClear, setConfirmClear] = useState(false)
+  // Google Calendar: open the settings when coming back from Google's sign-in
+  const [googleResult] = useState(() => peekGoogleResult())
+  useEffect(() => { clearGoogleResult() }, [])
+  const [calendarOpen, setCalendarOpen] = useState(!!googleResult)
+  const [googleConnected, setGoogleConnected] = useState(null)
+  const { socket } = useSocket()
   const scrollRef = useRef(null)
   const inputRef = useRef(null)
   const firstName = AuthUser?.fullName?.split(' ')[0]
@@ -308,6 +404,52 @@ const AiChat = () => {
       .finally(() => setLoading(false))
     inputRef.current?.focus()
   }, [])
+
+  // Is Google connected? (dot on the calendar button)
+  useEffect(() => {
+    axios.get('/api/google/status', api).then((res) => setGoogleConnected(res.data.connected)).catch(() => {})
+  }, [])
+  const onGoogleStatus = useCallback((s) => setGoogleConnected(s.connected), [])
+
+  // Disappearing Nexa chat (24 h by default)
+  const [timer, setTimer] = useState(86400)
+  const [timerOpen, setTimerOpen] = useState(false)
+  useEffect(() => {
+    axios.get('/api/ai/settings', api).then((res) => setTimer(res.data.disappearAfter)).catch(() => {})
+  }, [])
+  const changeTimer = async (secs) => {
+    setTimerOpen(false)
+    const before = timer
+    setTimer(secs)
+    try {
+      await axios.put('/api/ai/settings', { disappearAfter: secs }, api)
+      const res = await axios.get('/api/ai/messages', api)
+      setMessages(res.data.messages)
+    } catch { setTimer(before); setError("Couldn't change that setting.") }
+  }
+  const keepMessage = useCallback(async (m, kept) => {
+    try {
+      const res = await axios.put(`/api/ai/messages/${m._id}/keep`, { kept }, api)
+      setMessages((prev) => prev.map((x) => (x._id === m._id ? { ...x, kept: res.data.message.kept, expiresAt: res.data.message.expiresAt } : x)))
+    } catch { setError("Couldn't update that message.") }
+  }, [])
+  const deleteMessage = useCallback(async (m) => {
+    try {
+      await axios.delete(`/api/ai/messages/${m._id}`, api)
+      setMessages((prev) => prev.filter((x) => x._id !== m._id))
+    } catch { setError("Couldn't delete that message.") }
+  }, [])
+
+  // Messages Nexa sends by itself: morning brief, meeting reminders
+  useEffect(() => {
+    if (!socket) return
+    const onNexa = (msg) => setMessages((prev) => (prev.some((m) => m._id === msg._id) ? prev : [...prev, msg]))
+    // Old messages disappearing (the 24-hour timer)
+    const onGone = (ids) => { const gone = new Set(ids); setMessages((prev) => prev.filter((m) => !gone.has(String(m._id)))) }
+    socket.on('nexaMessage', onNexa)
+    socket.on('nexaMessagesDeleted', onGone)
+    return () => { socket.off('nexaMessage', onNexa); socket.off('nexaMessagesDeleted', onGone) }
+  }, [socket])
 
   // Keep scheduled cards up to date (sent, cancelled…)
   useEffect(() => {
@@ -348,20 +490,93 @@ const AiChat = () => {
     el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`
   }, [text])
 
-  const ask = async (question = text) => {
-    const value = question.trim()
-    if (!value || thinking) return
+  // A photo or document to send with the next question
+  const [pending, setPending] = useState(null) // { file, url }
+  const fileRef = useRef(null)
+  const pickFile = async (raw) => {
+    if (!raw) return
+    setError('')
+    if (raw.size > NEXA_MAX_BYTES) return setError('That file is over 10 MB.')
+    const okType = NEXA_FILES.split(',').some((t) => (t.startsWith('.') ? raw.name.toLowerCase().endsWith(t) : raw.type === t))
+    if (!okType) return setError('Nexa can read photos, PDFs, Word documents and text files.')
+    const file = raw.type.startsWith('image/') ? await compressImage(raw) : raw
+    setPending((old) => { if (old?.url) URL.revokeObjectURL(old.url); return { file, url: file.type.startsWith('image/') ? URL.createObjectURL(file) : null } })
+    inputRef.current?.focus()
+  }
+  const clearPending = () => setPending((old) => { if (old?.url) URL.revokeObjectURL(old.url); return null })
+  // Paste a screenshot straight into the box
+  const onPaste = (e) => {
+    const item = [...(e.clipboardData?.items || [])].find((i) => i.kind === 'file')
+    if (item) { e.preventDefault(); pickFile(item.getAsFile()) }
+  }
+
+  // Emoji, GIF and sticker picker
+  const [mediaOpen, setMediaOpen] = useState(false)
+  const mediaBtnRef = useRef(null)
+  const closeMedia = useCallback(() => setMediaOpen(false), [])
+  // Put the emoji where the cursor is (or replace the selected text)
+  const insertEmoji = (emoji) => {
+    const el = inputRef.current
+    const start = el?.selectionStart ?? text.length
+    const end = el?.selectionEnd ?? text.length
+    setText((prev) => prev.slice(0, start) + emoji + prev.slice(end))
+    requestAnimationFrame(() => {
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(start + emoji.length, start + emoji.length)
+    })
+  }
+  // A GIF or sticker goes straight to Nexa (with any text typed so far)
+  const sendMedia = async (media) => {
+    if (thinking) return
+    const value = text.trim()
     setError('')
     setText('')
-    const temp = { _id: `temp-${Date.now()}`, role: 'user', content: value, createdAt: new Date().toISOString() }
+    const temp = { _id: `temp-${Date.now()}`, role: 'user', createdAt: new Date().toISOString(), content: value, attachment: { kind: media.kind, url: media.url, name: media.title, width: media.width, height: media.height } }
     setMessages((prev) => [...prev, temp])
     setThinking(true)
     try {
-      const res = await axios.post('/api/ai/messages', { message: value, timeZone }, api)
+      const res = await axios.post('/api/ai/messages', { message: value, timeZone, media }, api)
       setMessages((prev) => [...prev.filter((m) => m._id !== temp._id), res.data.question, res.data.answer])
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m._id !== temp._id))
       setText(value)
+      setError(err.response?.data?.error || "Nexa couldn't answer. Try again.")
+    } finally {
+      setThinking(false)
+      inputRef.current?.focus()
+    }
+  }
+
+  const ask = async (question = text) => {
+    const file = pending?.file
+    const value = question.trim()
+    if ((!value && !file) || thinking) return
+    setError('')
+    setText('')
+    const temp = {
+      _id: `temp-${Date.now()}`, role: 'user', createdAt: new Date().toISOString(),
+      content: value || (file ? (file.type.startsWith('image/') ? "What's in this photo?" : 'Summarize this document.') : ''),
+      attachment: file ? { kind: file.type.startsWith('image/') ? 'image' : 'file', url: pending.url, name: file.name, size: file.size } : null,
+    }
+    setMessages((prev) => [...prev, temp])
+    setPending(null)
+    setThinking(true)
+    try {
+      let body = { message: value, timeZone }
+      if (file) {
+        body = new FormData()
+        body.append('message', value)
+        body.append('timeZone', timeZone)
+        body.append('file', file, file.name)
+      }
+      const res = await axios.post('/api/ai/messages', body, api)
+      setMessages((prev) => [...prev.filter((m) => m._id !== temp._id), res.data.question, res.data.answer])
+      if (temp.attachment?.url?.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(temp.attachment.url), 5000)
+    } catch (err) {
+      setMessages((prev) => prev.filter((m) => m._id !== temp._id))
+      setText(value)
+      if (file) setPending({ file, url: temp.attachment.url })
       setError(err.response?.data?.error || "Nexa couldn't answer. Try again.")
     } finally {
       setThinking(false)
@@ -392,6 +607,13 @@ const AiChat = () => {
     })
   }
 
+  // Same functions on every render, so the memoized bubbles don't redraw while typing
+  const latest = useRef({})
+  useEffect(() => { latest.current = { cancelScheduled, openChat, fill } })
+  const onCancelStable = useCallback((id) => latest.current.cancelScheduled(id), [])
+  const onOpenStable = useCallback((action) => latest.current.openChat(action), [])
+  const onPickStable = useCallback((example) => latest.current.fill(example), [])
+
   const clear = async () => {
     await axios.delete('/api/ai/messages', api)
     setMessages([])
@@ -412,11 +634,34 @@ const AiChat = () => {
         <div className="min-w-0">
           <p className="text-[15px] font-semibold">Nexa</p>
           <p className={`text-xs ${thinking ? 'font-medium text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
-            {thinking ? 'thinking…' : 'AI assistant'}
+            {thinking ? 'thinking…' : timer ? `AI assistant · messages disappear after ${timerLabel(timer)}` : 'AI assistant'}
           </p>
         </div>
+        <div className="relative ml-auto">
+          <button onClick={() => setTimerOpen((o) => !o)} className={`flex size-9 items-center justify-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 ${timer ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} title={`Disappearing messages: ${timerLabel(timer)}`} aria-label="Disappearing messages" aria-expanded={timerOpen}>
+            <LuTimer className="size-4.5" />
+          </button>
+          {timerOpen && (
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setTimerOpen(false)} />
+              <div role="menu" className="absolute right-0 top-full z-30 mt-1.5 w-64 rounded-xl bg-white p-1 shadow-xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+                <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Disappearing messages</p>
+                <p className="px-3 pb-2 text-xs text-slate-500 dark:text-slate-400">Old messages and their files are deleted. Tap Keep on a message to save it.</p>
+                {TIMER_OPTIONS.map(([secs, label]) => (
+                  <button key={secs} role="menuitemradio" aria-checked={timer === secs} onClick={() => changeTimer(secs)} className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
+                    {label}{timer === secs && <LuCheck className="size-4 text-indigo-600 dark:text-indigo-400" />}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        <button onClick={() => setCalendarOpen(true)} className="relative flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-violet-50 hover:text-violet-600 dark:text-slate-400 dark:hover:bg-violet-500/10 dark:hover:text-violet-300" title="Google Calendar & reminders" aria-label="Google Calendar and reminders">
+          <LuCalendarDays className="size-4.5" />
+          {googleConnected && <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-950" />}
+        </button>
         {messages.length > 0 && (
-          <button onClick={() => setConfirmClear(true)} className="ml-auto flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400" title="Clear chat" aria-label="Clear chat">
+          <button onClick={() => setConfirmClear(true)} className="flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400" title="Clear chat" aria-label="Clear chat">
             <LuTrash2 className="size-4.5" />
           </button>
         )}
@@ -428,7 +673,7 @@ const AiChat = () => {
             <div className="flex h-full flex-col items-center justify-center py-10 text-center">
               <AiAvatar size="lg" />
               <h2 className="mt-4 text-lg font-semibold">Hi {firstName}, I'm Nexa</h2>
-              <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">Your assistant in NexChat. Pick something to try, or just ask.</p>
+              <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">Your assistant in Kova. Pick something to try, or just ask.</p>
               <div className="mt-6 flex w-full justify-center">
                 <CapabilitiesCard onPick={fill} />
               </div>
@@ -436,34 +681,64 @@ const AiChat = () => {
           ) : (
             <div className="pb-2 pt-4">
               {messages.map((m) => (m.role === 'assistant'
-                ? <NexaBubble key={m._id} message={m} statuses={statuses} onCancel={cancelScheduled} onOpen={openChat} onPick={fill} onAsk={askAbout} onImageSaved={imageSaved} />
-                : <MyBubble key={m._id} message={m} />))}
+                ? <NexaBubble key={m._id} message={m} statuses={statuses} onCancel={onCancelStable} onOpen={onOpenStable} onPick={onPickStable} onAsk={askAbout} onImageSaved={imageSaved} onKeep={keepMessage} onDelete={deleteMessage} />
+                : <MyBubble key={m._id} message={m} onKeep={keepMessage} onDelete={deleteMessage} />))}
               <AnimatePresence>{thinking && <Thinking />}</AnimatePresence>
             </div>
           )}
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 sm:px-6 lg:px-8 dark:border-slate-800 dark:bg-slate-950">
+      <div className="relative shrink-0 border-t border-slate-200 bg-white px-4 py-3 sm:px-6 lg:px-8 dark:border-slate-800 dark:bg-slate-950">
+        <AnimatePresence>
+          {mediaOpen && <MediaPicker onEmoji={insertEmoji} onMedia={sendMedia} onClose={closeMedia} toggleRef={mediaBtnRef} className="left-4 sm:left-6 lg:left-8" />}
+        </AnimatePresence>
         {error && <p className="mb-2 px-1 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
+        {pending && (
+          <div className="mb-2 flex items-center gap-2">
+            {pending.url
+              ? <img src={pending.url} alt="" className="size-14 rounded-xl object-cover ring-1 ring-slate-200 dark:ring-slate-700" />
+              : <FileChip name={pending.file.name} size={pending.file.size} />}
+            <span className="text-xs text-slate-500 dark:text-slate-400">Ask anything about it, or just send</span>
+            <button type="button" onClick={clearPending} className="ml-auto flex size-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800" aria-label="Remove file"><LuX className="size-4" /></button>
+          </div>
+        )}
         <form onSubmit={(e) => { e.preventDefault(); ask() }} className="flex items-end gap-1 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xs transition focus-within:border-indigo-300 focus-within:ring-4 focus-within:ring-indigo-500/10 dark:border-slate-800 dark:bg-slate-900 dark:focus-within:border-indigo-500/50">
+          <input ref={fileRef} type="file" accept={NEXA_FILES} hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; pickFile(f) }} />
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={thinking} aria-label="Attach a photo or document" title="Send Nexa a photo or document (PDF, Word, text)" className="flex size-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white">
+            <LuPaperclip className="size-4.5" />
+          </button>
+          <button
+            type="button"
+            ref={mediaBtnRef}
+            onClick={() => setMediaOpen((o) => !o)}
+            aria-label="Emoji, GIFs and stickers"
+            aria-expanded={mediaOpen}
+            title="Emoji, GIFs and stickers"
+            className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white ${mediaOpen ? 'bg-slate-100 text-indigo-600 dark:bg-slate-800 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}
+          >
+            <LuSmile className="size-4.5" />
+          </button>
           <textarea
+            onPaste={onPaste}
             ref={inputRef}
             rows={1}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onKeyDown}
             maxLength={4000}
-            placeholder="Message Nexa"
+            placeholder={pending ? 'Ask about this file (optional)' : 'Message Nexa'}
             className="min-h-10 flex-1 resize-none bg-transparent py-2.5 pl-2.5 text-sm leading-5 text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100"
             style={{ maxHeight: MAX_HEIGHT }}
           />
-          <button type="submit" disabled={!text.trim() || thinking} aria-label="Send" title="Send" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:bg-indigo-500 active:scale-95 disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-500">
+          <button type="submit" disabled={(!text.trim() && !pending) || thinking} aria-label="Send" title="Send" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:bg-indigo-500 active:scale-95 disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-500">
             <LuSendHorizontal className="size-4" />
           </button>
         </form>
         <p className="mt-1.5 text-center text-[11px] text-slate-400">Nexa is AI and can make mistakes.</p>
       </div>
+
+      <GoogleCalendarDialog open={calendarOpen} onClose={() => setCalendarOpen(false)} result={googleResult} onStatus={onGoogleStatus} onTry={(example) => { setCalendarOpen(false); fill(example) }} />
 
       <ConfirmDialog
         open={confirmClear}

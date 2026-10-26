@@ -138,7 +138,7 @@ const SHOWCASE = [
     visual: (
       <OverlayCard className="flex items-center gap-4">
         <div className="shrink-0 rounded-xl bg-white p-2 ring-1 ring-slate-200 dark:ring-0">
-          <QRCodeSVG value="https://nexchat.app/invite/welcome" size={96} level="M" marginSize={0} />
+          <QRCodeSVG value="https://kova.app/invite/welcome" size={96} level="M" marginSize={0} />
         </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-slate-900 dark:text-white">Sofia Martinez</p>
@@ -254,46 +254,100 @@ const Features = () => {
 
         <Reveal className="mt-14 grid items-center gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-14">
           {/* Feature list */}
-          <div className="order-2 lg:order-1" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+          <div
+            className="order-2 space-y-2 lg:order-1"
+            onMouseLeave={() => setPaused(false)}
+          >
             {SHOWCASE.map(({ Icon, title, desc }, i) => {
               const on = i === active
               return (
-                <button
+                <div
                   key={title}
-                  onClick={() => setActive(i)}
-                  aria-pressed={on}
-                  className={`relative block w-full border-l-2 py-3.5 pl-5 text-left transition-colors ${
-                    on ? 'border-indigo-600 dark:border-indigo-400' : 'border-slate-200 hover:border-slate-300 dark:border-white/10 dark:hover:border-white/20'
+                  onMouseEnter={() => {
+                    setActive(i)
+                    setPaused(true)
+                  }}
+                  onClick={() => {
+                    setActive(i)
+                    setPaused(true)
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setActive(i)
+                    }
+                  }}
+                  className={`group relative block w-full cursor-pointer rounded-2xl p-4 text-left transition-all duration-300 ${
+                    on ? '' : 'hover:bg-slate-50/80 dark:hover:bg-white/[0.03]'
                   }`}
                 >
-                  <span className={`flex items-center gap-3 text-[15px] font-semibold transition-colors ${on ? 'text-slate-900 dark:text-white' : 'text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300'}`}>
-                    <Icon className={`size-4.5 ${on ? 'text-indigo-600 dark:text-indigo-400' : ''}`} />
-                    {title}
-                  </span>
-                  <AnimatePresence initial={false}>
-                    {on && (
-                      <motion.p
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.25, ease: EASE }}
-                        className="overflow-hidden pl-7.5 text-sm leading-relaxed text-slate-500 dark:text-zinc-400"
-                      >
-                        <span className="block pt-1.5">{desc}</span>
-                      </motion.p>
-                    )}
-                  </AnimatePresence>
-                  {/* progress until the next feature */}
-                  {on && !paused && (
-                    <motion.span
-                      key={`p${active}`}
-                      initial={{ scaleY: 0 }}
-                      animate={{ scaleY: 1 }}
-                      transition={{ duration: ROTATE_MS / 1000, ease: 'linear' }}
-                      className="absolute -left-0.5 top-0 h-full w-0.5 origin-top bg-indigo-300 dark:bg-indigo-300/60"
+                  {/* Sliding active pill indicator background */}
+                  {on && (
+                    <motion.div
+                      layoutId="activeFeaturePill"
+                      className="absolute inset-0 rounded-2xl border border-slate-200/80 bg-slate-100/90 shadow-xs dark:border-white/10 dark:bg-white/[0.07] dark:shadow-inner dark:shadow-white/5"
+                      transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
                     />
                   )}
-                </button>
+
+                  <div className="relative z-10 flex items-start gap-3.5">
+                    {/* Modern icon badge */}
+                    <div
+                      className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ${
+                        on
+                          ? 'bg-linear-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/25 ring-1 ring-white/20'
+                          : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200/80 group-hover:text-slate-800 dark:bg-white/5 dark:text-zinc-400 dark:group-hover:bg-white/10 dark:group-hover:text-zinc-200'
+                      }`}
+                    >
+                      <Icon className="size-5" />
+                    </div>
+
+                    <div className="min-w-0 flex-1 pt-0.5">
+                      <div className="flex items-center justify-between">
+                        <p
+                          className={`text-[15.5px] font-semibold tracking-tight transition-colors duration-200 ${
+                            on
+                              ? 'text-slate-900 dark:text-white'
+                              : 'text-slate-600 group-hover:text-slate-900 dark:text-zinc-400 dark:group-hover:text-zinc-200'
+                          }`}
+                        >
+                          {title}
+                        </p>
+                      </div>
+
+                      <AnimatePresence initial={false}>
+                        {on && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.28, ease: EASE }}
+                            className="overflow-hidden"
+                          >
+                            <p className="pt-1.5 text-[13.5px] leading-relaxed text-slate-500 dark:text-zinc-400">
+                              {desc}
+                            </p>
+
+                            {/* Sleek auto-rotation progress bar */}
+                            {!paused && (
+                              <div className="mt-3.5 h-1 w-full overflow-hidden rounded-full bg-slate-200/70 dark:bg-white/10">
+                                <motion.div
+                                  key={`prog-${active}`}
+                                  initial={{ width: '0%' }}
+                                  animate={{ width: '100%' }}
+                                  transition={{ duration: ROTATE_MS / 1000, ease: 'linear' }}
+                                  className="h-full rounded-full bg-linear-to-r from-indigo-500 via-violet-500 to-indigo-500"
+                                />
+                              </div>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                </div>
               )
             })}
           </div>
@@ -339,7 +393,7 @@ const UseCases = () => (
             Made for the people <Serif className="text-indigo-600 dark:text-indigo-400">you talk to most.</Serif>
           </h2>
         </div>
-        <p className="max-w-sm text-slate-500 dark:text-zinc-400">Whether it's two people or a whole crew, NexChat keeps everyone in the same conversation.</p>
+        <p className="max-w-sm text-slate-500 dark:text-zinc-400">Whether it's two people or a whole crew, Kova keeps everyone in the same conversation.</p>
       </Reveal>
 
       <div className="mt-14 grid gap-5 md:grid-cols-3">
@@ -464,7 +518,7 @@ const Footer = ({ loggedIn }) => {
     {
       title: 'Account',
       links: loggedIn
-        ? [{ to: '/', label: 'Open NexChat' }, { to: '/profile', label: 'Profile settings' }]
+        ? [{ to: '/', label: 'Open Kova' }, { to: '/profile', label: 'Profile settings' }]
         : [{ to: '/login', label: 'Sign in' }, { to: '/signup', label: 'Create account' }],
     },
     {
@@ -511,7 +565,7 @@ const Footer = ({ loggedIn }) => {
         </div>
 
         <div className="flex flex-col items-center justify-between gap-4 border-t border-slate-200/70 dark:border-white/8 py-8 sm:flex-row">
-          <p className="text-sm text-slate-500 dark:text-zinc-400">© {new Date().getFullYear()} NexChat. All rights reserved.</p>
+          <p className="text-sm text-slate-500 dark:text-zinc-400">© {new Date().getFullYear()} Kova. All rights reserved.</p>
           <p className="text-sm text-slate-500 dark:text-zinc-400">
             Made by{' '}
             <a href={GITHUB_PROFILE} target="_blank" rel="noopener noreferrer" className="font-semibold text-slate-900 dark:text-white underline-offset-4 hover:text-indigo-600 hover:underline">
@@ -546,21 +600,23 @@ const HomePage = () => {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  const cta = AuthUser ? { to: '/', label: 'Open NexChat' } : { to: '/signup', label: 'Get started for free' }
+  const cta = AuthUser ? { to: '/', label: 'Open Kova' } : { to: '/signup', label: 'Get started for free' }
 
   return (
     <div className="min-h-dvh overflow-x-clip bg-white text-slate-900 dark:bg-zinc-950 dark:text-white">
-      {/* Floating nav */}
-      <div className="fixed inset-x-0 top-0 z-50 px-4 pt-4">
-        <nav
-          className={`mx-auto flex h-14 max-w-[1400px] items-center justify-between rounded-full border pl-5 pr-2 transition-all duration-300 ${
-            scrolled ? 'border-slate-200/70 dark:border-white/8 bg-white/75 dark:bg-zinc-950/75 shadow-lg shadow-slate-900/5 backdrop-blur-xl dark:shadow-black/30' : 'border-transparent'
-          }`}
-        >
+      {/* Top nav attached flush to top */}
+      <header
+        className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
+          scrolled
+            ? 'border-b border-slate-200/80 bg-white/85 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/85'
+            : 'border-b border-slate-200/40 bg-white/60 backdrop-blur-md dark:border-white/5 dark:bg-zinc-950/60'
+        }`}
+      >
+        <nav className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-4 sm:px-6 lg:px-8">
           <Logo />
           <div className="hidden items-center gap-1 text-sm text-slate-600 dark:text-zinc-300 md:flex">
-            <a href="#features" className="rounded-full px-4 py-2 transition hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white">Features</a>
-            <a href="#how-it-works" className="rounded-full px-4 py-2 transition hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white">How it works</a>
+            <a href="#features" className="rounded-full px-4 py-2 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white">Features</a>
+            <a href="#how-it-works" className="rounded-full px-4 py-2 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white">How it works</a>
           </div>
           <div className="flex items-center gap-1.5">
             <button
@@ -581,7 +637,7 @@ const HomePage = () => {
             )}
           </div>
         </nav>
-      </div>
+      </header>
 
       {/* Hero */}
       <header className="pb-4 pt-32 sm:pt-40">

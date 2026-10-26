@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
+import { remarkHtmlBreaks } from '../../utils/markdown'
 import { motion } from 'motion/react'
 import { LuLoaderCircle, LuSparkles, LuX } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
+
+const HTML_BREAKS = [remarkHtmlBreaks]
 
 const md = {
   p: (props) => <p className="my-1 first:mt-0 last:mb-0" {...props} />,
@@ -48,7 +51,7 @@ const CatchUp = () => {
         ) : result.error ? (
           <p className="text-red-600 dark:text-red-400">{result.error}</p>
         ) : (
-          <ReactMarkdown components={md}>{result.summary}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={HTML_BREAKS} components={md}>{result.summary}</ReactMarkdown>
         )}
       </div>
     </motion.div>

@@ -81,7 +81,7 @@ const Login = () => {
       quote={<Quote />}
       footer={
         <>
-          New to NexChat?{" "}
+          New to Kova?{" "}
           <Link to="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">Create an account</Link>
         </>
       }

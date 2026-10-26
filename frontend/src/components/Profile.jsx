@@ -9,6 +9,7 @@ import usePageTitle from '../hooks/usePageTitle'
 import useThemeClass from '../hooks/useThemeClass'
 import { compressAvatar } from '../utils/attachments'
 import Logout from '../home/leftpart/Logout'
+import NotificationSettings from './NotificationSettings'
 import { checkUsernameFree, normalizeUsername, USERNAME_RULES } from '../utils/contacts'
 
 const TABS = [
@@ -174,6 +175,11 @@ const Profile = () => {
               </Button>
             )}
           </div>
+        </Card>
+
+        {/* Notifications */}
+        <Card className="mt-6 overflow-hidden">
+          <NotificationSettings />
         </Card>
 
         {/* Settings */}

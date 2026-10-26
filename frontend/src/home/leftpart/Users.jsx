@@ -29,7 +29,7 @@ const RowSkeleton = () => (
 const Users = () => {
   const [allUser, loading] = useGetAllUsers()
   const { onlineUsers } = useSocket()
-  const { unreadCounts, previews, typingUsers, requests, setContactsDialog, groups, communities, setCreateDialog } = useConversation()
+  const { unreadCounts, previews, typingUsers, requests, setContactsDialog, groups, communities, setCreateDialog, pinnedChats } = useConversation()
   const [AuthUser] = useAuth()
   const myId = String(AuthUser?._id)
   const [query, setQuery] = useState('')
@@ -51,6 +51,7 @@ const Users = () => {
 
   const onlineSet = useMemo(() => new Set(onlineUsers.map(String)), [onlineUsers])
   const unreadOf = (u) => unreadCounts[String(u._id)] || 0
+  const pinRank = (c) => { const i = pinnedChats.indexOf(String(c._id)); return i < 0 ? Infinity : i }
   const lastTime = (u) => (previews[String(u._id)] ? new Date(previews[String(u._id)].createdAt).getTime() : 0)
 
   // "Message yourself" row: shown first in the All tab, and when the search matches me
@@ -78,9 +79,10 @@ const Users = () => {
     return pool
       .filter(matches)
       .filter((c) => tab === 'all' || tab === 'groups' || (tab === 'online' ? onlineSet.has(String(c._id)) : unreadOf(c) > 0))
-      .sort((a, b) => lastTime(b) - lastTime(a) || a.fullName.localeCompare(b.fullName))
+      // Pinned chats first (in pin order), then the most recent
+      .sort((a, b) => pinRank(a) - pinRank(b) || lastTime(b) - lastTime(a) || a.fullName.localeCompare(b.fullName))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allUser, groups, query, tab, onlineSet, unreadCounts, previews])
+  }, [allUser, groups, query, tab, onlineSet, unreadCounts, previews, pinnedChats])
 
   const rowFor = (chat, compact = false) =>
     chat.isGroup ? (
@@ -92,6 +94,7 @@ const Users = () => {
         typing={typingUsers[String(chat._id)]}
         myId={myId}
         compact={compact}
+        pinned={pinnedChats.includes(String(chat._id))}
       />
     ) : (
       <User
@@ -102,6 +105,7 @@ const Users = () => {
         preview={previews[String(chat._id)]}
         typing={typingUsers[String(chat._id)]}
         myId={myId}
+        pinned={pinnedChats.includes(String(chat._id))}
       />
     )
 

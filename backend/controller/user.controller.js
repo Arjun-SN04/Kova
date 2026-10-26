@@ -8,7 +8,7 @@ import { RESERVED_USERNAMES, USERNAME_RE, USERNAME_RULES, normalizeUsername, new
 
 // Never send password hashes, contact lists or invite tokens to the browser
 const publicUser = (user) => {
-  const { password, confirmPassword, __v, contacts, inviteToken, ...rest } = user.toObject ? user.toObject() : user
+  const { password, confirmPassword, __v, contacts, inviteToken, pinnedChats, starred, ...rest } = user.toObject ? user.toObject() : user
   return rest
 }
 

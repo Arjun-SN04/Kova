@@ -1,5 +1,5 @@
 import React from 'react'
-import { LuChevronRight, LuFileText, LuImage, LuMic, LuVideo } from 'react-icons/lu'
+import { LuChevronRight, LuFileText, LuImage, LuMic, LuPin, LuVideo } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import { GroupAvatar } from '../Avatar'
 import { shortTime } from '../../utils/conversations'
@@ -11,7 +11,7 @@ const AttachmentIcon = ({ kind }) => {
 }
 
 // One group in the chat list. `compact` is used for groups listed under a community.
-export const GroupRow = ({ group, unread, preview, typing, myId, compact = false }) => {
+export const GroupRow = ({ group, unread, preview, typing, myId, compact = false, pinned = false }) => {
   const { selectedConversation, setSelectedConversation, clearUnread, setCatchUp } = useConversation()
   const id = String(group._id)
   const isSelected = String(selectedConversation?._id) === id
@@ -35,12 +35,13 @@ export const GroupRow = ({ group, unread, preview, typing, myId, compact = false
         isSelected ? 'bg-indigo-50 dark:bg-indigo-500/10' : 'hover:bg-slate-50 dark:hover:bg-slate-900'
       }`}
     >
-      <GroupAvatar name={group.name} announcement={group.announcement} size={compact ? 'sm' : 'md'} />
+      <GroupAvatar name={group.name} src={group.avatar?.url} announcement={group.announcement} size={compact ? 'sm' : 'md'} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
           <p className={`truncate text-sm ${isSelected ? 'font-semibold text-indigo-700 dark:text-indigo-300' : unread ? 'font-semibold text-slate-900 dark:text-white' : 'font-medium text-slate-800 dark:text-slate-200'}`}>
             {group.name}
           </p>
+          {pinned && <LuPin className="ml-auto size-3 shrink-0 -rotate-45 text-slate-400" title="Pinned" aria-label="Pinned" />}
           {preview && (
             <span className={`shrink-0 text-[11px] ${unread && !isSelected ? 'font-semibold text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>
               {shortTime(preview.createdAt)}

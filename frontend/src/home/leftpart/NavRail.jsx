@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { LuLayers, LuMessageSquareText, LuMoon, LuPhone, LuSettings, LuSun, LuUser } from 'react-icons/lu'
+import { LuLayers, LuMessageSquareText, LuMoon, LuPhone, LuSettings, LuSun, LuUser, LuStar, LuCircleDashed } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
 import { useTheme } from '../../context/ThemeProvider'
@@ -11,7 +11,7 @@ import { LogoMark } from '../../components/ui'
 // Unread chats, missed calls since I last opened Calls, unread community messages
 export const useNavBadges = () => {
   const [AuthUser] = useAuth()
-  const { unreadCounts, calls, callsSeenAt, groups } = useConversation()
+  const { unreadCounts, calls, callsSeenAt, groups, statusFeed } = useConversation()
   const communityGroups = new Set(groups.filter((g) => g.community).map((g) => String(g._id)))
   const total = (filter) => Object.entries(unreadCounts).filter(([id]) => filter(id)).reduce((n, [, c]) => n + c, 0)
   return {
@@ -19,13 +19,17 @@ export const useNavBadges = () => {
     calls: calls.filter((c) =>
       String(c.callee?._id) === String(AuthUser?._id) && c.status === 'missed' && new Date(c.startedAt).getTime() > callsSeenAt).length,
     communities: total((id) => communityGroups.has(id)),
+    // Contacts with status updates I haven't seen
+    status: statusFeed.people.filter((p) => !p.allSeen).length,
   }
 }
 
 export const NAV_ITEMS = [
   { id: 'chats', label: 'Chats', Icon: LuMessageSquareText },
+  { id: 'status', label: 'Status', Icon: LuCircleDashed },
   { id: 'calls', label: 'Calls', Icon: LuPhone },
   { id: 'communities', label: 'Communities', Icon: LuLayers },
+  { id: 'starred', label: 'Starred', Icon: LuStar },
 ]
 
 const Badge = ({ count, className = '' }) =>
@@ -46,7 +50,7 @@ export const NavRail = () => {
 
   return (
     <nav aria-label="Sections" className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-slate-200 bg-slate-50 py-4 md:flex dark:border-slate-800 dark:bg-slate-950">
-      <Link to="/home" className="group mb-3" title="NexChat home"><LogoMark className="size-9" /></Link>
+      <Link to="/home" className="group mb-3" title="Kova home"><LogoMark className="size-9" /></Link>
       {NAV_ITEMS.map(({ id, label, Icon }) => {
         const on = activePanel === id
         return (

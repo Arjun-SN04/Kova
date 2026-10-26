@@ -34,7 +34,7 @@ export const answerMention = async ({ groupId, message, sender, timeZone = "UTC"
       reply = await askGroq([
         {
           role: "system",
-          content: `You are Nexa, the AI assistant inside the NexChat group "${group.name}". ${sender.fullName} mentioned you, and your answer is posted in the group for everyone.
+          content: `You are Nexa, the AI assistant inside the Kova group "${group.name}". ${sender.fullName} mentioned you, and your answer is posted in the group for everyone.
 In the recent messages below, "Me" means ${sender.fullName}. Messages from "Nexa" are your own earlier answers.
 Answer as 1 to 4 short bullet points ("- " lines). Use people's first names exactly as written (never shorten them). No headings, no em or en dashes. If asked to decide or pick, pick clearly and say why in one line.
 
@@ -86,7 +86,7 @@ export const answerDirectMention = async ({ sender, otherId, message, timeZone =
       reply = await askGroq([
         {
           role: "system",
-          content: `You are Nexa, the AI assistant inside NexChat. ${sender.fullName} mentioned you in ${self ? "their private notes chat" : `their private chat with ${otherName}`}, and your answer is posted in that chat${self ? "" : " for both of them"}.
+          content: `You are Nexa, the AI assistant inside Kova. ${sender.fullName} mentioned you in ${self ? "their private notes chat" : `their private chat with ${otherName}`}, and your answer is posted in that chat${self ? "" : " for both of them"}.
 In the recent messages below, "Me" means ${sender.fullName}. Messages from "Nexa" are your own earlier answers.
 Answer as 1 to 4 short bullet points ("- " lines). Use people's first names exactly as written. No headings, no em or en dashes.
 

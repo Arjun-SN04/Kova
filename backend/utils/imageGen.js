@@ -3,7 +3,7 @@ import { createRequire } from "module"
 // Pictures for Nexa. Nobody signs in; providers are tried in this order:
 // 1. Cloudflare Workers AI FLUX (best quality, no watermark). Needs CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN.
 //    Free: 10,000 neurons a day, about 95 klein-4b or 170 schnell images at 1024px.
-// 2. Puter FLUX with NexChat's Puter account, if PUTER_AUTH_TOKEN is set.
+// 2. Puter FLUX with Kova's Puter account, if PUTER_AUTH_TOKEN is set.
 // 3. SubNP free API (no key). Its small watermark is cropped off when we store the image.
 // Returns { buffer, mimetype, transformation? } (transformation: applied by Cloudinary on upload).
 

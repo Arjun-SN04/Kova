@@ -7,6 +7,8 @@ const conversation = mongoose.Schema({
 
         }
     ],
+    // Disappearing messages for this chat, in seconds (0 = off)
+    disappearAfter: { type: Number, default: 0 },
     messages : [
         {
             type:mongoose.Schema.Types.ObjectId,

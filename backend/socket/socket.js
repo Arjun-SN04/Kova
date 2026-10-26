@@ -4,6 +4,8 @@ import express from "express";
 import User from "../models/user.model.js";
 import { Group } from "../models/group.model.js";
 import { logCall } from "../utils/callLog.js";
+import { registerGroupCallHandlers } from "./groupCalls.js";
+import { sendPush } from "../utils/push.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -69,7 +71,11 @@ const registerCallHandlers = (socket, userId) => {
       if (!me || !me.contacts.some((c) => c.toString() === to)) return reply("not-allowed");
       const info = { caller: userId, callee: to, type, startedAt: new Date(), answeredAt: null };
       // They'll still see a missed call in the chat
-      if (!userSocketMap[to]) { record(info); return reply("offline"); }
+      if (!userSocketMap[to]) {
+        record(info);
+        sendPush([to], { title: `Missed ${type} call`, body: `${me.fullName} tried to call you`, tag: `call-${userId}`, urgent: true }).catch(() => {});
+        return reply("offline");
+      }
       if (activeCalls[to]) { record(info); return reply("busy"); }
       if (activeCalls[userId]) endCall(userId);
 
@@ -146,10 +152,12 @@ io.on("connection", (socket) => {
   socket.on("stopTyping", relay("stopTyping"))
 
   if (userId && userId !== "undefined") registerCallHandlers(socket, userId)
+  const leaveGroupCalls = userId && userId !== "undefined" ? registerGroupCallHandlers(io, socket, userId, userSocketMap) : () => {}
 
   socket.on("disconnect", () => {
     if (userId && userSocketMap[userId] === socket.id) {
       endCall(userId, "ended");
+      leaveGroupCalls();
       delete userSocketMap[userId];
       console.log(`❌ User disconnected | userId: ${userId}`);
     }

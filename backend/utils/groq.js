@@ -49,10 +49,11 @@ export const tidy = (text) =>
 // One model turn. Returns the assistant message ({ content, tool_calls? }),
 // or throws an Error with a friendly message.
 // toolChoice: "auto" (default), or { type: "function", function: { name } } to require that tool
-export const groqChat = async (messages, { tools = null, toolChoice = null, maxTokens = 700, temperature = 0.6, model: preferred = null } = {}) => {
+// only: use just `model` (e.g. the vision model; the others can't see images)
+export const groqChat = async (messages, { tools = null, toolChoice = null, maxTokens = 700, temperature = 0.6, model: preferred = null, only = false } = {}) => {
   const all = keys()
   if (!all.length) throw new Error("Nexa isn't set up on this server yet.")
-  const models = [preferred, process.env.GROQ_MODEL || "openai/gpt-oss-120b", FALLBACK_MODEL].filter((m, i, a) => m && a.indexOf(m) === i)
+  const models = only && preferred ? [preferred] : [preferred, process.env.GROQ_MODEL || "openai/gpt-oss-120b", FALLBACK_MODEL].filter((m, i, a) => m && a.indexOf(m) === i)
 
   for (const model of models) {
     for (let attempt = 0; attempt < all.length; attempt++) {
@@ -60,7 +61,7 @@ export const groqChat = async (messages, { tools = null, toolChoice = null, maxT
       try {
         const { status, data } = await call(key, model, messages, { tools, toolChoice, maxTokens, temperature })
         const message = data.choices?.[0]?.message
-        if (status === 200 && message && (message.content?.trim() || message.tool_calls?.length)) return { ...message, content: tidy(message.content) }
+        if (status === 200 && message && (message.content?.trim() || message.tool_calls?.length)) return { ...message, content: tidy(String(message.content || "").replace(/<think>[\s\S]*?<\/think>\s*/g, "")) }
         // Rate limited, bad key or server trouble: try the next key
         if ([401, 403, 429].includes(status) || status >= 500 || status === 200) continue
         // Model not available: try the fallback model

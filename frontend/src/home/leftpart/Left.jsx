@@ -4,6 +4,9 @@ import { LuLayers, LuMoon, LuSquarePen, LuSun, LuUserPlus, LuUsers } from 'react
 import Users from './Users'
 import CallsPanel from './CallsPanel'
 import CommunitiesPanel from './CommunitiesPanel'
+import StarredPanel from './StarredPanel'
+import NotifyBanner from './NotifyBanner'
+import StatusPanel from '../status/StatusPanel'
 import { MobileTabs, NavRail } from './NavRail'
 import ContactsDialog from './ContactsDialog'
 import CreateGroupDialog from '../groups/CreateGroupDialog'
@@ -37,7 +40,7 @@ const ChatsPanel = () => {
     <>
       {/* Header */}
       <header className="flex items-center justify-between px-4 pb-4 pt-5">
-        <Link to="/home" className="group flex items-center gap-2.5" title="NexChat home">
+        <Link to="/home" className="group flex items-center gap-2.5" title="Kova home">
           <LogoMark className="size-8 md:hidden" />
           <span className="text-xl font-semibold tracking-tight">Chats</span>
         </Link>
@@ -75,6 +78,7 @@ const ChatsPanel = () => {
         </div>
       </header>
 
+      <NotifyBanner />
       <Users />
     </>
   )
@@ -87,7 +91,7 @@ const Left = () => {
     <div className="flex h-full w-full bg-white dark:bg-slate-950">
       <NavRail />
       <div className="flex min-w-0 flex-1 flex-col">
-        {activePanel === 'calls' ? <CallsPanel /> : activePanel === 'communities' ? <CommunitiesPanel /> : <ChatsPanel />}
+        {activePanel === 'calls' ? <CallsPanel /> : activePanel === 'communities' ? <CommunitiesPanel /> : activePanel === 'starred' ? <StarredPanel /> : activePanel === 'status' ? <StatusPanel /> : <ChatsPanel />}
         <MobileTabs />
       </div>
       <ContactsDialog />

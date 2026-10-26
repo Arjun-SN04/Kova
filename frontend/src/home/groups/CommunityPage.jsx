@@ -156,7 +156,7 @@ const CommunityPage = ({ community: summary }) => {
           <div className="mt-2 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
             {community.groups.map((g) => (
               <div key={g._id} className="flex items-center gap-3 px-4 py-3">
-                <GroupAvatar name={g.name} announcement={g.announcement} size="sm" />
+                <GroupAvatar name={g.name} src={g.avatar?.url} announcement={g.announcement} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{g.name}</p>
                   <p className="truncate text-xs text-slate-500 dark:text-slate-400">{g.description || `${g.memberCount} members`}</p>

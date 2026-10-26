@@ -6,6 +6,7 @@ import User from "../models/user.model.js"
 import { Group } from "../models/group.model.js"
 import { emitToUsers } from "../utils/notify.js"
 import { answerDirectMention } from "../utils/nexaGroup.js"
+import { previewOf, sendPush } from "../utils/push.js"
 
 const zoneHeader = (req) => { try { const tz = req.headers["x-time-zone"]; new Intl.DateTimeFormat("en-US", { timeZone: tz }); return tz || "UTC" } catch { return "UTC" } }
 
@@ -102,6 +103,7 @@ export const sendMessage = async (req, res) => {
     }
 
     res.status(201).json(newMessage)
+    if (!self) sendPush([receiverId], { title: req.user.fullName, body: previewOf(newMessage), tag: `chat-${senderId}` }).catch(() => {})
 
     // "@Nexa …": Nexa answers in this chat, for both people (in the background)
     answerDirectMention({ sender: req.user, otherId: receiverId, message: newMessage, timeZone: zoneHeader(req) })
@@ -162,6 +164,7 @@ export const editMessage = async (req, res) => {
       return res.status(403).json({ error: "Not authorized to edit this message" })
     if (Date.now() - existing.createdAt.getTime() > EDIT_WINDOW_MS)
       return res.status(403).json({ error: "Messages can only be edited within 10 minutes of sending" })
+    if (existing.poll) return res.status(400).json({ error: "Polls can't be edited" })
     if (!message?.trim() && !existing.attachment) return res.status(400).json({ error: "Message cannot be empty" })
 
     existing.message = (message || "").trim()
@@ -319,6 +322,8 @@ export const forwardMessages = async (req, res) => {
       let conversation = await findConversation(userId, receiver._id)
       if (!conversation) conversation = await Conversation.create({ members: [userId, receiver._id] })
 
+      // insertMany skips the save hook, so apply this chat's disappearing timer here
+      const secs = conversation.disappearAfter || 0
       const copies = originals.map((o) => new Message({
         senderId: userId,
         receiverId: receiver._id,
@@ -326,6 +331,7 @@ export const forwardMessages = async (req, res) => {
         attachment: o.attachment,
         forwarded: true,
         seen: self,
+        expiresAt: secs ? new Date(Date.now() + secs * 1000) : null,
       }))
       await Message.insertMany(copies)
       conversation.messages.push(...copies.map((c) => c._id))
@@ -343,6 +349,7 @@ export const forwardMessages = async (req, res) => {
         message: o.message,
         attachment: o.attachment,
         forwarded: true,
+        expiresAt: group.disappearAfter ? new Date(Date.now() + group.disappearAfter * 1000) : null,
       }))
       await Message.insertMany(copies)
       group.reads.set(String(userId), new Date())

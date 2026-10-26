@@ -216,7 +216,7 @@ const InviteTab = () => {
   }, [])
 
   const url = invite && inviteUrl(invite.token)
-  const shareText = `Chat with me on NexChat: ${url}`
+  const shareText = `Chat with me on Kova: ${url}`
 
   const copy = async () => {
     try {
@@ -227,7 +227,7 @@ const InviteTab = () => {
   }
 
   const qrFile = () => new Promise((resolve) =>
-    qrRef.current?.toBlob((blob) => resolve(blob && new File([blob], `nexchat-${invite.username}.png`, { type: 'image/png' })), 'image/png'))
+    qrRef.current?.toBlob((blob) => resolve(blob && new File([blob], `kova-${invite.username}.png`, { type: 'image/png' })), 'image/png'))
 
   const download = async () => {
     const file = await qrFile()
@@ -244,9 +244,9 @@ const InviteTab = () => {
     try {
       const file = await qrFile()
       if (file && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ title: 'Add me on NexChat', text: shareText, files: [file] })
+        await navigator.share({ title: 'Add me on Kova', text: shareText, files: [file] })
       } else {
-        await navigator.share({ title: 'Add me on NexChat', text: shareText, url })
+        await navigator.share({ title: 'Add me on Kova', text: shareText, url })
       }
     } catch { /* cancelled */ }
   }

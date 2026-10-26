@@ -88,7 +88,7 @@ const EmptySelfChat = ({ user }) => (
 
 const EmptyGroup = ({ group }) => (
   <div className="flex h-full flex-col items-center justify-center py-12 text-center">
-    <GroupAvatar name={group.name} announcement={group.announcement} size="lg" />
+    <GroupAvatar name={group.name} src={group.avatar?.url} announcement={group.announcement} size="lg" />
     <p className="mt-4 text-lg font-semibold">{group.name}</p>
     <p className="mt-1 max-w-xs text-sm text-slate-500 dark:text-slate-400">
       {group.announcement

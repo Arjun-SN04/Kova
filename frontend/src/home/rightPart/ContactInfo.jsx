@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import ChatSettings from './ChatSettings'
 import axios from 'axios'
 import { motion } from 'motion/react'
 import { LuAtSign, LuCalendar, LuMail, LuTrash2, LuUserMinus, LuX } from 'react-icons/lu'
@@ -93,6 +94,8 @@ const ContactInfo = ({ user, onClose, onClear }) => {
               </div>
             )}
           </dl>
+
+          <ChatSettings chat={user} />
 
           <button
             onClick={onClear}

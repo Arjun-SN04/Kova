@@ -2,10 +2,11 @@ import { Group } from "../models/group.model.js"
 import { Community } from "../models/community.model.js"
 import { Message } from "../models/message.model.js"
 import User from "../models/user.model.js"
-import { uploadToCloudinary } from "../config/cloudinary.js"
+import { deleteFromCloudinary, uploadToCloudinary } from "../config/cloudinary.js"
 import { emitToUsers } from "../utils/notify.js"
 import { releaseAttachments } from "./message.controller.js"
 import { answerMention } from "../utils/nexaGroup.js"
+import { previewOf, sendPush } from "../utils/push.js"
 
 export const MEMBER_FIELDS = "fullName username avatar"
 const MAX_MEMBERS = 256
@@ -29,6 +30,8 @@ export const groupView = (g) => ({
   createdBy: g.createdBy,
   community: g.community ? { _id: g.community._id ?? g.community, name: g.community.name } : null,
   announcement: g.announcement,
+  avatar: g.avatar || null,
+  disappearAfter: g.disappearAfter || 0,
   createdAt: g.createdAt,
 })
 
@@ -48,6 +51,7 @@ export const destroyGroup = async (group) => {
   await Message.deleteMany({ groupId: group._id })
   await Group.deleteOne({ _id: group._id })
   await releaseAttachments(withFiles.map((m) => m.attachment))
+  if (group.avatar?.publicId) await deleteFromCloudinary([{ publicId: group.avatar.publicId, resourceType: "image" }])
   emitToUsers(group.members, "groupRemoved", { groupId: String(group._id) })
 }
 
@@ -157,6 +161,31 @@ export const updateGroup = async (req, res) => {
   } catch (error) {
     console.log("updateGroup error:", error)
     fail(res, 500, "Internal server error")
+  }
+}
+
+// Group photo (admins only)
+export const updateGroupAvatar = async (req, res) => {
+  try {
+    const group = await loadMemberGroup(req, res)
+    if (!group?._id) return
+    if (!isAdmin(group, req.user._id)) return fail(res, 403, "Only admins can change the group photo")
+    const old = group.avatar
+    if (req.method === "DELETE") {
+      group.avatar = null
+    } else {
+      if (!req.file) return fail(res, 400, "Please choose an image")
+      const uploaded = await uploadToCloudinary(req.file, { subfolder: "group-avatars" })
+      group.avatar = { url: uploaded.url, publicId: uploaded.publicId }
+    }
+    await group.save()
+    if (old?.publicId) await deleteFromCloudinary([{ publicId: old.publicId, resourceType: "image" }])
+    const full = await broadcastGroup(group._id)
+    await notifyCommunity(group.community)
+    res.status(200).json(groupView(full))
+  } catch (error) {
+    console.log("updateGroupAvatar error:", error?.message || error)
+    fail(res, 500, "Could not update the group photo")
   }
 }
 
@@ -328,6 +357,7 @@ export const sendGroupMessage = async (req, res) => {
 
     emitToUsers(group.members, "newMessage", newMessage, me)
     res.status(201).json(newMessage)
+    sendPush(group.members.filter((m) => !sameId(m, me)), { title: group.name, body: `${req.user.fullName.split(" ")[0]}: ${previewOf(newMessage)}`, tag: `group-${group._id}` }).catch(() => {})
 
     // "@Nexa …": answer in the group (in the background)
     answerMention({ groupId: group._id, message: newMessage, sender: req.user, timeZone: safeZone(req.headers["x-time-zone"]) })

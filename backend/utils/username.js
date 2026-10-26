@@ -3,7 +3,7 @@ import User from "../models/user.model.js"
 
 export const USERNAME_RE = /^[a-z0-9_.]{3,20}$/
 // Names people can't take (the assistant and service names)
-export const RESERVED_USERNAMES = new Set(["nexa", "nexa.ai", "nexchat", "admin", "support", "system"])
+export const RESERVED_USERNAMES = new Set(["nexa", "nexa.ai", "nexchat", "kova", "admin", "support", "system"])
 export const USERNAME_RULES = "3–20 characters: lowercase letters, numbers, _ or ."
 
 export const normalizeUsername = (value) => String(value || "").trim().replace(/^@/, "").toLowerCase()

@@ -5,6 +5,8 @@ import { loadConversations, markSeen } from '../utils/conversations'
 import { loadCommunities } from '../utils/groups'
 import { loadCalls } from '../utils/calls'
 import { useAuth } from './AuthProvider'
+import { AI_CHAT } from '../utils/ai'
+import { loadStatusFeed } from '../utils/status'
 
 // Typing indicators clear themselves if no "stopTyping" arrives in time
 const TYPING_TIMEOUT_MS = 4000
@@ -49,6 +51,20 @@ const useListenMessages = () => {
         // Only missed calls count as unread, like on the server
         store().addUnread(chatId)
       }
+    }
+
+    // A contact posted or removed a status
+    const handleStatus = () => loadStatusFeed()
+
+    // Someone changed a chat's disappearing-messages timer
+    const handleChatTimer = ({ chatId, seconds }) => store().setChatTimer(chatId, seconds)
+
+    // Pinned chats changed (maybe in another tab)
+    const handlePrefs = ({ pinnedChats }) => store().setPinnedChats(pinnedChats)
+
+    // Nexa wrote by itself (morning brief, meeting reminder): unread dot unless its chat is open
+    const handleNexaMessage = () => {
+      if (!store().selectedConversation?.isAi) store().addUnread(AI_CHAT._id)
     }
 
     const handleMessageDeleted = (messageId) => {
@@ -106,6 +122,10 @@ const useListenMessages = () => {
     socket.on('callLogged', handleCallLogged)
     socket.on('scheduledUpdated', handleScheduled)
     socket.on('newMessage', handleNewMessage)
+    socket.on('nexaMessage', handleNexaMessage)
+    socket.on('prefsUpdated', handlePrefs)
+    socket.on('chatTimer', handleChatTimer)
+    socket.on('statusUpdated', handleStatus)
     socket.on('messageDeleted', handleMessageDeleted)
     socket.on('messageEdited', handleMessageEdited)
     socket.on('messagesDeleted', handleMessagesDeleted)
@@ -117,6 +137,10 @@ const useListenMessages = () => {
 
     return () => {
       socket.off('groupAdded', handleGroupAdded)
+      socket.off('nexaMessage', handleNexaMessage)
+      socket.off('prefsUpdated', handlePrefs)
+      socket.off('chatTimer', handleChatTimer)
+      socket.off('statusUpdated', handleStatus)
       socket.off('groupUpdated', handleGroupUpdated)
       socket.off('groupRemoved', handleGroupRemoved)
       socket.off('communityUpdated', handleCommunityChanged)

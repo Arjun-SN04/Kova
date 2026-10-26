@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
-import { LuAlarmClock, LuCheck, LuCheckCheck, LuEllipsis, LuLanguages, LuCopy, LuForward, LuPencil, LuReply, LuSmilePlus, LuSquareCheck, LuTrash2 } from 'react-icons/lu'
+import { LuAlarmClock, LuCheck, LuCheckCheck, LuEllipsis, LuLanguages, LuCopy, LuForward, LuPencil, LuBookmark, LuBookmarkX, LuPin, LuPinOff, LuReply, LuSmilePlus, LuSquareCheck, LuStar, LuStarOff, LuTimer, LuTrash2 } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import Avatar from '../Avatar'
 import Attachment from './Attachment'
@@ -11,6 +11,9 @@ import ReactionPicker from './ReactionPicker'
 import { GoToMessage, RemindMenu, Transcript, Translation, useTranslation } from './NexaExtras'
 import { AiAvatar } from '../Avatar'
 import ReactMarkdown from 'react-markdown'
+import { remarkHtmlBreaks } from '../../utils/markdown'
+import PollCard from './PollCard'
+import { setKept, setMessagePinned, toggleStar } from '../../utils/chatExtras'
 
 // Nexa writes short Markdown (bullets, bold); people's messages stay plain text
 const botMd = {
@@ -22,6 +25,8 @@ const botMd = {
   a: (props) => <a className="underline underline-offset-2" target="_blank" rel="noreferrer" {...props} />,
 }
 import { loadConversations } from '../../utils/conversations'
+
+const HTML_BREAKS = [remarkHtmlBreaks]
 
 const formatTime = (date) => new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 const LONG_PRESS_MS = 450
@@ -64,8 +69,12 @@ const ActionButton = ({ onClick, label, danger = false, children }) => (
 const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId, original, now, senderLabel = null, nameOf = null, isBot = false }) => {
   const {
     setMessages, editingMessage, setEditingMessage, replyingTo, setReplyingTo, highlightedId, setHighlightedId,
-    selectionMode, selectedIds, startSelection, toggleSelected, setForwardIds,
+    selectionMode, selectedIds, startSelection, toggleSelected, setForwardIds, starredIds,
   } = useConversation()
+  const starred = starredIds.includes(String(message._id))
+  const pinned = !!message.pinned
+  const kept = !!message.kept
+  const expiring = !!message.expiresAt && !kept
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showActions, setShowActions] = useState(false)
@@ -97,7 +106,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
   const isEditing = editingMessage?._id === id
   const isReplyTarget = replyingTo?._id === id
   const isSelected = selectedIds.includes(id)
-  const editable = itsMe && canEdit(message, now)
+  const editable = itsMe && !message.poll && canEdit(message, now)
   const contactFirst = contactName?.split(' ')[0]
 
   const handleDelete = async () => {
@@ -198,6 +207,9 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           <MenuItem icon={copied ? LuCheck : LuCopy} label={copied ? 'Copied' : 'Copy'} onClick={() => { copyText(); setTimeout(() => setMoreOpen(false), 400) }} />
           <MenuItem icon={LuForward} label="Forward" onClick={close(() => setForwardIds([id]))} />
           {canTranslate && <MenuItem icon={LuLanguages} label={translation?.text ? 'Hide translation' : 'Translate'} onClick={close(translate)} />}
+          <MenuItem icon={starred ? LuStarOff : LuStar} label={starred ? 'Unstar' : 'Star'} onClick={close(() => toggleStar(id))} />
+          {!isBot && <MenuItem icon={pinned ? LuPinOff : LuPin} label={pinned ? 'Unpin' : 'Pin'} onClick={close(() => setMessagePinned(id, !pinned))} />}
+          {(expiring || kept) && <MenuItem icon={kept ? LuBookmarkX : LuBookmark} label={kept ? "Don't keep" : 'Keep (stop it disappearing)'} onClick={close(() => setKept(message, !kept))} />}
           <MenuItem icon={LuAlarmClock} label="Remind me" onClick={() => { setMoreOpen(false); setRemindOpen(true) }} />
           {editable && <MenuItem icon={LuPencil} label="Edit" onClick={close(() => setEditingMessage(message))} />}
           <MenuItem icon={LuSquareCheck} label="Select" onClick={close(() => startSelection(id))} />
@@ -293,8 +305,9 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           {quote}
           {message.attachment && <Attachment attachment={message.attachment} itsMe={itsMe} />}
           <Transcript message={message} itsMe={itsMe} />
-          {message.message && (isBot ? (
-            <div className="wrap-break-word"><ReactMarkdown components={botMd}>{message.message}</ReactMarkdown></div>
+          {message.poll && <PollCard message={message} itsMe={itsMe} myId={myId} nameOf={nameOf} />}
+          {message.message && !message.poll && (isBot ? (
+            <div className="wrap-break-word"><ReactMarkdown remarkPlugins={HTML_BREAKS} components={botMd}>{message.message}</ReactMarkdown></div>
           ) : (
             <span className={`block whitespace-pre-wrap wrap-break-word ${media ? 'px-2 pb-1 pt-1.5' : message.attachment ? 'pt-2' : ''}`}>
               {message.message}
@@ -330,11 +343,15 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           </div>
         )}
 
-        {last && (
-          <p className="mt-1 flex items-center gap-1 px-1 text-[11px] text-slate-400">
-            {formatTime(message.createdAt)}
-            {message.edited && ' · edited'}
-            {itsMe && String(message.receiverId) !== String(myId) && (message.seen
+        {(last || starred || pinned || kept) && (
+          <p className={`flex items-center gap-1 px-1 text-[11px] text-slate-400 ${last ? 'mt-1' : 'mt-0.5'}`}>
+            {pinned && <LuPin className="size-3 -rotate-45 text-indigo-500" title="Pinned" aria-label="Pinned" />}
+            {starred && <LuStar className="size-3 fill-amber-400 text-amber-400" title="Starred" aria-label="Starred" />}
+            {kept && <LuBookmark className="size-3 fill-indigo-400 text-indigo-400" title="Kept: won't disappear" aria-label="Kept" />}
+            {last && expiring && <LuTimer className="size-3" title={`Disappears ${new Date(message.expiresAt).toLocaleString()}`} aria-label="Disappearing message" />}
+            {last && formatTime(message.createdAt)}
+            {last && message.edited && ' · edited'}
+            {last && itsMe && String(message.receiverId) !== String(myId) && (message.seen
               ? <LuCheckCheck className="size-3.5 text-indigo-500" title="Seen" aria-label="Seen" />
               : <LuCheck className="size-3.5" title="Sent" aria-label="Sent" />)}
           </p>

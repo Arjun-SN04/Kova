@@ -38,6 +38,21 @@ const messageSchema = new mongoose.Schema({
   ref: { type: refSchema, default: null },
   // True when this message was forwarded from another chat
   forwarded: { type: Boolean, default: false },
+  // Disappearing messages: deleted (with its file) at this time, unless someone keeps it
+  expiresAt: { type: Date, default: null, index: true },
+  kept: { type: Boolean, default: false },
+  // Pinned at the top of the chat (up to 3 per chat)
+  pinned: { type: { by: mongoose.Schema.Types.ObjectId, at: Date, _id: false }, default: null },
+  // A poll: question + options; each option lists who voted for it
+  poll: {
+    type: {
+      question: String,
+      multiple: Boolean, // people can pick more than one option
+      closed: Boolean,
+      options: [{ _id: false, id: String, text: String, votes: [mongoose.Schema.Types.ObjectId] }],
+    },
+    default: null,
+  },
   // Image / video / voice note / file stored on Cloudinary
   attachment: {
     type: {
@@ -55,5 +70,12 @@ const messageSchema = new mongoose.Schema({
     default: null,
   },
 }, { timestamps: true })
+
+// New messages follow the chat's disappearing-messages timer
+messageSchema.pre("save", async function () {
+  if (!this.isNew || this.expiresAt || this.kept) return
+  const { expiryFor } = await import("../utils/disappear.js")
+  this.expiresAt = await expiryFor(this)
+})
 
 export const Message = mongoose.model("Message", messageSchema)

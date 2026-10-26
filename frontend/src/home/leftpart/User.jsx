@@ -3,11 +3,11 @@ import useConversation from '../../Zustand/UserConversation'
 import Avatar from '../Avatar'
 import { shortTime } from '../../utils/conversations'
 import { attachmentLabel } from '../../utils/attachments'
-import { LuFileText, LuImage, LuMic, LuPhone, LuPhoneMissed, LuVideo } from 'react-icons/lu'
+import { LuFileText, LuImage, LuMic, LuPhone, LuPhoneMissed, LuPin, LuVideo } from 'react-icons/lu'
 import { describeCall } from '../../utils/calls'
 
 // One row in the contact list.
-const User = ({ user, online, unread, preview, typing, myId }) => {
+const User = ({ user, online, unread, preview, typing, myId, pinned = false }) => {
   const { selectedConversation, setSelectedConversation, clearUnread, setCatchUp, nexaId } = useConversation()
   const userId = user._id?.toString()
   const isSelected = selectedConversation?._id?.toString() === userId
@@ -43,6 +43,7 @@ const User = ({ user, online, unread, preview, typing, myId }) => {
           >
             {user.fullName}
           </p>
+          {pinned && <LuPin className="ml-auto size-3 shrink-0 -rotate-45 text-slate-400" title="Pinned" aria-label="Pinned" />}
           {preview && (
             <span className={`shrink-0 text-[11px] ${unread && !isSelected ? 'font-semibold text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>
               {shortTime(preview.createdAt)}

@@ -1,15 +1,20 @@
 import express from "express"
 import secureRoute from "../middleware/secureRoute.js"
+import { uploadSingle } from "../config/cloudinary.js"
 import {
   cancelScheduled, catchUp, clearAiMessages, getAiMessages, listScheduled, nexaInfo, remindAboutMessage,
-  rewriteText, createAiImage, sendAiMessage, smartReplies, transcribeMessage, translateMessage,
+  rewriteText, createAiImage, sendAiMessage, deleteAiMessage, keepAiMessage, getAiSettings, setAiSettings, smartReplies, transcribeMessage, translateMessage,
 } from "../controller/ai.controller.js"
 
 const router = express.Router()
 router.use(secureRoute)
 router.get("/messages", getAiMessages)
-router.post("/messages", sendAiMessage)
+router.post("/messages", uploadSingle("file"), sendAiMessage)
 router.delete("/messages", clearAiMessages)
+router.delete("/messages/:id", deleteAiMessage)
+router.put("/messages/:id/keep", keepAiMessage)
+router.get("/settings", getAiSettings)
+router.put("/settings", setAiSettings)
 router.post("/messages/:id/image", createAiImage)
 router.post("/rewrite", rewriteText)
 router.get("/scheduled", listScheduled)

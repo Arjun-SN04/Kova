@@ -60,7 +60,7 @@ const InvitePage = () => {
         <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300">
           <LuUserPlus className="size-6" />
         </div>
-        <h1 className="mt-5 text-xl font-semibold">You've been invited to NexChat</h1>
+        <h1 className="mt-5 text-xl font-semibold">You've been invited to Kova</h1>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Log in or create an account, and you'll be connected right after.</p>
         <div className="mt-6 grid gap-2 sm:grid-cols-2">
           <Button to="/signup" fullWidth>Create account</Button>
@@ -92,7 +92,7 @@ const InvitePage = () => {
             ? 'This is your own invite link. Share it with friends so they can add you.'
             : invite.status === 'contact'
               ? `You and ${firstName} are already contacts.`
-              : `${firstName} invited you to chat on NexChat.`}
+              : `${firstName} invited you to chat on Kova.`}
         </p>
         <div className="mt-6 grid gap-2">
           {invite.status === 'none' && (
