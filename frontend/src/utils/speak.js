@@ -1,9 +1,15 @@
 import { create } from 'zustand'
 
-// Read a message aloud with the browser's own voices (free, no server).
-// One message at a time; the store says which one is speaking so its button can show "Stop".
-export const useSpeech = create(() => ({ speakingId: null }))
-export const canSpeak = () => typeof window !== 'undefined' && 'speechSynthesis' in window
+// Read a message aloud. First choice: the server's expressive voice (Groq Orpheus, with a
+// mood per line). If that isn't available, the device's own voices.
+// One message at a time; the store says which one is loading / speaking for its button.
+export const useSpeech = create(() => ({ speakingId: null, loadingId: null }))
+export const canSpeak = () => typeof window !== 'undefined' && (typeof Audio !== 'undefined' || 'speechSynthesis' in window)
+const hasDeviceVoice = () => typeof window !== 'undefined' && 'speechSynthesis' in window
+
+let player = null      // the <audio> playing server speech
+const urls = new Map() // message id -> object URL of its audio (replays are instant)
+let serverVoice = true // turned off for this session if the server can't speak at all
 
 // Markdown and emoji out, so the voice reads only the words
 const plain = (text) => String(text || '')
@@ -30,15 +36,51 @@ const pickVoice = (lang) => {
 }
 
 export const stopSpeaking = () => {
-  if (!canSpeak()) return
-  window.speechSynthesis.cancel()
-  useSpeech.setState({ speakingId: null })
+  if (player) { player.pause(); player = null }
+  if (hasDeviceVoice()) window.speechSynthesis.cancel()
+  useSpeech.setState({ speakingId: null, loadingId: null })
 }
 
-export const speak = (id, text) => {
-  if (!canSpeak()) return
+const playUrl = (id, url) => {
+  player = new Audio(url)
+  player.onended = () => { if (useSpeech.getState().speakingId === id) useSpeech.setState({ speakingId: null }) }
+  player.onerror = () => useSpeech.setState({ speakingId: null })
+  useSpeech.setState({ speakingId: id, loadingId: null })
+  return player.play()
+}
+
+export const speak = async (id, text) => {
+  const st = useSpeech.getState()
+  if (st.speakingId === id || st.loadingId === id) { stopSpeaking(); return }
+  stopSpeaking()
+  if (urls.has(id)) { playUrl(id, urls.get(id)).catch(() => {}); return }
+  // The expressive voice speaks English (Roman Hindi too); Devanagari goes to a Hindi device voice
+  if (serverVoice && !/[\u0900-\u097F]/.test(text)) {
+    useSpeech.setState({ loadingId: id })
+    try {
+      const res = await fetch('/api/ai/speak', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
+      if (useSpeech.getState().loadingId !== id) return // stopped while it was being made
+      if (res.ok) {
+        const url = URL.createObjectURL(await res.blob())
+        urls.set(id, url)
+        await playUrl(id, url)
+        return
+      }
+      const err = await res.json().catch(() => ({}))
+      if (['terms', 'not_configured'].includes(err.code)) serverVoice = false
+      console.warn('Expressive voice unavailable:', err.error || res.status)
+    } catch (e) {
+      console.warn('Expressive voice failed:', e?.message)
+    }
+    useSpeech.setState({ loadingId: null })
+  }
+  speakOnDevice(id, text)
+}
+
+// Fallback: the browser's built-in voices
+const speakOnDevice = (id, text) => {
+  if (!hasDeviceVoice()) return
   const synth = window.speechSynthesis
-  if (useSpeech.getState().speakingId === id) { stopSpeaking(); return }
   synth.cancel()
   const words = plain(text)
   if (!words) return

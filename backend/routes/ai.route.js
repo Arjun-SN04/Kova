@@ -3,7 +3,7 @@ import secureRoute from "../middleware/secureRoute.js"
 import { uploadSingle } from "../config/cloudinary.js"
 import {
   cancelScheduled, catchUp, clearAiMessages, getAiMessages, listScheduled, nexaInfo, remindAboutMessage,
-  rewriteText, createAiImage, sendAiMessage, deleteAiMessage, deleteAiFile, keepAiMessage, getAiSettings, setAiSettings, smartReplies, transcribeMessage, translateMessage,
+  rewriteText, createAiImage, sendAiMessage, deleteAiMessage, deleteAiFile, speakMessage, keepAiMessage, getAiSettings, setAiSettings, smartReplies, transcribeMessage, translateMessage,
 } from "../controller/ai.controller.js"
 
 const router = express.Router()
@@ -18,6 +18,7 @@ router.get("/settings", getAiSettings)
 router.put("/settings", setAiSettings)
 router.post("/messages/:id/image", createAiImage)
 router.post("/rewrite", rewriteText)
+router.post("/speak", speakMessage)
 router.get("/scheduled", listScheduled)
 router.delete("/scheduled/:id", cancelScheduled)
 router.get("/bot", nexaInfo)

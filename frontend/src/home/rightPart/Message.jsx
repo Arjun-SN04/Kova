@@ -120,7 +120,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
   const isSelected = selectedIds.includes(id)
   // Listen: read the text (or a voice note's transcript) aloud
   const readable = message.poll ? '' : [message.message, message.transcript].filter(Boolean).join('. ')
-  const speaking = useSpeech((st) => st.speakingId === id)
+  const speaking = useSpeech((st) => st.speakingId === id || st.loadingId === id)
   const editable = itsMe && !message.poll && !message.card && canEdit(message, now)
   const contactFirst = contactName?.split(' ')[0]
 

@@ -8,6 +8,7 @@ import { deleteFromCloudinary, uploadToCloudinary } from "../config/cloudinary.j
 import { hasGmail } from "../utils/google.js"
 import { TIMER_CHOICES, nexaFiles } from "../utils/disappear.js"
 import { wantsCreative, writeCreative } from "../utils/creative.js"
+import { speakText } from "../utils/tts.js"
 import { parseMedia } from "./gif.controller.js"
 import { generateImage } from "../utils/imageGen.js"
 import { VISION_MODEL, excerptFor, extractDocText, imageForModel, isDoc, isImage } from "../utils/aiFiles.js"
@@ -793,5 +794,25 @@ export const remindAboutMessage = async (req, res) => {
   } catch (error) {
     console.log("remindAboutMessage error:", error.message)
     res.status(500).json({ error: "Couldn't set the reminder" })
+  }
+}
+
+// ── Listen: expressive voice for a message (Groq Orpheus, see utils/tts.js) ──
+const speakUse = new Map() // userId -> timestamps in the last hour
+export const speakMessage = async (req, res) => {
+  const text = String(req.body?.text || "")
+  if (!text.trim()) return res.status(400).json({ error: "Nothing to read" })
+  const id = String(req.user._id)
+  const now = Date.now()
+  const recentUse = (speakUse.get(id) || []).filter((t) => now - t < 3600_000)
+  if (recentUse.length >= 40) return res.status(429).json({ error: "You've listened a lot this hour. Try again a bit later.", code: "limit" })
+  speakUse.set(id, [...recentUse, now])
+  try {
+    const wav = await speakText(text)
+    res.set({ "Content-Type": "audio/wav", "Cache-Control": "private, max-age=3600" })
+    res.send(wav)
+  } catch (err) {
+    console.log("speak error:", err.code || "", err.message)
+    res.status(err.code === "empty" ? 400 : 503).json({ error: err.message, code: err.code || "failed" })
   }
 }

@@ -2,13 +2,15 @@
 // Keys come from GROQ_API_KEYS (comma-separated). When one key is rate-limited
 // or rejected, the next one is tried, so the free tiers add up.
 
+import { geminiChat, geminiConfigured } from "./gemini.js"
+
 const URL = "https://api.groq.com/openai/v1/chat/completions"
 const FALLBACK_MODEL = "openai/gpt-oss-20b"
 
 const keys = () => (process.env.GROQ_API_KEYS || "").split(",").map((k) => k.trim()).filter(Boolean)
 let next = 0 // spread requests across keys
 
-export const groqConfigured = () => keys().length > 0
+export const groqConfigured = () => keys().length > 0 || geminiConfigured()
 
 // Groq's built-in web search only works on the gpt-oss models
 const toolsFor = (model, tools) => {
@@ -51,6 +53,16 @@ export const tidy = (text) =>
 // toolChoice: "auto" (default), or { type: "function", function: { name } } to require that tool
 // only: use just `model` (e.g. the vision model; the others can't see images)
 export const groqChat = async (messages, { tools = null, toolChoice = null, maxTokens = 700, temperature = 0.6, model: preferred = null, only = false, reasoning = "low" } = {}) => {
+  // Nexa's chat runs on Gemini (GEMINI_MODEL, Flash-Lite by default). Groq is the backup, and
+  // still handles calls pinned to one of its models (photos: the vision model).
+  if (geminiConfigured() && !(only && preferred)) {
+    try {
+      const msg = await geminiChat(messages, { tools, toolChoice, maxTokens, temperature, reasoning })
+      if (msg.content?.trim() || msg.tool_calls?.length) return { ...msg, content: tidy(String(msg.content || "")) }
+    } catch (err) {
+      console.log("Gemini failed, using Groq:", err.status || "", err.message)
+    }
+  }
   const all = keys()
   if (!all.length) throw new Error("Nexa isn't set up on this server yet.")
   const models = only && preferred ? [preferred] : [preferred, process.env.GROQ_MODEL || "openai/gpt-oss-120b", FALLBACK_MODEL].filter((m, i, a) => m && a.indexOf(m) === i)

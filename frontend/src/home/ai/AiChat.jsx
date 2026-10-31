@@ -4,7 +4,7 @@ import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuArrowLeft, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImages, LuMessageCircle, LuSendHorizontal, LuSmile, LuSparkles, LuSquare, LuTrash2, LuVolume2, LuX } from 'react-icons/lu'
+import { LuArrowLeft, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImages, LuMessageCircle, LuSendHorizontal, LuSmile, LuLoaderCircle, LuSparkles, LuSquare, LuTrash2, LuVolume2, LuX } from 'react-icons/lu'
 import { canSpeak, speak, useSpeech } from '../../utils/speak'
 import { selfContact } from '../../utils/conversations'
 import useConversation from '../../Zustand/UserConversation'
@@ -310,11 +310,13 @@ const isFresh = (message) => Date.now() - new Date(message.createdAt).getTime() 
 // Read the answer aloud (tap again to stop)
 const ListenButton = ({ id, text }) => {
   const speaking = useSpeech((st) => st.speakingId === id)
+  const loading = useSpeech((st) => st.loadingId === id)
   if (!canSpeak() || !text?.trim()) return null
+  const active = speaking || loading
   return (
-    <button onClick={() => speak(id, text)} className={`inline-flex items-center gap-1 transition hover:text-slate-700 focus:opacity-100 dark:hover:text-slate-200 ${speaking ? 'text-indigo-600 opacity-100 dark:text-indigo-400' : 'opacity-0 group-hover:opacity-100'}`} aria-label={speaking ? 'Stop reading' : 'Listen'}>
-      {speaking ? <LuSquare className="size-3" /> : <LuVolume2 className="size-3" />}
-      {speaking ? 'Stop' : 'Listen'}
+    <button onClick={() => speak(id, text)} className={`inline-flex items-center gap-1 transition hover:text-slate-700 focus:opacity-100 dark:hover:text-slate-200 ${active ? 'text-indigo-600 opacity-100 dark:text-indigo-400' : 'opacity-0 group-hover:opacity-100'}`} aria-label={active ? 'Stop reading' : 'Listen'}>
+      {loading ? <LuLoaderCircle className="size-3 animate-spin" /> : speaking ? <LuSquare className="size-3" /> : <LuVolume2 className="size-3" />}
+      {loading ? 'Preparing…' : speaking ? 'Stop' : 'Listen'}
     </button>
   )
 }
