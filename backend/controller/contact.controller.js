@@ -2,11 +2,13 @@ import User from "../models/user.model.js"
 import { ContactRequest } from "../models/contactRequest.model.js"
 import { getReceiverSocketId, io } from "../socket/socket.js"
 import { normalizeUsername, newInviteToken } from "../utils/username.js"
+import { Customer } from "../models/customer.model.js"
+import { Report } from "../models/report.model.js"
 
 // What contacts can see about each other
-const CONTACT_FIELDS = "fullName username email avatar createdAt"
+export const CONTACT_FIELDS = "fullName username email avatar createdAt business"
 // What a stranger sees before you're connected (no email)
-const STRANGER_FIELDS = "fullName username avatar"
+const STRANGER_FIELDS = "fullName username avatar business"
 
 const notify = (userId, event, data) => {
   const socketId = getReceiverSocketId(userId)
@@ -15,8 +17,13 @@ const notify = (userId, event, data) => {
 
 const isContact = (me, otherId) => me.contacts.some((c) => c.equals(otherId))
 
+// Has either person blocked the other?
+export const isBlocked = async (aId, bId) =>
+  !!(await User.exists({ $or: [{ _id: aId, blocked: bId }, { _id: bId, blocked: aId }] }))
+
 // Make two people contacts of each other and drop any requests between them.
-const connect = async (aId, bId) => {
+export const connect = async (aId, bId) => {
+  if (await isBlocked(aId, bId)) throw Object.assign(new Error("You can't connect with this account"), { status: 403 })
   await Promise.all([
     User.updateOne({ _id: aId }, { $addToSet: { contacts: bId } }),
     User.updateOne({ _id: bId }, { $addToSet: { contacts: aId } }),
@@ -70,10 +77,19 @@ export const sendRequest = async (req, res) => {
   try {
     const me = req.user
     const username = normalizeUsername(req.body.username)
-    const target = await User.findOne({ username, isBot: { $ne: true } }).select("_id")
+    const target = await User.findOne({ username, isBot: { $ne: true } }).select("_id business")
     if (!target) return res.status(404).json({ error: `No one goes by @${username}` })
     if (target._id.equals(me._id)) return res.status(400).json({ error: "That's you!" })
     if (isContact(me, target._id)) return res.status(400).json({ error: "You're already contacts" })
+    if (await isBlocked(me._id, target._id)) return res.status(403).json({ error: "You can't send a request to this account" })
+
+    // Businesses accept everyone: connect right away
+    if (target.business?.enabled) {
+      const [mine, them] = await connect(me._id, target._id)
+      await Customer.updateOne({ business: target._id, customer: me._id }, { $setOnInsert: { firstAt: new Date() } }, { upsert: true })
+      notify(target._id, "contactAdded", mine)
+      return res.status(200).json({ status: "contact", user: them })
+    }
 
     const theirs = await ContactRequest.findOne({ from: target._id, to: me._id })
     if (theirs) {
@@ -91,6 +107,7 @@ export const sendRequest = async (req, res) => {
     notify(target._id, "contactRequest", { _id: request._id, from, createdAt: request.createdAt })
     res.status(201).json({ status: "outgoing", requestId: request._id })
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message })
     console.log("sendRequest error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
@@ -123,6 +140,7 @@ export const acceptRequest = async (req, res) => {
     notify(request.from, "contactAdded", mine)
     res.status(200).json({ user: them })
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message })
     console.log("acceptRequest error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
@@ -215,7 +233,64 @@ export const acceptInvite = async (req, res) => {
     notify(owner._id, "contactAdded", mine)
     res.status(200).json({ user: them })
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message })
     console.log("acceptInvite error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// ── Blocking and reporting ─────────────────────────────────────
+// Blocking removes the contact both ways and stops new requests, invites and messages
+export const blockUser = async (req, res) => {
+  try {
+    const me = req.user._id
+    const otherId = req.params.userId
+    if (String(otherId) === String(me)) return res.status(400).json({ error: "You can't block yourself" })
+    const other = await User.exists({ _id: otherId })
+    if (!other) return res.status(404).json({ error: "User not found" })
+    await Promise.all([
+      User.updateOne({ _id: me }, { $addToSet: { blocked: otherId }, $pull: { contacts: otherId } }),
+      User.updateOne({ _id: otherId }, { $pull: { contacts: me } }),
+      ContactRequest.deleteMany({ $or: [{ from: me, to: otherId }, { from: otherId, to: me }] }),
+    ])
+    notify(otherId, "contactRemoved", { userId: me.toString() })
+    res.status(200).json({ blocked: otherId })
+  } catch (error) {
+    console.log("blockUser error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+export const unblockUser = async (req, res) => {
+  try {
+    await User.updateOne({ _id: req.user._id }, { $pull: { blocked: req.params.userId } })
+    res.status(200).json({ unblocked: req.params.userId })
+  } catch (error) {
+    console.log("unblockUser error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+export const getBlocked = async (req, res) => {
+  try {
+    const me = await User.findById(req.user._id).populate("blocked", STRANGER_FIELDS)
+    res.status(200).json({ blocked: me.blocked || [] })
+  } catch (error) {
+    console.log("getBlocked error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// Report an account to the app admins (optionally blocking it too)
+export const reportUser = async (req, res) => {
+  try {
+    const target = await User.exists({ _id: req.params.userId })
+    if (!target) return res.status(404).json({ error: "User not found" })
+    const reason = ["spam", "scam", "abuse", "other"].includes(req.body.reason) ? req.body.reason : "spam"
+    await Report.create({ reporter: req.user._id, target: req.params.userId, reason, details: String(req.body.details || "").slice(0, 500) })
+    res.status(201).json({ reported: true })
+  } catch (error) {
+    console.log("reportUser error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 }

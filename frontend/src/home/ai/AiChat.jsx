@@ -3,7 +3,7 @@ import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuArrowLeft, LuBellRing, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImage, LuLanguages, LuLifeBuoy, LuListChecks, LuMessageCircle, LuNewspaper, LuPenLine, LuSend, LuSendHorizontal, LuSmile, LuSparkles, LuTrash2, LuX } from 'react-icons/lu'
+import { LuArrowLeft, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuMessageCircle, LuSendHorizontal, LuSmile, LuSparkles, LuTrash2, LuX } from 'react-icons/lu'
 import { selfContact } from '../../utils/conversations'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
@@ -25,51 +25,42 @@ const REMARK = [remarkGfm, remarkHtmlBreaks]
 const api = { withCredentials: true }
 const MAX_HEIGHT = 140
 
-// What Nexa can do. Tapping an example puts it in the box to edit and send.
+// What Nexa can do. Tapping one puts the example in the box to edit and send.
+// `starter` ones are shown on the empty screen; all of them for "What can you do?".
 const CAPABILITIES = [
-  { Icon: LuSend, title: 'Send messages', example: "Tell Arjun I'm running 10 minutes late" },
-  { Icon: LuBellRing, title: 'Reminders', example: 'Remind me at 6pm to call mom' },
-  { Icon: LuClock, title: 'Schedule messages', example: 'Wish Priya happy birthday tomorrow at 9am' },
-  { Icon: LuListChecks, title: 'Manage scheduled', example: 'What do I have scheduled?' },
-  { Icon: LuNewspaper, title: 'Catch up on a chat', example: 'Summarize my chat with Arjun' },
-  { Icon: LuCalendarDays, title: 'Calendar & Meet', example: "What's on my calendar today?" },
-  { Icon: LuFileText, title: 'Read photos & PDFs', example: 'Summarize this PDF in 5 bullets' },
-  { Icon: LuGlobe, title: 'Search the web', example: "What's today's top news?" },
-  { Icon: LuImage, title: 'Create images', example: 'Draw a cozy cabin in the snow at night' },
-  { Icon: LuPenLine, title: 'Write and rewrite', example: 'Make this more professional: ' },
-  { Icon: LuLanguages, title: 'Translate', example: "Translate 'see you soon' to Hindi" },
-  { Icon: LuLifeBuoy, title: 'Kova help', example: 'How do communities work?' },
+  { title: 'Send a message', example: "Tell Arjun I'm running 10 minutes late", starter: true },
+  { title: 'Schedule a message', example: 'Wish Priya happy birthday tomorrow at 9am', starter: true },
+  { title: 'Set a reminder', example: 'Remind me at 6pm to call mom', starter: true },
+  { title: 'Catch up on a chat', example: 'Summarize my chat with Arjun', starter: true },
+  { title: 'Search the web', example: "What's today's top news?", starter: true },
+  { title: 'Create an image', example: 'Draw a cozy cabin in the snow at night', starter: true },
+  { title: 'Check your calendar', example: "What's on my calendar today?" },
+  { title: 'Manage scheduled', example: 'What do I have scheduled?' },
+  { title: 'Read photos & PDFs', example: 'Summarize this PDF in 5 bullets' },
+  { title: 'Write and rewrite', example: 'Make this more professional: ' },
+  { title: 'Translate', example: "Translate 'see you soon' to Hindi" },
+  { title: 'Kova help', example: 'How do communities work?' },
 ]
-const IN_CHATS = ['✨ Rewrite', 'Smart replies', 'Catch me up', 'Translate', 'Transcribe', 'Remind me', '@Nexa in groups']
 
-const CapabilitiesCard = ({ onPick }) => (
-  <div className="w-full max-w-xl">
+const CapabilitiesCard = ({ onPick, all = false }) => (
+  <div className="w-full max-w-2xl text-left">
     <div className="grid gap-2 sm:grid-cols-2">
-      {CAPABILITIES.map(({ Icon, title, example }) => (
+      {CAPABILITIES.filter((c) => all || c.starter).map(({ title, example }) => (
         <button
           key={title}
           onClick={() => onPick(example)}
-          className="flex items-start gap-3 rounded-xl bg-white p-3 text-left shadow-xs ring-1 ring-slate-200 transition hover:bg-violet-50 hover:ring-violet-200 dark:bg-slate-800 dark:ring-slate-700 dark:hover:bg-violet-500/10 dark:hover:ring-violet-500/30"
+          className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700 dark:hover:bg-slate-800/70"
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300"><Icon className="size-4" /></span>
-          <span className="min-w-0">
-            <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">{title}</span>
-            <span className="block truncate text-xs text-slate-500 dark:text-slate-400">"{example.trim()}"</span>
-          </span>
+          <span className="block text-sm font-medium text-slate-800 dark:text-slate-100">{title}</span>
+          <span className="mt-0.5 block truncate text-[13px] text-slate-500 dark:text-slate-400">{example.trim()}</span>
         </button>
       ))}
     </div>
-    <div className="mt-3 rounded-xl bg-slate-50 p-3 text-left ring-1 ring-slate-200 dark:bg-slate-900/60 dark:ring-slate-800">
-      <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200"><LuSparkles className="size-3.5 text-violet-500" /> Also in every chat</p>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {IN_CHATS.map((t) => (
-          <span key={t} className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
-            {t}
-          </span>
-        ))}
-      </div>
-      <p className="mt-2 text-[11px] text-slate-400">Find Translate, Transcribe and Remind me in a message's ⋯ menu.</p>
-    </div>
+    {all && (
+      <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+        In any chat, Nexa can also rewrite your message, suggest replies, catch you up, translate, transcribe voice notes and set reminders. Mention @Nexa in groups to ask it there.
+      </p>
+    )}
   </div>
 )
 
@@ -253,7 +244,7 @@ const NexaBubble = memo(({ message, statuses, onCancel, onOpen, onPick, onAsk, o
         <AiAvatar size="xs" />
         <div className="min-w-0 flex-1">
           <p className="mb-2 inline-block rounded-2xl rounded-bl-md bg-white px-3.5 py-2 text-sm text-slate-800 shadow-xs ring-1 ring-slate-200/80 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700/60">Here's what I can do. Tap one to try it.</p>
-          <CapabilitiesCard onPick={onPick} />
+          <CapabilitiesCard onPick={onPick} all />
         </div>
       </div>
     )
@@ -671,10 +662,9 @@ const AiChat = () => {
         <div className="h-full px-4 sm:px-6 lg:px-8">
           {loading ? null : messages.length === 0 && !thinking ? (
             <div className="flex h-full flex-col items-center justify-center py-10 text-center">
-              <AiAvatar size="lg" />
-              <h2 className="mt-4 text-lg font-semibold">Hi {firstName}, I'm Nexa</h2>
-              <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">Your assistant in Kova. Pick something to try, or just ask.</p>
-              <div className="mt-6 flex w-full justify-center">
+              <AiAvatar size="md" />
+              <h2 className="mt-4 text-xl font-semibold tracking-tight text-slate-900 dark:text-white">Hi {firstName}, how can I help?</h2>
+              <div className="mt-8 flex w-full justify-center">
                 <CapabilitiesCard onPick={fill} />
               </div>
             </div>

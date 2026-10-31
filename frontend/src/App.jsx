@@ -7,6 +7,9 @@ import Login from './components/Login'
 import HomePage from './components/HomePage'
 import Profile from './components/Profile'
 import InvitePage from './components/InvitePage'
+import BusinessPage from './business/BusinessPage'
+import PublicPage from './business/PublicPage'
+import { takeReturnTo } from './business/utils'
 import { takePendingInvite } from './utils/contacts'
 import { useAuth } from './context/AuthProvider'
 import { PageTransition } from './components/ui'
@@ -23,7 +26,10 @@ const App = () => {
   useEffect(() => {
     if (!AuthUser) return
     const token = takePendingInvite()
-    if (token && !location.pathname.startsWith('/invite/')) navigate(`/invite/${token}`, { replace: true })
+    if (token && !location.pathname.startsWith('/invite/')) { navigate(`/invite/${token}`, { replace: true }); return }
+    // A business page opened while signed out
+    const back = takeReturnTo()
+    if (back && back !== location.pathname) navigate(back, { replace: true })
   }, [AuthUser, location.pathname, navigate])
 
   return (
@@ -35,6 +41,8 @@ const App = () => {
           <Route path='/signup' element={AuthUser ? <Navigate to="/" /> : page(<Signup />)} />
           <Route path='/login' element={AuthUser ? <Navigate to="/" /> : page(<Login />)} />
           <Route path='/invite/:token' element={page(<InvitePage />)} />
+          <Route path='/business' element={AuthUser ? page(<BusinessPage />) : <Navigate to="/login" />} />
+          <Route path='/b/:username' element={page(<PublicPage />)} />
           <Route path='/profile' element={AuthUser ? page(<Profile />) : <Navigate to="/login" />} />
           <Route path='*' element={<Navigate to={AuthUser ? '/' : '/home'} />} />
         </Routes>

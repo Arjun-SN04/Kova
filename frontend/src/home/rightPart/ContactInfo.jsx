@@ -7,6 +7,11 @@ import { useSocket } from '../../context/SocketProvider'
 import useConversation from '../../Zustand/UserConversation'
 import Avatar from '../Avatar'
 import ConfirmDialog from '../ConfirmDialog'
+import { useAuth } from '../../context/AuthProvider'
+import useBusiness from '../../business/store'
+import CustomerPanel from '../../business/CustomerPanel'
+import { BusinessBadge, BusinessProfile, OpenStatus, SafetyActions } from '../../business/BusinessInfo'
+import { isBusiness } from '../../business/utils'
 
 // Side panel with details about the person you're chatting with.
 // Inline column on wide screens, slide-over drawer on smaller ones.
@@ -15,6 +20,10 @@ const ContactInfo = ({ user, onClose, onClear }) => {
   const isOnline = !user.isSelf && onlineUsers.map(String).includes(String(user._id))
   const [confirmRemove, setConfirmRemove] = useState(false)
   const firstName = user.fullName?.split(' ')[0]
+  const [AuthUser] = useAuth()
+  const { settings: bizSettings, records, setRecord } = useBusiness()
+  // I'm a business and this is a customer chat: show the customer panel
+  const showCustomer = isBusiness(AuthUser) && !user.isSelf && !isBusiness(user)
 
   // Removing a contact keeps the chat history, but neither of you can message the other
   const removeContact = async () => {
@@ -61,9 +70,9 @@ const ContactInfo = ({ user, onClose, onClear }) => {
         <div className="flex-1 overflow-y-auto p-6">
           <div className="flex flex-col items-center text-center">
             <Avatar name={user.fullName} src={user.avatar?.url} size="lg" online={isOnline} />
-            <p className="mt-4 text-lg font-semibold">{user.fullName}</p>
+            <p className="mt-4 flex items-center gap-1.5 text-lg font-semibold">{user.fullName} <BusinessBadge business={user.business} className="size-4.5" /></p>
             <p className={`mt-0.5 text-sm ${isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
-              {user.isSelf ? 'Notes, links and files for yourself' : isOnline ? 'Online now' : 'Offline'}
+              {user.isSelf ? 'Notes, links and files for yourself' : isBusiness(user) ? <OpenStatus business={user.business} /> : isOnline ? 'Online now' : 'Offline'}
             </p>
           </div>
 
@@ -95,6 +104,22 @@ const ContactInfo = ({ user, onClose, onClear }) => {
             )}
           </dl>
 
+          {!user.isSelf && <BusinessProfile user={user} />}
+
+          {showCustomer && (
+            <div className="mt-6">
+              <CustomerPanel
+                key={user._id}
+                biz="me"
+                customerId={user._id}
+                record={records[String(user._id)]}
+                settings={bizSettings}
+                team={[AuthUser, ...(bizSettings?.team || []).map((t) => t.user).filter(Boolean)]}
+                onChange={setRecord}
+              />
+            </div>
+          )}
+
           <ChatSettings chat={user} />
 
           <button
@@ -111,6 +136,7 @@ const ContactInfo = ({ user, onClose, onClear }) => {
               <LuUserMinus className="size-4" /> Remove contact
             </button>
           )}
+          {!user.isSelf && <SafetyActions user={user} onBlocked={() => { onClose(); useConversation.getState().removeContact(user._id) }} />}
         </div>
       </motion.aside>
       <ConfirmDialog

@@ -1,12 +1,13 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { LuLayers, LuMessageSquareText, LuMoon, LuPhone, LuSettings, LuSun, LuUser, LuStar, LuCircleDashed } from 'react-icons/lu'
+import { LuBriefcase, LuLayers, LuMessageSquareText, LuMoon, LuPhone, LuSettings, LuSun, LuUser, LuStar, LuCircleDashed } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
 import { useTheme } from '../../context/ThemeProvider'
 import Avatar from '../Avatar'
 import Logout from './Logout'
 import { LogoMark } from '../../components/ui'
+import useBusiness from '../../business/store'
 
 // Unread chats, missed calls since I last opened Calls, unread community messages
 export const useNavBadges = () => {
@@ -41,6 +42,18 @@ const Badge = ({ count, className = '' }) =>
 
 const railBtn = 'relative flex size-11 items-center justify-center rounded-xl transition'
 
+// Opens the business workspace. The badge counts customers waiting too long for a reply.
+export const BusinessLink = ({ className = '', iconClass = 'size-5' }) => {
+  const waiting = useBusiness((st) => st.alerts.length)
+  const works = useBusiness((st) => !!st.me?.business?.enabled || st.me?.workFor?.length > 0)
+  return (
+    <Link to="/business" className={`relative ${className}`} title={works ? 'Business' : 'Set up a business account'} aria-label="Business">
+      <LuBriefcase className={iconClass} />
+      <Badge count={waiting} className="-right-1 -top-1 bg-amber-500!" />
+    </Link>
+  )
+}
+
 // Narrow bar on the far left (desktop): sections at the top, me at the bottom
 export const NavRail = () => {
   const [AuthUser] = useAuth()
@@ -69,6 +82,7 @@ export const NavRail = () => {
       })}
 
       <div className="mt-auto flex flex-col items-center gap-1">
+        <BusinessLink className={`${railBtn} text-slate-500 hover:bg-slate-200/60 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white`} />
         <button onClick={toggle} className={`${railBtn} text-slate-500 hover:bg-slate-200/60 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white`} title={dark ? 'Light mode' : 'Dark mode'} aria-label="Toggle theme">
           {dark ? <LuSun className="size-5" /> : <LuMoon className="size-5" />}
         </button>

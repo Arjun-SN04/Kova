@@ -82,7 +82,7 @@ const Login = () => {
       footer={
         <>
           New to Kova?{" "}
-          <Link to="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">Create an account</Link>
+          <Link to="/signup" className="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">Create an account</Link>
         </>
       }
     >

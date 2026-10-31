@@ -1,15 +1,15 @@
 import { motion } from 'motion/react'
 import { LuArrowLeft } from 'react-icons/lu'
 import { Button, Logo } from './ui'
-import { useLightPage } from '../hooks/useThemeClass'
+import useThemeClass from '../hooks/useThemeClass'
 
 const EASE = [0.22, 1, 0.36, 1]
 
 // Sign in / sign up layout: form on the left, framed photo panel on the right.
 const AuthLayout = ({ title, subtitle, image, imageAlt, quote, floating, footer, children }) => {
-  useLightPage()
+  useThemeClass()
   return (
-  <div className="min-h-dvh bg-white lg:grid lg:grid-cols-[1fr_1.05fr] lg:p-3">
+  <div className="min-h-dvh bg-white dark:bg-zinc-950 lg:grid lg:grid-cols-[1fr_1.05fr] lg:p-3">
     {/* Form side */}
     <main className="relative flex min-h-dvh flex-col lg:min-h-0">
 
@@ -27,10 +27,10 @@ const AuthLayout = ({ title, subtitle, image, imageAlt, quote, floating, footer,
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: EASE }}
         >
-          <h1 className="text-4xl font-semibold tracking-[-0.03em] text-slate-900">{title}</h1>
-          <p className="mt-3 text-[15px] text-slate-500">{subtitle}</p>
+          <h1 className="text-4xl font-semibold tracking-[-0.03em] text-slate-900 dark:text-white">{title}</h1>
+          <p className="mt-3 text-[15px] text-slate-500 dark:text-slate-400">{subtitle}</p>
           <div className="mt-10">{children}</div>
-          {footer && <p className="mt-10 text-center text-sm text-slate-500">{footer}</p>}
+          {footer && <p className="mt-10 text-center text-sm text-slate-500 dark:text-slate-400">{footer}</p>}
         </motion.div>
       </div>
     </main>
@@ -70,9 +70,9 @@ export const FloatCard = ({ className = '', delay = 0, children }) => (
     animate={{ opacity: 1, y: 0, scale: 1 }}
     transition={{ duration: 0.7, delay, ease: EASE }}
   >
-    <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut', delay }}>
+    <div className="float-bob" style={{ animationDelay: `${delay}s` }}>
       {children}
-    </motion.div>
+    </div>
   </motion.div>
 )
 

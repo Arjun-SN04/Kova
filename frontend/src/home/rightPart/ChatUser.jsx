@@ -8,6 +8,8 @@ import { useSocket } from '../../context/SocketProvider'
 import { useCall } from '../../context/CallProvider'
 import Avatar, { GroupAvatar } from '../Avatar'
 import { useAuth } from '../../context/AuthProvider'
+import { BusinessBadge, OpenStatus } from '../../business/BusinessInfo'
+import { isBusiness } from '../../business/utils'
 
 const iconBtn =
   'flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'
@@ -117,6 +119,7 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
         <div className="min-w-0">
           <p className="truncate text-[15px] font-semibold">
             {selectedConversation.fullName}
+            {!isGroup && <BusinessBadge business={selectedConversation.business} className="ml-1 size-3.5 -translate-y-px" />}
             {chatTimers[String(selectedConversation._id)] > 0 && (
               <span className="ml-1.5 inline-flex translate-y-[-1px] items-center gap-0.5 align-middle text-[11px] font-medium text-slate-400" title={`Disappearing messages: ${timerLabel(chatTimers[String(selectedConversation._id)])}`}>
                 <LuTimer className="size-3" />{timerShort(chatTimers[String(selectedConversation._id)])}
@@ -134,6 +137,8 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
             <p className="text-xs text-slate-500 dark:text-slate-400">Message yourself</p>
           ) : typing ? (
             <p className="text-xs font-medium text-indigo-600 dark:text-indigo-400">{typing === 'Nexa' ? 'Nexa is thinking…' : typeof typing === 'string' ? `${typing} is typing…` : 'typing…'}</p>
+          ) : isBusiness(selectedConversation) ? (
+            <p className="truncate text-xs"><OpenStatus business={selectedConversation.business} /></p>
           ) : (
             <p className={`text-xs ${isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
               {isOnline ? 'Online' : 'Offline'}

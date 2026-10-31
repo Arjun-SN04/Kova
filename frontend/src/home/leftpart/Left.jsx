@@ -7,7 +7,7 @@ import CommunitiesPanel from './CommunitiesPanel'
 import StarredPanel from './StarredPanel'
 import NotifyBanner from './NotifyBanner'
 import StatusPanel from '../status/StatusPanel'
-import { MobileTabs, NavRail } from './NavRail'
+import { BusinessLink, MobileTabs, NavRail } from './NavRail'
 import ContactsDialog from './ContactsDialog'
 import CreateGroupDialog from '../groups/CreateGroupDialog'
 import useConversation from '../../Zustand/UserConversation'
@@ -72,6 +72,7 @@ const ChatsPanel = () => {
               </span>
             )}
           </button>
+          <BusinessLink className={`${iconBtn} md:hidden`} iconClass="size-4.5" />
           <button onClick={toggle} className={`${iconBtn} md:hidden`} title={dark ? 'Light mode' : 'Dark mode'} aria-label="Toggle theme">
             {dark ? <LuSun className="size-4.5" /> : <LuMoon className="size-4.5" />}
           </button>

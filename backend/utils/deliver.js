@@ -17,15 +17,16 @@ const pushFrom = async (senderId, to, msg, groupName = null) => {
 // Send a text message on someone's behalf (used by Nexa and scheduled messages).
 // Applies the same rules as the app: contacts only, group members only, admins-only announcements.
 // Everyone involved, including the sender, gets a live `newMessage`.
-export const deliverText = async ({ senderId, receiverId = null, groupId = null, text, ref = null }) => {
+// Business extras: `auto` (greeting/away/nexa/reminder), `sentBy` (team member), `card` (product/order/payment/booking).
+export const deliverText = async ({ senderId, receiverId = null, groupId = null, text, ref = null, auto = null, sentBy = null, card = null }) => {
   const body = String(text || "").trim()
-  if (!body) throw new Error("The message is empty")
+  if (!body && !card) throw new Error("The message is empty")
 
   if (groupId) {
     const group = await Group.findById(groupId)
     if (!group || !group.members.some((m) => same(m, senderId))) throw new Error("You're not in that group")
     if (group.announcement && !group.admins.some((a) => same(a, senderId))) throw new Error("Only admins can post announcements there")
-    const msg = await Message.create({ senderId, groupId, message: body })
+    const msg = await Message.create({ senderId, groupId, message: body, sentBy, card })
     group.reads.set(String(senderId), new Date())
     group.updatedAt = new Date()
     await group.save()
@@ -44,10 +45,14 @@ export const deliverText = async ({ senderId, receiverId = null, groupId = null,
     : await Conversation.findOne({ members: { $all: [senderId, receiverId] } })
   if (!conversation) conversation = await Conversation.create({ members: [senderId, receiverId] })
 
-  const msg = await Message.create({ senderId, receiverId, message: body, seen: self, ref })
+  const msg = await Message.create({ senderId, receiverId, message: body, seen: self, ref, auto, sentBy, card })
   conversation.messages.push(msg._id)
   await conversation.save()
   emitToUsers(self ? [senderId] : [receiverId, senderId], "newMessage", msg)
-  if (!self) pushFrom(senderId, [receiverId], msg)
+  if (!self) {
+    pushFrom(senderId, [receiverId], msg)
+    // Business chats: auto messages, waiting-for-reply, team inboxes
+    import("./business.js").then(({ onDirectMessage }) => onDirectMessage(msg)).catch((err) => console.log("business hook error:", err.message))
+  }
   return msg
 }

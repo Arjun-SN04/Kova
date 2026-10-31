@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { LuInbox, LuLayers, LuQrCode, LuSearch, LuSearchX, LuUserPlus, LuUsers, LuX } from 'react-icons/lu'
+import { LuClock, LuInbox, LuLayers, LuQrCode, LuSearch, LuSearchX, LuUserPlus, LuUsers, LuX } from 'react-icons/lu'
 import User from './User'
 import AiRow from './AiRow'
 import { CommunityRow, GroupRow } from './GroupRow'
@@ -8,6 +8,8 @@ import { useSocket } from '../../context/SocketProvider'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
 import { selfContact } from '../../utils/conversations'
+import useBusiness from '../../business/store'
+import { isBusiness } from '../../business/utils'
 
 const TABS = [
   { id: 'all', label: 'All' },
@@ -34,6 +36,19 @@ const Users = () => {
   const myId = String(AuthUser?._id)
   const [query, setQuery] = useState('')
   const [tab, setTab] = useState('all')
+  // Business accounts: filter customers by label, waiting for a reply, or leads
+  const { settings: bizSettings, records, alerts, dismissAlert } = useBusiness()
+  const bizMode = isBusiness(AuthUser)
+  const bizLabels = bizMode ? bizSettings?.labels || [] : []
+  const [bizFilter, setBizFilter] = useState(null) // null | 'waiting' | 'leads' | labelId
+  const recordOf = (c) => records[String(c._id)]
+  const passesBizFilter = (c) => {
+    if (!bizFilter) return true
+    const r = recordOf(c)
+    if (bizFilter === 'waiting') return !!r?.waitingSince
+    if (bizFilter === 'leads') return !!r?.lead
+    return !!r?.labels?.some((l) => String(l) === bizFilter)
+  }
   const searchRef = useRef(null)
 
   // Press "/" anywhere to jump to search
@@ -79,10 +94,11 @@ const Users = () => {
     return pool
       .filter(matches)
       .filter((c) => tab === 'all' || tab === 'groups' || (tab === 'online' ? onlineSet.has(String(c._id)) : unreadOf(c) > 0))
+      .filter((c) => !bizFilter || (!c.isGroup && passesBizFilter(c)))
       // Pinned chats first (in pin order), then the most recent
       .sort((a, b) => pinRank(a) - pinRank(b) || lastTime(b) - lastTime(a) || a.fullName.localeCompare(b.fullName))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allUser, groups, query, tab, onlineSet, unreadCounts, previews, pinnedChats])
+  }, [allUser, groups, query, tab, onlineSet, unreadCounts, previews, pinnedChats, bizFilter, records])
 
   const rowFor = (chat, compact = false) =>
     chat.isGroup ? (
@@ -106,6 +122,9 @@ const Users = () => {
         typing={typingUsers[String(chat._id)]}
         myId={myId}
         pinned={pinnedChats.includes(String(chat._id))}
+        labels={bizMode ? (recordOf(chat)?.labels || []).map((id) => bizLabels.find((l) => String(l._id) === String(id))).filter(Boolean) : []}
+        lead={bizMode && !!recordOf(chat)?.lead}
+        waiting={bizMode && !!recordOf(chat)?.waitingSince && !!previews[String(chat._id)]}
       />
     )
 
@@ -200,6 +219,37 @@ const Users = () => {
           </button>
         ))}
       </div>
+
+      {/* Business: customer filters */}
+      {bizMode && tab !== 'groups' && (
+        <div className="mt-2 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+          {[['waiting', 'Waiting'], ['leads', 'Leads']].map(([id, label]) => (
+            <button key={id} onClick={() => setBizFilter((f) => (f === id ? null : id))} className={`flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition ${bizFilter === id ? 'bg-slate-900 text-white ring-slate-900 dark:bg-white dark:text-slate-900 dark:ring-white' : 'text-slate-600 ring-slate-200 hover:bg-slate-50 dark:text-slate-300 dark:ring-slate-800 dark:hover:bg-slate-900'}`}>
+              {label}
+            </button>
+          ))}
+          {bizLabels.map((l) => (
+            <button key={l._id} onClick={() => setBizFilter((f) => (f === String(l._id) ? null : String(l._id)))} className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition"
+              style={bizFilter === String(l._id) ? { backgroundColor: l.color, color: '#fff', boxShadow: `inset 0 0 0 1px ${l.color}` } : { color: l.color, boxShadow: `inset 0 0 0 1px ${l.color}55` }}>
+              <span className="size-1.5 rounded-full" style={{ backgroundColor: bizFilter === String(l._id) ? '#fff' : l.color }} />{l.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Business: customers waiting too long for a reply */}
+      {bizMode && alerts.filter((a) => String(a.business) === myId).slice(0, 2).map((a) => {
+        const contact = allUser.find((u) => String(u._id) === a.customer)
+        return (
+          <div key={a.customer} className="mx-4 mt-2 flex items-center gap-2.5 rounded-xl bg-amber-50 px-3 py-2 text-[13px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+            <LuClock className="size-4 shrink-0" />
+            <button onClick={() => { if (contact) useConversation.getState().setSelectedConversation(contact); dismissAlert(a.customer) }} className="min-w-0 flex-1 truncate text-left font-medium">
+              {a.name} has waited {a.minutes} min
+            </button>
+            <button onClick={() => dismissAlert(a.customer)} className="text-xs opacity-70 hover:opacity-100" aria-label="Dismiss">Dismiss</button>
+          </div>
+        )
+      })}
 
       {/* Pending requests */}
       {requests.incoming.length > 0 && (

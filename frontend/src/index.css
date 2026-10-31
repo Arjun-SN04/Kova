@@ -24,6 +24,192 @@
   --color-indigo-950: #170535;
 }
 
+/* ── Colour themes (Profile → Appearance) ──────────────────────
+   The accent is Tailwind's indigo (and violet, used by Nexa). Each theme
+   swaps both palettes, so every accent class follows the chosen theme. */
+:root[data-accent="ocean"] {
+  --color-indigo-50: #eff6ff;
+  --color-violet-50: #eff6ff;
+  --color-indigo-100: #dbeafe;
+  --color-violet-100: #dbeafe;
+  --color-indigo-200: #bfdbfe;
+  --color-violet-200: #bfdbfe;
+  --color-indigo-300: #93c5fd;
+  --color-violet-300: #93c5fd;
+  --color-indigo-400: #60a5fa;
+  --color-violet-400: #60a5fa;
+  --color-indigo-500: #3b82f6;
+  --color-violet-500: #3b82f6;
+  --color-indigo-600: #2563eb;
+  --color-violet-600: #2563eb;
+  --color-indigo-700: #1d4ed8;
+  --color-violet-700: #1d4ed8;
+  --color-indigo-800: #1e40af;
+  --color-violet-800: #1e40af;
+  --color-indigo-900: #1e3a8a;
+  --color-violet-900: #1e3a8a;
+  --color-indigo-950: #172554;
+  --color-violet-950: #172554;
+}
+:root[data-accent="lagoon"] {
+  --color-indigo-50: #f0fdfa;
+  --color-violet-50: #f0fdfa;
+  --color-indigo-100: #ccfbf1;
+  --color-violet-100: #ccfbf1;
+  --color-indigo-200: #99f6e4;
+  --color-violet-200: #99f6e4;
+  --color-indigo-300: #5eead4;
+  --color-violet-300: #5eead4;
+  --color-indigo-400: #2dd4bf;
+  --color-violet-400: #2dd4bf;
+  --color-indigo-500: #14b8a6;
+  --color-violet-500: #14b8a6;
+  --color-indigo-600: #0d9488;
+  --color-violet-600: #0d9488;
+  --color-indigo-700: #0f766e;
+  --color-violet-700: #0f766e;
+  --color-indigo-800: #115e59;
+  --color-violet-800: #115e59;
+  --color-indigo-900: #134e4a;
+  --color-violet-900: #134e4a;
+  --color-indigo-950: #042f2e;
+  --color-violet-950: #042f2e;
+}
+:root[data-accent="forest"] {
+  --color-indigo-50: #ecfdf5;
+  --color-violet-50: #ecfdf5;
+  --color-indigo-100: #d1fae5;
+  --color-violet-100: #d1fae5;
+  --color-indigo-200: #a7f3d0;
+  --color-violet-200: #a7f3d0;
+  --color-indigo-300: #6ee7b7;
+  --color-violet-300: #6ee7b7;
+  --color-indigo-400: #34d399;
+  --color-violet-400: #34d399;
+  --color-indigo-500: #10b981;
+  --color-violet-500: #10b981;
+  --color-indigo-600: #059669;
+  --color-violet-600: #059669;
+  --color-indigo-700: #047857;
+  --color-violet-700: #047857;
+  --color-indigo-800: #065f46;
+  --color-violet-800: #065f46;
+  --color-indigo-900: #064e3b;
+  --color-violet-900: #064e3b;
+  --color-indigo-950: #022c22;
+  --color-violet-950: #022c22;
+}
+:root[data-accent="rose"] {
+  --color-indigo-50: #fff1f2;
+  --color-violet-50: #fff1f2;
+  --color-indigo-100: #ffe4e6;
+  --color-violet-100: #ffe4e6;
+  --color-indigo-200: #fecdd3;
+  --color-violet-200: #fecdd3;
+  --color-indigo-300: #fda4af;
+  --color-violet-300: #fda4af;
+  --color-indigo-400: #fb7185;
+  --color-violet-400: #fb7185;
+  --color-indigo-500: #f43f5e;
+  --color-violet-500: #f43f5e;
+  --color-indigo-600: #e11d48;
+  --color-violet-600: #e11d48;
+  --color-indigo-700: #be123c;
+  --color-violet-700: #be123c;
+  --color-indigo-800: #9f1239;
+  --color-violet-800: #9f1239;
+  --color-indigo-900: #881337;
+  --color-violet-900: #881337;
+  --color-indigo-950: #4c0519;
+  --color-violet-950: #4c0519;
+}
+:root[data-accent="graphite"] {
+  --color-indigo-50: #f4f4f5;
+  --color-violet-50: #f4f4f5;
+  --color-indigo-100: #e7e7ea;
+  --color-violet-100: #e7e7ea;
+  --color-indigo-200: #d4d5d9;
+  --color-violet-200: #d4d5d9;
+  --color-indigo-300: #b4b6bc;
+  --color-violet-300: #b4b6bc;
+  --color-indigo-400: #8a8d95;
+  --color-violet-400: #8a8d95;
+  --color-indigo-500: #5c5f67;
+  --color-violet-500: #5c5f67;
+  --color-indigo-600: #3a3d43;
+  --color-violet-600: #3a3d43;
+  --color-indigo-700: #2c2e33;
+  --color-violet-700: #2c2e33;
+  --color-indigo-800: #1f2125;
+  --color-violet-800: #1f2125;
+  --color-indigo-900: #16171a;
+  --color-violet-900: #16171a;
+  --color-indigo-950: #0e0f10;
+  --color-violet-950: #0e0f10;
+}
+/* Graphite in dark mode: light accent, so buttons stand out on dark grey */
+:root.dark[data-accent="graphite"] {
+  --color-indigo-300: #d4d5d9; --color-violet-300: #d4d5d9;
+  --color-indigo-400: #b4b6bc; --color-violet-400: #b4b6bc;
+  --color-indigo-500: #8a8d95; --color-violet-500: #8a8d95;
+  --color-indigo-600: #5c5f67; --color-violet-600: #5c5f67;
+  --color-indigo-700: #4a4d54; --color-violet-700: #4a4d54;
+}
+
+/* Light mode neutrals: a clean cool grey (less blue than Tailwind's slate) */
+:root {
+  --color-slate-50: #f7f8fa;
+  --color-slate-100: #eff1f4;
+  --color-slate-200: #e3e6eb;
+  --color-slate-300: #cdd2d9;
+  --color-slate-400: #9aa0ab;
+  --color-slate-500: #6b717d;
+  --color-slate-600: #4c525d;
+  --color-slate-700: #363b44;
+  --color-slate-800: #23272e;
+  --color-slate-900: #16191e;
+  --color-slate-950: #0c0e11;
+}
+
+/* Dark mode palette: a neutral graphite instead of Tailwind's navy slate.
+   Every slate-* / zinc-* class switches to these greys in dark mode. */
+.dark {
+  --graphite-50: #f7f7f8;
+  --graphite-100: #ececee;
+  --graphite-200: #dcdde0;
+  --graphite-300: #c2c4c9;
+  --graphite-400: #989ba3;
+  --graphite-500: #6d7079;
+  --graphite-600: #4a4d54;
+  --graphite-700: #33353a;
+  --graphite-800: #232428;
+  --graphite-900: #161719;
+  --graphite-950: #0e0f10;
+  --color-slate-50: var(--graphite-50);
+  --color-slate-100: var(--graphite-100);
+  --color-slate-200: var(--graphite-200);
+  --color-slate-300: var(--graphite-300);
+  --color-slate-400: var(--graphite-400);
+  --color-slate-500: var(--graphite-500);
+  --color-slate-600: var(--graphite-600);
+  --color-slate-700: var(--graphite-700);
+  --color-slate-800: var(--graphite-800);
+  --color-slate-900: var(--graphite-900);
+  --color-slate-950: var(--graphite-950);
+  --color-zinc-50: var(--graphite-50);
+  --color-zinc-100: var(--graphite-100);
+  --color-zinc-200: var(--graphite-200);
+  --color-zinc-300: var(--graphite-300);
+  --color-zinc-400: var(--graphite-400);
+  --color-zinc-500: var(--graphite-500);
+  --color-zinc-600: var(--graphite-600);
+  --color-zinc-700: var(--graphite-700);
+  --color-zinc-800: var(--graphite-800);
+  --color-zinc-900: var(--graphite-900);
+  --color-zinc-950: var(--graphite-950);
+  color-scheme: dark;
+}
+
 *,
 *::before,
 *::after {
@@ -46,11 +232,11 @@ html {
    shows through while pages fade in and out */
 html.dark,
 html.dark body {
-  background-color: #020617;
+  background-color: #0e0f10;
 }
 
 body {
-  background-color: #f8fafc;
+  background-color: var(--color-slate-50);
   transition: background-color 0.2s ease;
   font-family: var(--font-sans);
   font-feature-settings: "cv11", "ss01";
@@ -76,11 +262,11 @@ body {
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #33353a;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #4a4d54;
 }
 
 @keyframes pulse-badge {
@@ -99,14 +285,15 @@ body {
 
 /* Chat background: soft doodle pattern behind the messages */
 .chat-bg {
-  background-color: #f5f6fa;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%238b5cf6' stroke-opacity='0.07' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 24h26a7 7 0 0 1 7 7v12a7 7 0 0 1-7 7H32l-8 7v-7h-4a7 7 0 0 1-7-7V31a7 7 0 0 1 7-7z'/%3E%3Ccircle cx='27' cy='37' r='1.2'/%3E%3Ccircle cx='33' cy='37' r='1.2'/%3E%3Ccircle cx='39' cy='37' r='1.2'/%3E%3Ccircle cx='132' cy='36' r='9'/%3E%3Cpath d='M104 116l7 7 14-14'/%3E%3Cpath d='M146 134h18M155 125v18'/%3E%3Cpath d='M30 146c5-5 10-5 15 0s10 5 15 0'/%3E%3Cpath d='M120 74h22a6 6 0 0 1 6 6v9a6 6 0 0 1-6 6h-14l-7 6v-6h-1a6 6 0 0 1-6-6v-9a6 6 0 0 1 6-6z'/%3E%3Cpath d='M70 92l4-8 4 8 8 1-6 6 1.5 8-7.5-4-7.5 4 1.5-8-6-6z'/%3E%3C/g%3E%3C/svg%3E");
+  /* A light wash of the theme colour, so bubbles stand out from it */
+  background-color: color-mix(in oklab, var(--color-indigo-500) 5%, #eceef2);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%23475569' stroke-opacity='0.08' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 24h26a7 7 0 0 1 7 7v12a7 7 0 0 1-7 7H32l-8 7v-7h-4a7 7 0 0 1-7-7V31a7 7 0 0 1 7-7z'/%3E%3Ccircle cx='27' cy='37' r='1.2'/%3E%3Ccircle cx='33' cy='37' r='1.2'/%3E%3Ccircle cx='39' cy='37' r='1.2'/%3E%3Ccircle cx='132' cy='36' r='9'/%3E%3Cpath d='M104 116l7 7 14-14'/%3E%3Cpath d='M146 134h18M155 125v18'/%3E%3Cpath d='M30 146c5-5 10-5 15 0s10 5 15 0'/%3E%3Cpath d='M120 74h22a6 6 0 0 1 6 6v9a6 6 0 0 1-6 6h-14l-7 6v-6h-1a6 6 0 0 1-6-6v-9a6 6 0 0 1 6-6z'/%3E%3Cpath d='M70 92l4-8 4 8 8 1-6 6 1.5 8-7.5-4-7.5 4 1.5-8-6-6z'/%3E%3C/g%3E%3C/svg%3E");
   background-size: 180px 180px;
 }
 
 .dark .chat-bg {
-  background-color: #0b1120;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%2394a3b8' stroke-opacity='0.07' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 24h26a7 7 0 0 1 7 7v12a7 7 0 0 1-7 7H32l-8 7v-7h-4a7 7 0 0 1-7-7V31a7 7 0 0 1 7-7z'/%3E%3Ccircle cx='27' cy='37' r='1.2'/%3E%3Ccircle cx='33' cy='37' r='1.2'/%3E%3Ccircle cx='39' cy='37' r='1.2'/%3E%3Ccircle cx='132' cy='36' r='9'/%3E%3Cpath d='M104 116l7 7 14-14'/%3E%3Cpath d='M146 134h18M155 125v18'/%3E%3Cpath d='M30 146c5-5 10-5 15 0s10 5 15 0'/%3E%3Cpath d='M120 74h22a6 6 0 0 1 6 6v9a6 6 0 0 1-6 6h-14l-7 6v-6h-1a6 6 0 0 1-6-6v-9a6 6 0 0 1 6-6z'/%3E%3Cpath d='M70 92l4-8 4 8 8 1-6 6 1.5 8-7.5-4-7.5 4 1.5-8-6-6z'/%3E%3C/g%3E%3C/svg%3E");
+  background-color: color-mix(in oklab, var(--color-indigo-500) 3%, #101113);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%23989ba3' stroke-opacity='0.06' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 24h26a7 7 0 0 1 7 7v12a7 7 0 0 1-7 7H32l-8 7v-7h-4a7 7 0 0 1-7-7V31a7 7 0 0 1 7-7z'/%3E%3Ccircle cx='27' cy='37' r='1.2'/%3E%3Ccircle cx='33' cy='37' r='1.2'/%3E%3Ccircle cx='39' cy='37' r='1.2'/%3E%3Ccircle cx='132' cy='36' r='9'/%3E%3Cpath d='M104 116l7 7 14-14'/%3E%3Cpath d='M146 134h18M155 125v18'/%3E%3Cpath d='M30 146c5-5 10-5 15 0s10 5 15 0'/%3E%3Cpath d='M120 74h22a6 6 0 0 1 6 6v9a6 6 0 0 1-6 6h-14l-7 6v-6h-1a6 6 0 0 1-6-6v-9a6 6 0 0 1 6-6z'/%3E%3Cpath d='M70 92l4-8 4 8 8 1-6 6 1.5 8-7.5-4-7.5 4 1.5-8-6-6z'/%3E%3C/g%3E%3C/svg%3E");
 }
 
 /* Logo: the three dots rise one after another like a typing indicator.
@@ -146,6 +333,31 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .logo-dot {
+    animation: none;
+  }
+}
+
+/* Sign-in / sign-up cards bob gently. Plain CSS on its own GPU layer, so the
+   slow movement glides smoothly instead of stepping a pixel at a time. */
+@keyframes float-bob {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: translate3d(0, -8px, 0);
+  }
+}
+
+.float-bob {
+  animation: float-bob 6s ease-in-out infinite;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .float-bob {
     animation: none;
   }
 }

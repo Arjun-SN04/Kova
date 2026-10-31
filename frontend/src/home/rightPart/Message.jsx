@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
-import { LuAlarmClock, LuCheck, LuCheckCheck, LuEllipsis, LuLanguages, LuCopy, LuForward, LuPencil, LuBookmark, LuBookmarkX, LuPin, LuPinOff, LuReply, LuSmilePlus, LuSquareCheck, LuStar, LuStarOff, LuTimer, LuTrash2 } from 'react-icons/lu'
+import { LuAlarmClock, LuBot, LuClipboardList, LuCheck, LuCheckCheck, LuEllipsis, LuLanguages, LuCopy, LuForward, LuPencil, LuBookmark, LuBookmarkX, LuPin, LuPinOff, LuReply, LuSmilePlus, LuSquareCheck, LuStar, LuStarOff, LuTimer, LuTrash2 } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import Avatar from '../Avatar'
 import Attachment from './Attachment'
@@ -14,6 +14,8 @@ import ReactMarkdown from 'react-markdown'
 import { remarkHtmlBreaks } from '../../utils/markdown'
 import PollCard from './PollCard'
 import { setKept, setMessagePinned, toggleStar } from '../../utils/chatExtras'
+import ChatCard from '../../business/ChatCard'
+import { TaskDialog } from '../../business/Tasks'
 
 // Nexa writes short Markdown (bullets, bold); people's messages stay plain text
 const botMd = {
@@ -84,6 +86,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
   const pressTimer = useRef(null)
   const [remindOpen, setRemindOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [taskOpen, setTaskOpen] = useState(false)
   const rowRef = useRef(null)
   const moreRef = useRef(null)
 
@@ -106,7 +109,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
   const isEditing = editingMessage?._id === id
   const isReplyTarget = replyingTo?._id === id
   const isSelected = selectedIds.includes(id)
-  const editable = itsMe && !message.poll && canEdit(message, now)
+  const editable = itsMe && !message.poll && !message.card && canEdit(message, now)
   const contactFirst = contactName?.split(' ')[0]
 
   const handleDelete = async () => {
@@ -211,6 +214,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           {!isBot && <MenuItem icon={pinned ? LuPinOff : LuPin} label={pinned ? 'Unpin' : 'Pin'} onClick={close(() => setMessagePinned(id, !pinned))} />}
           {(expiring || kept) && <MenuItem icon={kept ? LuBookmarkX : LuBookmark} label={kept ? "Don't keep" : 'Keep (stop it disappearing)'} onClick={close(() => setKept(message, !kept))} />}
           <MenuItem icon={LuAlarmClock} label="Remind me" onClick={() => { setMoreOpen(false); setRemindOpen(true) }} />
+          {message.groupId && !message.card && <MenuItem icon={LuClipboardList} label="Make task" onClick={close(() => setTaskOpen(true))} />}
           {editable && <MenuItem icon={LuPencil} label="Edit" onClick={close(() => setEditingMessage(message))} />}
           <MenuItem icon={LuSquareCheck} label="Select" onClick={close(() => startSelection(id))} />
           {itsMe && (
@@ -291,10 +295,13 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           onClick={selectionMode ? undefined : onBubbleClick}
           onDoubleClick={selectionMode ? undefined : (e) => { e.preventDefault(); window.getSelection()?.removeAllRanges(); react('❤️') }}
           title={new Date(message.createdAt).toLocaleString()}
-          className={`rounded-2xl text-[14px] leading-relaxed transition ${media ? 'p-1.5' : 'px-3.5 py-2'} ${corners} ${ring} ${deleting ? 'opacity-40' : ''} ${
+          className={message.card
+            // Business cards bring their own frame: no bubble around them
+            ? `rounded-xl text-[14px] leading-relaxed transition ${ring} ${deleting ? 'opacity-40' : ''} ${selectionMode ? 'pointer-events-none' : ''}`
+            : `rounded-2xl text-[14px] leading-relaxed transition ${media ? 'p-1.5' : 'px-3.5 py-2'} ${corners} ${ring} ${deleting ? 'opacity-40' : ''} ${
             itsMe
               ? 'bg-indigo-600 text-white'
-              : 'bg-white text-slate-800 shadow-xs dark:bg-slate-800 dark:text-slate-100'
+              : 'bg-white text-slate-800 shadow-xs ring-1 ring-slate-900/[0.04] dark:bg-slate-800 dark:text-slate-100 dark:ring-0'
           } ${!itsMe && !ring ? 'ring-1 ring-slate-200/80 dark:ring-slate-700/60' : ''} ${selectionMode ? 'pointer-events-none' : ''}`}
         >
           {message.forwarded && (
@@ -306,7 +313,8 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           {message.attachment && <Attachment attachment={message.attachment} itsMe={itsMe} />}
           <Transcript message={message} itsMe={itsMe} />
           {message.poll && <PollCard message={message} itsMe={itsMe} myId={myId} nameOf={nameOf} />}
-          {message.message && !message.poll && (isBot ? (
+          {message.card && <ChatCard message={message} mine={itsMe} />}
+          {message.message && !message.poll && !message.card && (isBot ? (
             <div className="wrap-break-word"><ReactMarkdown remarkPlugins={HTML_BREAKS} components={botMd}>{message.message}</ReactMarkdown></div>
           ) : (
             <span className={`block whitespace-pre-wrap wrap-break-word ${media ? 'px-2 pb-1 pt-1.5' : message.attachment ? 'pt-2' : ''}`}>
@@ -343,12 +351,13 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           </div>
         )}
 
-        {(last || starred || pinned || kept) && (
+        {(last || starred || pinned || kept || message.auto) && (
           <p className={`flex items-center gap-1 px-1 text-[11px] text-slate-400 ${last ? 'mt-1' : 'mt-0.5'}`}>
             {pinned && <LuPin className="size-3 -rotate-45 text-indigo-500" title="Pinned" aria-label="Pinned" />}
             {starred && <LuStar className="size-3 fill-amber-400 text-amber-400" title="Starred" aria-label="Starred" />}
             {kept && <LuBookmark className="size-3 fill-indigo-400 text-indigo-400" title="Kept: won't disappear" aria-label="Kept" />}
             {last && expiring && <LuTimer className="size-3" title={`Disappears ${new Date(message.expiresAt).toLocaleString()}`} aria-label="Disappearing message" />}
+            {message.auto && <span className="inline-flex items-center gap-0.5" title="Sent automatically"><LuBot className="size-3" />{message.auto === 'nexa' ? 'Nexa auto-reply' : 'Automatic'} ·</span>}
             {last && formatTime(message.createdAt)}
             {last && message.edited && ' · edited'}
             {last && itsMe && String(message.receiverId) !== String(myId) && (message.seen
@@ -360,6 +369,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
 
       {!itsMe && actions}
 
+      {taskOpen && <TaskDialog groupId={message.groupId} message={message} onClose={() => setTaskOpen(false)} />}
       <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}

@@ -41,8 +41,8 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Reactions** with any emoji: quick picks, a longer list, or the full picker (one reaction per person per message; double-click a message for a quick ❤️).
 - **Message actions**: hovering a message shows a small bar with **React**, **Reply** and **⋯ More** (Copy, Forward, Translate, Remind me, Edit, Select, Delete). With a mouse, clicking a message doesn't pin the bar; on touch screens a tap shows it and tapping elsewhere hides it.
 - **Forwarding** one or many messages to up to 20 people at once. Forwarded messages are labelled.
-- **Multi-select** mode (hover menu → Select, or long-press on touch) to copy, forward or delete several messages.
-- **Copy** message text with one click.
+- **Multi-select** mode (⋯ More → Select, or long-press on touch) to copy, forward or delete several messages.
+- **Copy** message text from the ⋯ More menu.
 - **Message grouping**: consecutive messages from the same person within 5 minutes are grouped, with date dividers ("Today", "Yesterday", or the date).
 
 ### Media
@@ -55,7 +55,7 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 ### Nexa, the AI assistant
 - **Nexa** is a built-in assistant pinned in the chat list (under "Message yourself"). Ask how to use NexChat, or anything else: writing a message, ideas, explanations, summaries.
 - Answers come as short bullet points (drafts to send come as a quote you can copy). Nexa never uses em or en dashes. The chat looks like any other NexChat conversation.
-- Ask **"What can you do?"** (or open Nexa for the first time) to see a capability card: Send messages, Reminders, Schedule messages, Manage scheduled, Catch up, Write and rewrite, Translate, NexChat help, plus what Nexa adds to every chat. Tapping an example puts it in the box to edit before sending. It remembers the conversation, so follow-up questions work. Suggestion chips help you start; the chat is private to you and can be cleared.
+- Opening Nexa with an empty chat shows a short greeting and six starter suggestions (send, schedule, remind, catch up, search the web, create an image). Ask **"What can you do?"** to see all twelve, plus a note on what Nexa adds to every chat. Tapping an example puts it in the box to edit before sending. It remembers the conversation, so follow-up questions work. The chat is private to you and can be cleared.
 - **Nexa can act for you** (ask in plain words):
   - *Send a message*: "tell Arjun I'm running 10 minutes late".
   - *Schedule a message*: "wish Priya happy birthday tomorrow at 9am". Times use your own time zone.
@@ -101,18 +101,39 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Add by username**: send a contact request; the other person accepts or declines it. Requests arrive live, with a badge and a banner.
 - **Invite link and QR code**: share your link or QR code (copy, share, WhatsApp, or save the QR image). Opening it adds you to each other instantly. The link can be reset at any time.
 - **Remove contact** from the contact info panel (chat history is kept).
+- **Block and report** from the contact info panel. Blocking removes the contact both ways and stops new requests, invites and messages; unblock in Profile → Blocked accounts. Reports (spam, scam, abuse) go to the app admins.
 - **Message yourself**: a private chat pinned at the top for notes, links and files.
 
 ### Navigation
 - **Section rail** on the left (WhatsApp-style) with **Chats**, **Calls** and **Communities**, each with a badge (unread chats, new missed calls, unread community messages). Theme, settings, log out and your profile sit at the bottom. On phones it becomes a bottom tab bar.
 - **Communities tab**: each community with its Announcements preview and unread count, plus "View all" to open the community.
 - Contact list with **last message preview** and time, sorted by most recent chat.
-- **Search** (press `/` anywhere) and **All / Online / Unread** tabs.
+- **Search** (press `/` anywhere) and **All / Online / Unread / Groups** tabs. Nexa is pinned under Message yourself.
 - **Contact info panel** (username, email, join date, clear chat, remove contact).
 - **Welcome screen** with people who are online right now.
 - **Jump to latest** button with a new-message counter when you scroll up.
 - **Resizable sidebar**: starts at about a third of the window (400–500px), can be dragged from 360px up to 640px (or about half the window), and double-click resets it.
 - **Responsive**: one panel at a time on phones, with back navigation.
+
+### Business
+Any account can turn on **Business** (Profile → Business tools, or the briefcase in the side rail) to talk to customers in one place. Setup is one screen: pick a category and add a short description (a photo for the chosen category shows alongside). The business workspace lives at `/business`; each section has a photo banner, and the sidebar shows the business's cover, its open status and a link to its public page.
+
+- **Business profile**: category, description, address, website, email, UPI ID and opening hours (with time zone). Chats with a business show a briefcase (or a blue ✓ once **verified** by an app admin) and "Open now · closes 8 PM" / "Closed · opens Mon 9 AM" in the header.
+- **Business page and QR code** (`/b/<username>`): a storefront with a **cover photo** (uploaded in Settings → Profile & hours, or a stock photo for the business's category), profile, hours, contact details, a photo catalog with a cart, the list of bookable services, **Book** and **Message**. Works signed out (sign in, then come back). Customers can message a business **without a contact request**; a contact request to a business is accepted at once.
+- **Quick replies and templates**: type `/` in a customer chat to insert a saved answer (`/price`, `/hours`); `{name}` becomes the customer's first name. Templates (`{name}`, `{order}`, `{total}`, `{status}`) are used for order updates.
+- **Greeting and away messages**: sent automatically on a customer's first message, and outside opening hours (at most every 6 hours per customer). They are marked "Automatic".
+- **Chat labels**: coloured tags ("Pending payment", "VIP") on customer chats, with label, **Waiting** and **Leads** filters in the chat list.
+- **Customer panel** (contact info and inbox): labels, lead flag, private notes, **follow-up reminder** (Nexa reminds you at the time), who handles them, **team-only notes**, and their orders.
+- **Broadcast lists**: one message to many customers (a list, everyone with a label, or all), delivered as separate private chats.
+- **Catalog**: items with photo, price, description and stock. Send any item in a chat as a **product card** (**+** in the message box → Send a product); customers tap "Ask about this" or open the shop.
+- **Orders**: customers order from the business page; the order arrives as a card in the chat. The business changes the status (new → confirmed → ready → out for delivery → done) and the customer is told in the chat, with a template or the default text. **Order history** per customer and overall.
+- **Payment requests**: an amount (optionally for an order) as a card with **Pay with UPI** (deep link) and the UPI ID to copy. The customer taps "I've paid", the business confirms with "Mark as paid", and the order is marked paid.
+- **Bookings**: services with a length and price; customers pick a day and a free slot (from opening hours, skipping booked times). Bookings appear in the chat as a card, in the Bookings screen, and in the business's Google Calendar with a Meet link when Google is connected. Customers get a reminder message the day before; either side can cancel.
+- **Team and shared inbox**: add staff by username as **Admin** (inbox, catalog, settings) or **Agent** (inbox, customers, orders, bookings). They use their own accounts and reply **as the business** from the shared inbox (filters: unread, waiting, mine, unassigned, leads, needs a person). Chats can be **assigned** to a team member. Staff only see customer chats, never the owner's other chats.
+- **Nexa for business**: optional **auto-reply** to customers from the profile, hours, catalog, services and FAQ (hands over to a person and marks "Needs a person" when unsure); **lead detection** (a Lead tag on likely sales); **smart replies** in a professional tone; and a **daily summary** at 9 AM in the Nexa chat (yesterday's customers, messages and orders, open orders, today's bookings, who's waiting, follow-ups due).
+- **Insights**: messages in/out, new customers, average first-reply time, orders and revenue, bookings, per-day charts and busiest hours (7, 30 or 90 days). **Unanswered alerts** notify the team when a customer waits longer than a set time (default 15 minutes).
+- **Export**: customers and orders as CSV files.
+- **Group tasks**: in any group, ⋯ → **Make task** on a message (or Tasks in group info): assign it, add a due date, tick it off. A task card is posted in the chat and updates when it's done.
 
 ### Account
 - Sign up, sign in, sign out (JWT in an HTTP-only cookie).
@@ -120,9 +141,16 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Profile photo** upload, change and remove (cropped and compressed in the browser).
 - Change display name, username and password.
 - **Dark theme by default**, with a light theme toggle in the app and on the landing page (remembered per browser).
+- **One "+" menu in the message box** for photos and files, the camera, polls, and (for business accounts) sending a product, requesting a payment and quick replies. Emoji stays as its own button.
+- **Copy or share your username** from Profile: **Copy** puts `@username` on the clipboard; **Share** opens the device's share sheet with your username and invite link (or copies that message where sharing isn't supported).
+- **Account settings** use a two-column layout on wide screens: profile details, password and blocked accounts on the left; appearance, notifications and business tools on the right.
+- **Appearance settings** (Profile → Appearance): **Light, Dark or System** mode (System follows the device), and six colour themes: **Iris** (violet, the default), **Ocean**, **Lagoon**, **Forest**, **Rose** and **Graphite**. A theme recolours buttons, links, selected chats, your message bubbles and Nexa. It's saved per browser (`chatTheme`, `chatAccent`) and applied before the app loads, so pages don't flash. The palettes are in `index.css` (`:root[data-accent=…]` swaps Tailwind's `indigo` and `violet`).
+- **Light mode**: clean cool greys, and the chat background is a soft wash of the theme colour so message bubbles stand out.
+- **Graphite dark palette**: dark mode uses neutral greys instead of navy. `index.css` remaps every `slate-*` and `zinc-*` colour under `.dark`, so all screens follow one palette.
+- **One dropdown style everywhere**: every dropdown uses the shared `Select` component (`components/ui/Select.jsx`) instead of the browser's own. Its menu opens above dialogs and scrolling panels, flips up when there's no room below, gets a search box for long lists (like time zones), and works with the keyboard (arrows, Enter, Escape, type to jump).
 
 ### Website
-- Landing page in dark and light, with a theme toggle, a feature showcase that cycles through the app's features over a photo, smooth scrolling (Lenis), parallax photos and scroll-in animations.
+- Landing page in dark (default) and light, with a theme toggle: a centered hero with a wide photo, a feature showcase that cycles through the app's features over a photo, use-case photos, "how it works" steps, smooth scrolling (Lenis), parallax and scroll-in animations.
 - Animated page transitions, a page title per screen, and a custom favicon. The logo's three dots do a small typing wave on load and while hovered.
 
 ---
@@ -188,10 +216,12 @@ flowchart LR
     subgraph Render
         API[Express REST API]
         IO[Socket.IO server<br/>userId → socketId map]
+        JOBS[Scheduler + @Nexa<br/>background work]
     end
 
     DB[(MongoDB Atlas)]
     CDN[(Cloudinary)]
+    GROQ[(Groq API<br/>gpt-oss + Whisper)]
 
     UI -- "HTTP /api/... (cookie)" --> PROXY --> API
     UI -. loads .-> STATIC
@@ -200,6 +230,9 @@ flowchart LR
     API -- "upload / delete" --> CDN
     UI -- "view media (CDN URL)" --> CDN
     API -- "emit events" --> IO
+    API -- "Nexa: chat, tools, transcribe" --> GROQ
+    JOBS --> DB
+    JOBS -- "Nexa answers, scheduled messages" --> IO
     UI <-. "call audio/video (WebRTC, peer to peer)" .-> PEER[Other person's browser]
     UI -. "find public address" .-> STUN[(STUN server)]
 ```
@@ -210,6 +243,7 @@ flowchart LR
 - **WebSockets** only push the result of those changes to the *other* person (and presence/typing signals). The sender updates its own screen from the HTTP response.
 - In production the browser calls `/api/...` on the Vercel domain and Vercel rewrites it to Render. That keeps the auth cookie **same-site**, so `SameSite=Strict` works. In development, Vite's proxy does the same thing (`/api` → `localhost:3000`).
 - The socket connects directly to the backend (`VITE_SOCKET_URL`), identifying itself with the user's id.
+- **Nexa** runs on the server only: the browser asks the API, the API calls Groq (keys never reach the browser), and actions such as sending or scheduling go through the same permission checks as the app. Scheduled messages and @Nexa answers are produced in the background and delivered over the socket like any other message.
 - **Calls are the exception to "HTTP does every change"**: ringing and connection setup (WebRTC offer/answer/ICE) go over the socket, and the audio/video itself flows directly between the two browsers. The server never sees call media.
 
 ### Sending a message (sequence)
@@ -333,6 +367,7 @@ This section explains the approach behind each feature.
 ### Typing indicator
 - While you type, the composer emits `typing { to }` once, then `stopTyping` after 2.5 s without a keypress, on send, or when you switch chats. The server simply relays these to the other person.
 - The receiver shows "typing…" and clears it on `stopTyping`, on the next message, or after a 4 s safety timeout.
+- In groups the event carries who is typing ("Priya is typing…"). When someone sends an `@Nexa` message, their own app immediately shows **"Nexa is thinking…"** (bubble, header and chat-list row) until Nexa's answer arrives (or 45 s pass); the other people get the same from the server's typing event.
 
 ### Read receipts and unread counts
 - Each message has a `seen` flag. When you open a chat (or come back to the browser tab with it open), the client calls `PUT /message/seen/:id`. The server marks that person's messages to you as seen and emits `messagesSeen` to them, which turns their ✓ into ✓✓.
@@ -346,12 +381,12 @@ This section explains the approach behind each feature.
 ### Reactions
 - Stored on the message as `reactions: [{ userId, emoji }]`, at most **one per person**. Choosing the same emoji removes it, and a different one replaces it.
 - The client updates instantly (optimistic update), then applies the server's answer, and rolls back if the request fails. The other person receives `messageReacted`.
-- The server only accepts emoji characters and only from the two people in the chat.
+- The server only accepts emoji characters, and only from people in the chat (both people in a direct chat, or the group's members).
 
 ### Selecting, forwarding and deleting
 - Selection mode is held in the store (`selectionMode`, `selectedIds`). The composer is replaced by a bar with Copy / Forward / Delete.
-- **Bulk delete** (`POST /message/delete-many`) only deletes messages you sent. The other person gets one `messagesDeleted` event.
-- **Forward** (`POST /message/forward`) copies messages into each recipient's conversation with `forwarded: true`. **Media is not re-uploaded**: the copies point to the same Cloudinary file, so forwarding costs no extra storage.
+- **Bulk delete** (`POST /message/delete-many`) only deletes messages you sent. Everyone who could see them (the other person, or the group) gets a `messagesDeleted` event.
+- **Forward** (`POST /message/forward`) copies messages into each chosen person's or group's conversation with `forwarded: true`. **Media is not re-uploaded**: the copies point to the same Cloudinary file, so forwarding costs no extra storage.
 
 ### Media pipeline (photos, videos, files, voice notes, camera)
 
@@ -384,11 +419,11 @@ flowchart LR
 ### Profile photos
 - The browser **centre-crops** the chosen image to a square and shrinks it to 400px WebP (typically a few dozen KB).
 - `PUT /user/avatar` uploads it to `nexchat/avatars`, saves `{ url, publicId }` on the user, and deletes the previous photo. `DELETE /user/avatar` removes it and falls back to initials.
-- The server broadcasts `userUpdated`, so everyone's contact list, chat header and message avatars update live. Name changes use the same event.
+- The server sends `userUpdated` to your contacts, so their contact lists, chat headers and message avatars update live. Name and username changes use the same event.
 
 ### Theme (dark / light)
 - **Dark is the default.** `ThemeProvider` stores the choice in `localStorage` (`chatTheme`); light is used only if the visitor picked it.
-- On the landing page, chat, profile and invite screens, `useThemeClass` adds the `dark` class to `<html>`. Tailwind's class-based `dark:` variant then applies everywhere, including dialogs rendered into `<body>` through portals. The sign-in and sign-up pages stay light (`useLightPage`).
+- On the landing page, sign-in, sign-up, chat, profile and invite screens, `useThemeClass` adds the `dark` class to `<html>`. Tailwind's class-based `dark:` variant then applies everywhere, including dialogs rendered into `<body>` through portals.
 - A small script in `index.html` applies dark mode before React loads, so refreshing never flashes white. When moving between two dark pages, switching back to light is delayed briefly so the page doesn't flicker between them.
 
 ### Landing page and transitions
@@ -396,6 +431,14 @@ flowchart LR
 - The landing page uses Lenis for smooth scrolling and Motion for parallax (`useScroll`/`useTransform`) and scroll-in reveals. Both respect the system's *reduce motion* setting.
 
 ---
+
+### Business accounts
+- The public profile is `User.business` (sent with contacts, so chats can show the badge and opening hours). Private settings (auto messages, quick replies, templates, labels, FAQ, services, broadcast lists, team, Nexa options) live in a separate `BusinessSettings` document, and what the business knows about each customer lives in `Customer` (labels, notes, follow-up, assignment, lead, timings).
+- **Hooks on every direct message** (`utils/business.js` → `onDirectMessage`, called from `sendMessage` and `deliverText`): a customer writing to a business creates or updates their `Customer` record, starts "waiting for a reply", sends the greeting/away message, then (in the background) runs lead detection and the Nexa auto-reply. A reply from the business clears "waiting". Both sides' events go to the whole team as `businessInbox`.
+- **Shared inbox**: workspace routes are `/business/:biz/...`, where `:biz` is the owner's id (or `me`). `loadBusiness` checks the caller's role (owner, admin or agent). Staff replies are sent with `senderId` = the business and `sentBy` = the staff member, so the customer sees one business.
+- **Cards** are messages with a `card` field (`product`, `order`, `payment`, `booking`, `task`) and a short text for previews and notifications. When an order, payment, booking, product or task changes, every matching card is updated and re-sent as `messageEdited`.
+- **Every minute** the server sends booking reminders (24 h before, skipped for last-minute bookings), follow-up reminders (to the owner's Nexa chat), "customer waiting" alerts, and each business's daily summary (once a day after 9 AM in its time zone).
+- **Opening hours** are stored as 7 days of `HH:MM` in the business's time zone; the same rules run on the server (away messages, booking slots) and in the browser (the "Open now" label).
 
 ## Data model
 
@@ -506,6 +549,19 @@ erDiagram
 | attachment | object \| null | `url, publicId, resourceType, kind (image/video/audio/file), name, size, mimeType, width, height, duration` |
 | createdAt / updatedAt | Date | timestamps |
 
+### Business collections
+| Collection | Key fields |
+|---|---|
+| `User.business` | `enabled, category, description, address, website, email, upiId, timeZone, hours[7] { open, close, closed }, cover { url, publicId }, verified, verificationRequested`; `User.blocked` lists blocked users |
+| BusinessSettings | `owner` (unique), `greeting / away { on, text }`, `quickReplies [{ shortcut, text }]`, `templates`, `labels [{ name, color }]`, `faq`, `services [{ name, minutes, price }]`, `broadcastLists`, `team [{ user, role }]`, `nexaAutoReply, leadDetection, dailySummary, unansweredMinutes, orderSeq` |
+| Customer | `business, customer` (unique pair), `labels, notes, internalNotes [{ by, text, at }], followUp { at, note, done }, assignedTo, lead, needsHuman, firstAt, lastInAt, lastOutAt, waitingSince, alertedAt, greetedAt, awayAt` |
+| Product | `business, name, description, price, inStock, image { url, publicId }, position` |
+| Order | `business, customer, number` (#1001…), `items [{ product, name, price, qty, image }], total, note, status, paid, paidAt` |
+| Booking | `business, customer, service { id, name, minutes, price }, start, end, note, status (booked/cancelled/done), eventId, meetLink, remindedAt` |
+| Task | `group, text, assignee, due, done, doneAt, doneBy, message, createdBy` |
+| Report | `reporter, target, reason (spam/scam/abuse/other), details, status` |
+| Message (new fields) | `card` (business/task card), `sentBy` (team member), `auto` (`greeting`, `away`, `nexa`, `reminder`, `booking`) |
+
 ---
 
 ## API reference
@@ -539,6 +595,9 @@ All routes except sign up, sign in and sign out require the `jwt` cookie. The fr
 | POST | `/invite/reset` | – | New invite token (old link and QR stop working) |
 | GET | `/invite/:token` | – | Who an invite link belongs to |
 | POST | `/invite/:token` | – | Use an invite link (connects both people) |
+| GET | `/blocked` | – | People I blocked |
+| POST / DELETE | `/block/:userId` | – | Block (removes the contact both ways) / unblock |
+| POST | `/report/:userId` | `{ reason, details? }` | Report an account to the app admins |
 
 ### Groups — `/groups`
 | Method | Path | Body | Description |
@@ -605,8 +664,50 @@ Sending and forwarding only work to your contacts (or yourself). Edit, delete, r
 | DELETE | `/conversation/:userId` | – | Clear a conversation (and its files) |
 | GET | `/conversations` | – | Last message + unread count per conversation |
 | PUT | `/seen/:userId` | – | Mark that person's messages to me as seen |
-| POST | `/forward` | `{ messageIds: [], receiverIds: [] }` (≤ 50 / ≤ 20) | Forward messages |
+| POST | `/forward` | `{ messageIds: [], receiverIds?: [], groupIds?: [] }` (≤ 50 / ≤ 20 each) | Forward messages to people and/or groups |
 | PUT | `/react/:messageId` | `{ emoji }` | Add, change or remove my reaction |
+
+### Business — `/business`
+
+`GET /public/:username` and `/public/:username/slots` work signed out; everything else needs the cookie. Workspace routes use `/:biz` = the owner's id or `me`; **team** = owner, admin or agent, **managers** = owner or admin.
+
+| Method | Path | Who | Description |
+|---|---|---|---|
+| GET | `/public/:username` | anyone | Business page: profile, open status, catalog, services, my relation |
+| GET | `/public/:username/slots?service=&date=YYYY-MM-DD` | anyone | Free booking slots |
+| GET | `/me` | me | My business profile, businesses I work for, `isAdmin` |
+| PUT | `/profile` | me | Turn Business on/off, edit profile, hours, UPI ID |
+| PUT | `/cover` | me | Upload the business page cover photo (multipart field `cover`, max 2 MB); send no file to go back to the stock photo |
+| POST | `/verification` | me | Ask for the verified badge |
+| POST | `/connect/:bizId` | customer | Message a business without a request |
+| POST / GET | `/orders`, `/orders/mine` | customer | Place an order `{ business, items: [{ product, qty }], note }` / my orders |
+| POST / GET | `/bookings`, `/bookings/mine` | customer | Book `{ business, serviceId, start, note }` / my bookings |
+| PUT | `/bookings/:id/cancel` | customer | Cancel my booking |
+| PUT | `/payments/:messageId/claim` | customer | "I've paid" on a payment card |
+| GET | `/:biz/overview` | team | Profile, settings, my role |
+| PUT | `/:biz/settings` | managers | Auto messages, lists (sent whole), Nexa options, alert time |
+| POST / DELETE | `/:biz/team`, `/:biz/team/:userId` | owner / owner or self | Add or change a team member `{ username, role }` / remove or leave |
+| GET | `/:biz/customers` | team | Customers with record, last message, unread, orders, spent |
+| PUT | `/:biz/customers/:customerId` | team | Labels, notes, follow-up, assignee, lead, needs-a-person |
+| POST / DELETE | `/:biz/customers/:customerId/notes[/:noteId]` | team | Team-only notes |
+| GET / POST | `/:biz/chat/:customerId` | team | Read the chat (marks it read) / reply as the business `{ text }` |
+| POST | `/:biz/chat/:customerId/card` | team | Send `{ kind: "product", productId }` or `{ kind: "payment", amount, note, orderId? }` |
+| PUT | `/:biz/payments/:messageId` | team | Mark a payment request paid / unpaid |
+| GET / POST / PUT / DELETE | `/:biz/products[/:id]` | team / managers | Catalog (multipart with optional `image`, 2 MB) |
+| GET / PUT | `/:biz/orders[/:id]` | team | List (`?customer=&status=`) / change `{ status?, paid?, notify?, text? }` |
+| GET / PUT | `/:biz/bookings[/:id]` | team | List / `{ status: done \| cancelled }` |
+| POST | `/:biz/broadcast` | managers | `{ text, listId \| labelId \| customerIds }` |
+| GET | `/:biz/insights?days=7` | managers | Totals, reply time, per-day series, busiest hours |
+| POST | `/:biz/summary` | owner | Send the daily summary to my Nexa chat now |
+| GET / POST / PUT | `/admin/verifications[/:userId]`, `/admin/reports/:id` | app admins | Verification requests and open reports |
+
+### Tasks — `/tasks`
+| Method | Path | Body | Description |
+|---|---|---|---|
+| GET | `/group/:groupId` | – | A group's tasks |
+| POST | `/` | `{ groupId, text, assignee?, due?, messageId? }` | New task (also posts a task card) |
+| PUT | `/:id` | `{ text?, assignee?, due?, done? }` | Edit or tick off |
+| DELETE | `/:id` | – | Delete (the card shows "Deleted") |
 
 ---
 
@@ -622,14 +723,14 @@ The socket connects with `?userId=<id>`.
 | `contactRequestRemoved` | server → other person | `{ _id }` | Request declined or cancelled |
 | `contactAdded` | server → other person | user | Request accepted or invite link used |
 | `contactRemoved` | server → other person | `{ userId }` | Removed from contacts |
-| `newMessage` | server → receiver / group members | message | New (or forwarded) message; group messages have `groupId` |
-| `messageEdited` | server → receiver | message | A message was edited |
-| `messageDeleted` | server → receiver | messageId | One message deleted |
-| `messagesDeleted` | server → receiver | `[messageId]` | Several messages deleted |
+| `newMessage` | server → receiver / group members | message | New or forwarded message, call entry, scheduled message, or Nexa answer. Group messages have `groupId`; Nexa's answers in a direct chat have `botChat` |
+| `messageEdited` | server → everyone in the chat | message | A message was edited, or a voice note was transcribed |
+| `messageDeleted` | server → everyone in the chat | messageId | One message deleted |
+| `messagesDeleted` | server → everyone in the chat | `[messageId]` | Several messages deleted |
 | `conversationDeleted` | server → receiver | `{ otherUserId }` | Chat cleared |
 | `messagesSeen` | server → sender | `{ by }` | Turn ✓ into ✓✓ |
-| `messageReacted` | server → other person | `{ messageId, reactions }` | Reaction changed |
-| `typing` / `stopTyping` | client → server → receiver | `{ to, group? }` → `{ from, user?, name? }` | Typing indicator (for groups, `from` is the group and `name` is who's typing) |
+| `messageReacted` | server → everyone in the chat | `{ messageId, reactions }` | Reaction changed |
+| `typing` / `stopTyping` | client → server → receiver | `{ to, group? }` → `{ from, user?, name? }` | Typing indicator (for groups, `from` is the group and `name` is who's typing; `name: "Nexa"` means Nexa is thinking) |
 | `groupAdded` | server → new members | group | Added to a group (or a new group was created) |
 | `groupUpdated` | server → group members | group | Name, description, members or admins changed |
 | `groupRemoved` | server → affected people | `{ groupId }` | Removed, left, or the group was deleted |
@@ -644,6 +745,12 @@ The socket connects with `?userId=<id>`.
 | `call:ended` | server → client | `{ callId, reason }` | Call over: `ended`, `declined`, `missed`, `busy`, `offline`, `not-allowed` |
 | `callLogged` | server → caller and callee | call | A call was saved (refreshes the Calls tab); the chat entry arrives as `newMessage` |
 | `scheduledUpdated` | server → sender | `{ id, status }` | A scheduled message was created, sent, cancelled or failed |
+| `businessInbox` | server → business team | `{ business, customer, message, record }` | A message between the business and a customer (updates inboxes) |
+| `businessCustomer` | server → business team | `{ business, record }` | A customer record changed (labels, notes, lead, needs a person) |
+| `businessSettings` | server → business team | `{ business }` | Settings or team changed (reload) |
+| `businessAlert` | server → business team | `{ business, customer, name, minutes }` | A customer has waited too long for a reply |
+| `businessTeam` | server → person | `{ business, removed? }` | Added to or removed from a business team |
+| `tasksUpdated` | server → group members | `{ groupId }` | A group's tasks changed |
 
 ---
 
@@ -662,11 +769,15 @@ NexChat/
 │   │   ├── group.controller.js    # Groups: create, members, admins, join, messages, unread
 │   │   ├── community.controller.js  # Communities: members, admins, groups, announcements
 │   │   ├── call.controller.js     # Call log: list and clear
-│   │   ├── ai.controller.js       # Nexa: history, ask (system prompt, rate limit), clear
-│   │   └── message.controller.js  # Send, edit, delete, seen, forward, react, summaries
+│   │   ├── ai.controller.js       # Nexa: chat with tools, rewrite, smart replies, catch-up, translate, transcribe, reminders, scheduled list
+│   │   ├── message.controller.js  # Send, edit, delete, seen, forward, react, summaries
+│   │   ├── business.controller.js # Business profile, settings, team, customers, shared inbox, broadcasts, insights, admin
+│   │   ├── commerce.controller.js # Business page, catalog, product/payment cards, orders, bookings
+│   │   └── task.controller.js     # Group tasks
 │   ├── models/                    # user, conversation, message, contactRequest, group, community, call, aiMessage, scheduledMessage (Mongoose)
 │   ├── routes/                    # /user, /contacts, /message, /groups, /communities, /calls and /ai routers
 │   ├── middleware/secureRoute.js  # JWT cookie check → req.user
+│   ├── middleware/optionalAuth.js # Same, but lets signed-out visitors through (business page)
 │   ├── jwt/token.js               # Sign JWT and set the cookie
 │   ├── socket/socket.js           # Socket.IO server, presence map, typing relay, call signalling
 │   ├── utils/username.js          # Username rules, generation, invite tokens
@@ -679,6 +790,7 @@ NexChat/
 │   ├── utils/chatAccess.js        # Read a chat the user is in as text (with transcripts); message access checks
 │   ├── utils/nexaBot.js           # The hidden Nexa account used for @Nexa answers
 │   ├── utils/nexaGroup.js         # Answer @Nexa mentions in groups and one-to-one chats
+│   ├── utils/business.js          # Opening hours, roles, greeting/away, Nexa auto-reply, lead detection, booking slots, minute jobs
 │   ├── scripts/migrate-contacts.js  # One-time upgrade: usernames, invite tokens, contacts from chats
 │   └── seed.js                    # Sample users, contacts and conversations
 └── frontend/
@@ -699,9 +811,19 @@ NexChat/
         │   ├── groups/            # New group/community dialog, member picker, group info, community page
         │   ├── ai/AiChat.jsx      # Nexa chat panel
         │   └── call/CallScreen.jsx  # Full-screen incoming / outgoing / in-call view
+        ├── business/              # Business features
+        │   ├── BusinessPage.jsx   # /business workspace shell (switcher, sections, live updates)
+        │   ├── PublicPage.jsx     # /b/:username business page: catalog, cart, booking, Message
+        │   ├── workspace/         # Inbox, Customers, Orders, Bookings, Catalog, Broadcasts, Insights, Settings
+        │   ├── ChatCard.jsx       # Product, order, payment, booking and task cards in chats
+        │   ├── Compose.jsx        # "/" quick replies, send product, request payment
+        │   ├── CustomerPanel.jsx  # Labels, notes, follow-up, assignee, team notes, orders
+        │   ├── BusinessInfo.jsx   # Badge, open status, business details, block/report
+        │   ├── Tasks.jsx          # Group tasks (dialog + group info section)
+        │   └── store.js, utils.js, useBusinessSocket.js
         ├── context/               # Auth, socket, theme, call (WebRTC) providers + data hooks
-        ├── hooks/                 # usePageTitle, useThemeClass / useLightPage, useVoiceRecorder
-        ├── utils/                 # attachments, conversations, messages, contacts, groups, calls, callTones
+        ├── hooks/                 # usePageTitle, useThemeClass, useVoiceRecorder
+        ├── utils/                 # attachments, conversations, messages, contacts, groups, calls, callTones, ai
         └── Zustand/UserConversation.js  # Global chat store
 ```
 
@@ -755,6 +877,9 @@ VAPID_SUBJECT=mailto:you@example.com
 
 # Nexa reading photos (Groq vision model)
 GROQ_VISION_MODEL=qwen/qwen3.8-27b
+
+# App admins (comma-separated emails): approve business verification and review reports
+ADMIN_EMAILS=you@example.com
 
 # GIF search in the emoji / GIF / sticker picker (free key: developers.giphy.com > Create an API key)
 # Stickers work without it (Google's animated Noto emoji)
@@ -815,8 +940,13 @@ It is safe to run again.
 
 ### Backend → Render
 1. Create a Web Service (or use `render.yaml`). Root directory `backend`, build `npm install`, start `node index.js`.
-2. Set environment variables: `MONGODB_URI`, `token`, `PORT`, `FRONTEND_URL` (your Vercel URL), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER`, `GROQ_API_KEYS`, `GROQ_MODEL`, `NEXA_IMAGES_PER_DAY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` (optional: `PUTER_AUTH_TOKEN`).
+2. Set environment variables: `MONGODB_URI`, `token`, `PORT`, `FRONTEND_URL` (your Vercel URL), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER`, `GROQ_API_KEYS`, `GROQ_MODEL`, `NEXA_IMAGES_PER_DAY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `ADMIN_EMAILS` (optional: `PUTER_AUTH_TOKEN`).
 3. If the production database predates contacts, run `node scripts/migrate-contacts.js` once against it.
+
+### Backend on your own VM (alternative)
+- Any Linux VM with Node 20+ works (WebSockets need a long-running process, so not a serverless function). Run `node index.js` behind a process manager (e.g. pm2 or systemd) and a reverse proxy with HTTPS (e.g. Caddy or Nginx).
+- Calls don't use the server's bandwidth (they are peer to peer). If you add a TURN server (e.g. coturn) for strict networks, only those relayed calls pass through the VM: roughly 40–50 MB per hour for voice and 1.5–2 GB per hour for 720p video.
+- If the frontend calls the VM's own domain instead of going through Vercel's `/api` proxy, set `FRONTEND_URL` to the site's URL and change the cookie's `sameSite` in `jwt/token.js` to `"none"` with `secure: true`.
 
 ### Frontend → Vercel
 1. Import the repo with root directory `frontend`.
@@ -831,11 +961,14 @@ It is safe to run again.
 - The session JWT lives in an HTTP-only, `SameSite=Strict` cookie. Enable `secure: true` in `jwt/token.js` when serving over HTTPS end to end.
 - **Contacts only**: the server only lets you see, message, forward to and call your contacts. Usernames can only be looked up exactly, and strangers never see your email.
 - Invite tokens are random and can be reset; contact lists and tokens are never sent to other users.
-- Every message action checks ownership on the server: only the sender can edit (within 10 minutes) or delete, and only the two participants can react, reply or forward.
+- Every message action checks ownership on the server: only the sender can edit (within 10 minutes) or delete, and only people in the chat (both people, or the group's members) can react, reply, forward, translate or transcribe it.
+- Nexa acts with the user's own permissions; the hidden Nexa account can't log in or be added as a contact, and the names `nexa`, `admin`, `support` and similar are reserved.
 - Uploads are restricted by MIME type (SVG is blocked) and size, and are streamed to Cloudinary without touching the server disk.
 - Cloudinary credentials and Groq API keys stay on the server (`backend/.env`, git-ignored); the browser never sees them.
 - Nexa chats are private to each user, rate-limited per user, and the replies are rendered as Markdown without raw HTML.
 - CORS only allows `localhost:5173` and `FRONTEND_URL`.
+- Business workspace routes check the caller's role on every request (owner, admin or agent). Team members only see the business's customer chats, never its owner's other chats, and replies they send are marked with `sentBy`.
+- Blocking is checked whenever two people could connect (requests, invite links, business pages), so a blocked account can't reach you again.
 - Call audio and video are encrypted by WebRTC (DTLS-SRTP) and go peer to peer; the server only relays signalling between the two people in the call.
 
 ---
@@ -857,12 +990,15 @@ It is safe to run again.
 | Nexa chat | 4,000 characters per question, 12 questions per minute, last 20 messages as context |
 | Group size | 256 people |
 | Community size | 1000 people |
+| Business | 200 catalog items, 20 team members, 1,000 broadcast recipients, 30 labels, 100 quick replies |
+| Away message | at most once every 6 hours per customer |
 
 - **One socket per user**: the presence map stores the latest connection, so with several tabs open only the newest receives live events (the others catch up on reload).
 - **Whole-conversation loading**: a chat's messages are loaded at once (no pagination yet).
 - **Read receipts** only apply to messages sent after the feature was added; older messages show a single ✓.
 - **Calls are one-to-one** (no group calls yet).
 - **Group read receipts**: group messages show a single ✓; there is no per-member "seen by" list.
+- **Groq free tier**: each key allows about 1,000 requests and ~200,000 tokens per day per model (8,000 tokens per minute). Limits are per Groq account, so several keys only add capacity when they come from different accounts. Roughly 50–80 Nexa questions, ~500 smart-reply suggestions and ~1,000 translations per key per day.
 - **Calls without TURN**: with only STUN, calls between some strict networks (corporate or mobile carrier NATs) can fail with "Couldn't connect". Add a TURN server to fix this.
 
 ---
@@ -874,7 +1010,8 @@ It is safe to run again.
 - [x] Call history in the chat and a Calls tab
 - [x] Group chats and communities
 - [x] AI assistant that can send, schedule and summarize
-- [x] Smart replies, catch-up, translate, voice note transcripts, message reminders, @Nexa in groups
+- [x] Smart replies, catch-up, translate, voice note transcripts, message reminders, @Nexa in any chat
+- [x] Business accounts: profile, quick replies, auto messages, labels, catalog, orders, payment requests, bookings, shared team inbox, Nexa auto-reply, insights, group tasks
 - [ ] Recurring scheduled messages, message search, streaming Nexa replies
 - [ ] Group calls
 - [ ] Group photos and invite links for groups
@@ -888,7 +1025,7 @@ It is safe to run again.
 
 ## Credits
 
-- Landing and sign-in photos: [Unsplash](https://unsplash.com) (see `frontend/public/images/CREDITS.md`).
+- Landing, sign-in and business photos: [Unsplash](https://unsplash.com) (see `frontend/public/images/CREDITS.md`).
 - Icons: [Lucide](https://lucide.dev) via react-icons.
 
 ## Author

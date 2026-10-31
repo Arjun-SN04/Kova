@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { LuMic, LuMicOff, LuPhone, LuPhoneOff, LuVideo, LuVideoOff } from 'react-icons/lu'
 import { useCall } from '../../context/CallProvider'
+import { initialsOf } from '../Avatar'
 
 const END_REASONS = {
   ended: 'Call ended',
@@ -32,7 +33,7 @@ const useStream = (stream) =>
   }, [stream])
 
 const BigAvatar = ({ user, ringing = false }) => {
-  const initials = user.fullName?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+  const initials = initialsOf(user.fullName)
   return (
     <div className="relative">
       {ringing && <span className="absolute inset-0 animate-ping rounded-full bg-white/20" />}

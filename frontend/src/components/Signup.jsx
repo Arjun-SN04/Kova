@@ -82,7 +82,7 @@ const Signup = () => {
       footer={
         <>
           Already have an account?{" "}
-          <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-500">Sign in</Link>
+          <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">Sign in</Link>
         </>
       }
     >
@@ -145,7 +145,7 @@ const Signup = () => {
             {isLoading ? "Creating account..." : "Create account"}
           </Button>
         </div>
-        <p className="text-center text-xs text-slate-400">By signing up you agree to be kind to everyone you chat with.</p>
+        <p className="text-center text-xs text-slate-400 dark:text-slate-500">By signing up you agree to be kind to everyone you chat with.</p>
       </form>
     </AuthLayout>
   );

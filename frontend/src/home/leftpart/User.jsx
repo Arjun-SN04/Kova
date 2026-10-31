@@ -5,9 +5,11 @@ import { shortTime } from '../../utils/conversations'
 import { attachmentLabel } from '../../utils/attachments'
 import { LuFileText, LuImage, LuMic, LuPhone, LuPhoneMissed, LuPin, LuVideo } from 'react-icons/lu'
 import { describeCall } from '../../utils/calls'
+import { BusinessBadge } from '../../business/BusinessInfo'
+import { LabelChip } from '../../business/CustomerPanel'
 
 // One row in the contact list.
-const User = ({ user, online, unread, preview, typing, myId, pinned = false }) => {
+const User = ({ user, online, unread, preview, typing, myId, pinned = false, labels = [], lead = false, waiting = false }) => {
   const { selectedConversation, setSelectedConversation, clearUnread, setCatchUp, nexaId } = useConversation()
   const userId = user._id?.toString()
   const isSelected = selectedConversation?._id?.toString() === userId
@@ -31,7 +33,8 @@ const User = ({ user, online, unread, preview, typing, myId, pinned = false }) =
       <Avatar name={user.fullName} src={user.avatar?.url} online={online && !user.isSelf} />
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <p
             className={`truncate text-sm ${
               isSelected
@@ -43,7 +46,12 @@ const User = ({ user, online, unread, preview, typing, myId, pinned = false }) =
           >
             {user.fullName}
           </p>
-          {pinned && <LuPin className="ml-auto size-3 shrink-0 -rotate-45 text-slate-400" title="Pinned" aria-label="Pinned" />}
+          <BusinessBadge business={user.business} className="size-3.5" />
+          {lead && <span className="shrink-0 rounded-full bg-orange-50 px-1.5 py-px text-[10px] font-medium text-orange-700 dark:bg-orange-500/10 dark:text-orange-300" title="Likely to buy or book">Lead</span>}
+          {labels.slice(0, 2).map((l) => <span key={l._id} className="hidden shrink-0 sm:inline"><LabelChip label={l} small /></span>)}
+          {labels.length > 2 && <span className="hidden shrink-0 text-[10px] text-slate-400 sm:inline">+{labels.length - 2}</span>}
+          </div>
+          {pinned && <LuPin className="size-3 shrink-0 -rotate-45 text-slate-400" title="Pinned" aria-label="Pinned" />}
           {preview && (
             <span className={`shrink-0 text-[11px] ${unread && !isSelected ? 'font-semibold text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>
               {shortTime(preview.createdAt)}
@@ -83,6 +91,7 @@ const User = ({ user, online, unread, preview, typing, myId, pinned = false }) =
               user.username ? `@${user.username}` : user.email
             )}
           </p>
+          {waiting && !unread && <span className="size-2 shrink-0 rounded-full bg-amber-500" title="Waiting for your reply" aria-label="Waiting for your reply" />}
           {unread > 0 && !isSelected && (
             <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[11px] font-semibold text-white">
               {unread > 99 ? '99+' : unread}

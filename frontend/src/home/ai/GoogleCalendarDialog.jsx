@@ -4,6 +4,7 @@ import axios from 'axios'
 import { AnimatePresence, motion } from 'motion/react'
 import { LuBellRing, LuCircleAlert, LuCircleCheck, LuGlobe, LuMail, LuSend, LuSun, LuX } from 'react-icons/lu'
 import { timeZone } from '../../utils/google'
+import Select from '../../components/ui/Select'
 
 const api = { withCredentials: true }
 
@@ -67,7 +68,6 @@ const Toggle = ({ checked, onChange, label, disabled }) => (
   </button>
 )
 
-const selectClass = 'h-7 cursor-pointer rounded-md border-0 bg-slate-100 py-0 pl-2 pr-7 text-xs font-medium text-slate-700 outline-none ring-1 ring-slate-200 focus:ring-2 focus:ring-violet-500/40 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700'
 
 // One setting: icon, title, description, a switch, and an option shown while it's on
 const SettingRow = ({ icon: Icon, title, description, checked, onToggle, children }) => (
@@ -260,16 +260,11 @@ const GoogleCalendarDialog = ({ open, onClose, result, onStatus, onTry }) => {
                     <div className="divide-y divide-slate-100 rounded-xl ring-1 ring-slate-200 dark:divide-slate-800 dark:ring-slate-800">
                       <SettingRow icon={LuSun} title="Morning brief" description="Today's meetings and tasks, every day" checked={a.dailyBrief} onToggle={(v) => save({ dailyBrief: v })}>
                         <span>Send at</span>
-                        <select value={a.briefTime} onChange={(e) => save({ briefTime: e.target.value })} className={selectClass} aria-label="Brief time">
-                          {!TIMES.includes(a.briefTime) && <option value={a.briefTime}>{timeLabel(a.briefTime)}</option>}
-                          {TIMES.map((t) => <option key={t} value={t}>{timeLabel(t)}</option>)}
-                        </select>
+                        <Select size="sm" fullWidth={false} value={a.briefTime} onChange={(v) => save({ briefTime: v })} aria-label="Brief time" options={[...new Set([a.briefTime, ...TIMES])].sort().map((t) => ({ value: t, label: timeLabel(t) }))} />
                       </SettingRow>
                       <SettingRow icon={LuBellRing} title="Meeting reminders" description="A message before each meeting starts" checked={a.meetReminders} onToggle={(v) => save({ meetReminders: v })}>
                         <span>Remind me</span>
-                        <select value={a.reminderMinutes} onChange={(e) => save({ reminderMinutes: Number(e.target.value) })} className={selectClass} aria-label="Minutes before">
-                          {[5, 10, 15, 30, 60].map((m) => <option key={m} value={m}>{m === 60 ? '1 hour' : `${m} minutes`}</option>)}
-                        </select>
+                        <Select size="sm" fullWidth={false} value={a.reminderMinutes} onChange={(v) => save({ reminderMinutes: Number(v) })} aria-label="Minutes before" options={[5, 10, 15, 30, 60].map((m) => ({ value: m, label: m === 60 ? '1 hour' : `${m} minutes` }))} />
                         <span>before</span>
                       </SettingRow>
                     </div>

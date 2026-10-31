@@ -7,6 +7,7 @@ import { Group } from "../models/group.model.js"
 import { emitToUsers } from "../utils/notify.js"
 import { answerDirectMention } from "../utils/nexaGroup.js"
 import { previewOf, sendPush } from "../utils/push.js"
+import { clearWaitingFor, onDirectMessage } from "../utils/business.js"
 
 const zoneHeader = (req) => { try { const tz = req.headers["x-time-zone"]; new Intl.DateTimeFormat("en-US", { timeZone: tz }); return tz || "UTC" } catch { return "UTC" } }
 
@@ -105,6 +106,9 @@ export const sendMessage = async (req, res) => {
     res.status(201).json(newMessage)
     if (!self) sendPush([receiverId], { title: req.user.fullName, body: previewOf(newMessage), tag: `chat-${senderId}` }).catch(() => {})
 
+    // Business chats: greeting / away messages, Nexa auto-reply, team inboxes
+    if (!self) onDirectMessage(newMessage).catch((err) => console.log("business hook error:", err.message))
+
     // "@Nexa …": Nexa answers in this chat, for both people (in the background)
     answerDirectMention({ sender: req.user, otherId: receiverId, message: newMessage, timeZone: zoneHeader(req) })
       .catch((err) => console.log("@Nexa (direct) error:", err.message))
@@ -192,6 +196,7 @@ export const deleteConversation = async (req, res) => {
     await Message.deleteMany({ _id: { $in: conversation.messages } })
     await releaseAttachments(withFiles.map((m) => m.attachment))
     await Conversation.findByIdAndDelete(conversation._id)
+    if (!isSelf(userId, otherUserId)) clearWaitingFor(userId, otherUserId)
 
     const receiverSocketId = !isSelf(userId, otherUserId) && getReceiverSocketId(otherUserId)
     if (receiverSocketId) {

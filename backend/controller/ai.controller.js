@@ -563,14 +563,21 @@ export const smartReplies = async (req, res) => {
     const text = await askGroq([
       {
         role: "system",
-        content: `Suggest 3 short replies the user ("Me") could send to the latest message in this chat.
+        content: req.user.business?.enabled && !chat.isGroup
+          // Business accounts reply to customers: warm and professional
+          ? `"Me" is the business ${req.user.fullName}${req.user.business.category ? ` (${req.user.business.category})` : ""} replying to a customer.
+Suggest 3 short replies to the customer's latest message.
+- Each reply under 16 words, polite, warm and professional, in the same language as the chat.
+- Make them different (e.g. answer / apologise and offer a fix / ask a helpful question). No promises about prices or stock that aren't in the chat. At most one emoji in total.
+- Return ONLY a JSON array of 3 strings.`
+          : `Suggest 3 short replies the user ("Me") could send to the latest message in this chat.
 - Each reply under 8 words, natural and casual, in the same language as the chat.
 - Make them different (e.g. yes / no or later / a question). At most one emoji in total.
 - Return ONLY a JSON array of 3 strings.`,
       },
       { role: "user", content: chat.lines.join("\n") },
     ], { model: FAST_MODEL, maxTokens: 300, temperature: 0.7 })
-    const replies = parseList(text).filter((r) => typeof r === "string" && r.trim()).map((r) => r.trim().slice(0, 80)).slice(0, 3)
+    const replies = parseList(text).filter((r) => typeof r === "string" && r.trim()).map((r) => r.trim().slice(0, 160)).slice(0, 3)
     res.status(200).json({ replies, for: String(last._id) })
   } catch (error) {
     console.log("smartReplies error:", error.message)

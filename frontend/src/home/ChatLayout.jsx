@@ -13,6 +13,7 @@ import { AI_CHAT } from '../utils/ai'
 import { readGoogleResult } from '../utils/google'
 import ReminderToasts from './ReminderToasts'
 import { loadStatusFeed } from '../utils/status'
+import useBusinessSocket from '../business/useBusinessSocket'
 
 // Includes the 64px section rail
 const MIN_WIDTH = 360
@@ -39,6 +40,8 @@ const ChatLayout = () => {
   // Listen for socket events for the whole chat screen, so unread badges
   // update even when no conversation is open.
   useListenMessages()
+  // Business: customer labels, waiting alerts, settings
+  useBusinessSocket()
 
   // Sidebar previews + unread counts from the server
   useEffect(() => {

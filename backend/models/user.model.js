@@ -42,6 +42,30 @@ const userSchema = mongoose.Schema({
     pinnedChats:{ type:[String], default:[] },
     // Messages I starred (saved), newest last
     starred:[{ type:mongoose.Schema.Types.ObjectId, ref:"Message" }],
+    // People I blocked: we can't be contacts or message each other
+    blocked:[{ type:mongoose.Schema.Types.ObjectId, ref:"User" }],
+    // Business account: the public part of the profile (private settings live in BusinessSettings)
+    business:{
+        type:{
+            enabled:{ type:Boolean, default:false },
+            category:String,
+            description:String,
+            address:String,
+            website:String,
+            email:String,
+            // UPI ID for payment requests (shown to customers on a payment card)
+            upiId:String,
+            // Opening hours: 7 days, Sunday first. Times are "HH:MM" in `timeZone`.
+            timeZone:String,
+            hours:[{ _id:false, open:String, close:String, closed:Boolean }],
+            verified:{ type:Boolean, default:false },
+            verificationRequested:{ type:Boolean, default:false },
+            // Banner photo on the business page (null = a stock photo for the category)
+            cover:{ type:{ url:String, publicId:String }, default:null },
+            _id:false,
+        },
+        default:null
+    },
     // Profile photo stored on Cloudinary (null = show initials)
     avatar:{
         type:{ url:String, publicId:String },

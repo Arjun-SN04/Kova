@@ -10,7 +10,11 @@ import useThemeClass from '../hooks/useThemeClass'
 import { compressAvatar } from '../utils/attachments'
 import Logout from '../home/leftpart/Logout'
 import NotificationSettings from './NotificationSettings'
+import AppearanceSettings from './AppearanceSettings'
+import UsernameShare from './UsernameShare'
+import { BlockedAccounts, BusinessCard } from '../business/AccountExtras'
 import { checkUsernameFree, normalizeUsername, USERNAME_RULES } from '../utils/contacts'
+import { initialsOf } from '../home/Avatar'
 
 const TABS = [
   { id: 'profile', label: 'Profile', Icon: LuUser },
@@ -34,7 +38,7 @@ const Profile = () => {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  const initials = AuthUser?.fullName?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'
+  const initials = initialsOf(AuthUser?.fullName)
   const colorIdx = (AuthUser?.fullName?.charCodeAt(0) || 0) % AVATAR_COLORS.length
 
   const { register: regProfile, handleSubmit: handleProfile, formState: { errors: profileErrors } } = useForm({
@@ -119,7 +123,7 @@ const Profile = () => {
   return (
     <div className="min-h-dvh bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <nav className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur-lg dark:border-slate-800 dark:bg-slate-950/80">
-        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-5 sm:px-8">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
           <Logo to="/" />
           <div className="flex items-center gap-1">
             <Button to="/" variant="ghost" size="sm" leftIcon={LuArrowLeft}>Back to chats</Button>
@@ -128,7 +132,7 @@ const Profile = () => {
         </div>
       </nav>
 
-      <main className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14">
+      <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Account settings</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage your profile and security.</p>
 
@@ -156,10 +160,8 @@ const Profile = () => {
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-lg font-semibold text-slate-900 dark:text-white">{AuthUser?.fullName}</p>
-            <p className="truncate text-sm text-slate-500 dark:text-slate-400">
-              {AuthUser?.username && <span className="font-medium text-slate-700 dark:text-slate-300">@{AuthUser.username} · </span>}
-              {AuthUser?.email}
-            </p>
+            {AuthUser?.username && <div className="mt-0.5 text-sm"><UsernameShare username={AuthUser.username} /></div>}
+            <p className="truncate text-sm text-slate-500 dark:text-slate-400">{AuthUser?.email}</p>
             <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-600/15 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20">
               <span className="size-1.5 rounded-full bg-emerald-500" />
               Active
@@ -177,111 +179,128 @@ const Profile = () => {
           </div>
         </Card>
 
-        {/* Notifications */}
-        <Card className="mt-6 overflow-hidden">
-          <NotificationSettings />
-        </Card>
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <div className="flex flex-col gap-6">
+            {/* Settings */}
+            <Card className="overflow-hidden lg:flex-1">
+              <div className="border-b border-slate-100 px-6 pt-4 dark:border-slate-800">
+                <div className="flex gap-6">
+                  {TABS.map(({ id, label, Icon }) => (
+                    <button
+                      key={id}
+                      onClick={() => setActiveTab(id)}
+                      className={`relative flex items-center gap-2 pb-3.5 text-sm font-medium transition ${
+                        activeTab === id ? 'text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <Icon className="size-4" />
+                      {label}
+                      {activeTab === id && (
+                        <motion.span layoutId="profile-tab" className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-indigo-600" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-        {/* Settings */}
-        <Card className="mt-6 overflow-hidden">
-          <div className="border-b border-slate-100 px-6 pt-4 dark:border-slate-800">
-            <div className="flex gap-6">
-              {TABS.map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => setActiveTab(id)}
-                  className={`relative flex items-center gap-2 pb-3.5 text-sm font-medium transition ${
-                    activeTab === id ? 'text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                  }`}
-                >
-                  <Icon className="size-4" />
-                  {label}
-                  {activeTab === id && (
-                    <motion.span layoutId="profile-tab" className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-indigo-600" />
-                  )}
-                </button>
-              ))}
-            </div>
+              <div className="p-6 sm:p-8">
+                <Alert type="success" message={success} className="mb-6" />
+                <Alert type="error" message={error} className="mb-6" />
+
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    key={activeTab}
+                    initial={{ opacity: 0, x: 8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -8 }}
+                    transition={{ duration: 0.18 }}
+                  >
+                    {activeTab === 'profile' ? (
+                      <form onSubmit={handleProfile(onUpdateProfile)} className="max-w-md space-y-5" noValidate>
+                        <Input
+                          label="Full name"
+                          icon={LuUser}
+                          placeholder="Your full name"
+                          error={profileErrors.fullName?.message}
+                          {...regProfile('fullName', { required: 'Name is required' })}
+                        />
+                        <Input
+                          label="Username"
+                          icon={LuAtSign}
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          hint={`People can find you by @username. ${USERNAME_RULES}.`}
+                          error={profileErrors.username?.message}
+                          {...regProfile('username', {
+                            required: 'Username is required',
+                            setValueAs: normalizeUsername,
+                            validate: (v) => checkUsernameFree(v, AuthUser?.username),
+                          })}
+                        />
+                        <Input
+                          label="Email address"
+                          type="email"
+                          icon={LuMail}
+                          value={AuthUser?.email || ''}
+                          disabled
+                          hint="Your email address can't be changed."
+                        />
+                        <Button type="submit" loading={isLoading}>{isLoading ? 'Saving...' : 'Save changes'}</Button>
+                      </form>
+                    ) : (
+                      <form onSubmit={handlePass(onUpdatePassword)} className="max-w-md space-y-5" noValidate>
+                        <Input
+                          label="Current password"
+                          type="password"
+                          icon={LuLock}
+                          autoComplete="current-password"
+                          error={passErrors.currentPassword?.message}
+                          {...regPass('currentPassword', { required: 'Current password is required' })}
+                        />
+                        <Input
+                          label="New password"
+                          type="password"
+                          icon={LuLock}
+                          autoComplete="new-password"
+                          hint="At least 6 characters."
+                          error={passErrors.newPassword?.message}
+                          {...regPass('newPassword', { required: 'New password is required', minLength: { value: 6, message: 'Minimum 6 characters' } })}
+                        />
+                        <Input
+                          label="Confirm new password"
+                          type="password"
+                          icon={LuLock}
+                          autoComplete="new-password"
+                          error={passErrors.confirmNew?.message}
+                          {...regPass('confirmNew', { required: 'Please confirm', validate: v => v === newPass || "Passwords don't match" })}
+                        />
+                        <Button type="submit" loading={isLoading}>{isLoading ? 'Updating...' : 'Update password'}</Button>
+                      </form>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </Card>
+            <Card className="overflow-hidden">
+              <BlockedAccounts />
+            </Card>
           </div>
+          <div className="flex flex-col gap-6">
+            {/* Appearance */}
+            <Card className="overflow-hidden lg:flex-1">
+              <AppearanceSettings />
+            </Card>
 
-          <div className="p-6 sm:p-8">
-            <Alert type="success" message={success} className="mb-6" />
-            <Alert type="error" message={error} className="mb-6" />
+            {/* Notifications */}
+            <Card className="overflow-hidden">
+              <NotificationSettings />
+            </Card>
 
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, x: 8 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -8 }}
-                transition={{ duration: 0.18 }}
-              >
-                {activeTab === 'profile' ? (
-                  <form onSubmit={handleProfile(onUpdateProfile)} className="max-w-md space-y-5" noValidate>
-                    <Input
-                      label="Full name"
-                      icon={LuUser}
-                      placeholder="Your full name"
-                      error={profileErrors.fullName?.message}
-                      {...regProfile('fullName', { required: 'Name is required' })}
-                    />
-                    <Input
-                      label="Username"
-                      icon={LuAtSign}
-                      autoCapitalize="none"
-                      spellCheck={false}
-                      hint={`People can find you by @username. ${USERNAME_RULES}.`}
-                      error={profileErrors.username?.message}
-                      {...regProfile('username', {
-                        required: 'Username is required',
-                        setValueAs: normalizeUsername,
-                        validate: (v) => checkUsernameFree(v, AuthUser?.username),
-                      })}
-                    />
-                    <Input
-                      label="Email address"
-                      type="email"
-                      icon={LuMail}
-                      value={AuthUser?.email || ''}
-                      disabled
-                      hint="Your email address can't be changed."
-                    />
-                    <Button type="submit" loading={isLoading}>{isLoading ? 'Saving...' : 'Save changes'}</Button>
-                  </form>
-                ) : (
-                  <form onSubmit={handlePass(onUpdatePassword)} className="max-w-md space-y-5" noValidate>
-                    <Input
-                      label="Current password"
-                      type="password"
-                      icon={LuLock}
-                      autoComplete="current-password"
-                      error={passErrors.currentPassword?.message}
-                      {...regPass('currentPassword', { required: 'Current password is required' })}
-                    />
-                    <Input
-                      label="New password"
-                      type="password"
-                      icon={LuLock}
-                      autoComplete="new-password"
-                      hint="At least 6 characters."
-                      error={passErrors.newPassword?.message}
-                      {...regPass('newPassword', { required: 'New password is required', minLength: { value: 6, message: 'Minimum 6 characters' } })}
-                    />
-                    <Input
-                      label="Confirm new password"
-                      type="password"
-                      icon={LuLock}
-                      autoComplete="new-password"
-                      error={passErrors.confirmNew?.message}
-                      {...regPass('confirmNew', { required: 'Please confirm', validate: v => v === newPass || "Passwords don't match" })}
-                    />
-                    <Button type="submit" loading={isLoading}>{isLoading ? 'Updating...' : 'Update password'}</Button>
-                  </form>
-                )}
-              </motion.div>
-            </AnimatePresence>
+            <Card className="overflow-hidden">
+              <BusinessCard />
+            </Card>
           </div>
-        </Card>
+        </div>
       </main>
     </div>
   )

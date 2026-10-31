@@ -8,6 +8,7 @@ import Avatar, { GroupAvatar } from '../Avatar'
 import ConfirmDialog from '../ConfirmDialog'
 import AddPeopleDialog from './AddPeopleDialog'
 import ChatSettings from '../rightPart/ChatSettings'
+import { GroupTasks } from '../../business/Tasks'
 import { communitiesApi, errorOf, groupsApi, isAdminOf, loadCommunities } from '../../utils/groups'
 import { compressAvatar } from '../../utils/attachments'
 
@@ -175,6 +176,7 @@ const GroupInfo = ({ group, onClose }) => {
           )}
 
           {!group.announcement && <ChatSettings chat={group} canChangeTimer={amAdmin} />}
+          {!group.announcement && <GroupTasks groupId={group._id} />}
 
           {error && <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
 

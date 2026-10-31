@@ -10,7 +10,7 @@ let lightTimer = null
 // Apply the app's dark mode to the whole page (<html class="dark">) while the
 // calling screen is mounted. Doing it on <html> (not a wrapper div) means
 // pop-ups rendered into <body> — dialogs, image viewer, forward picker — follow
-// the theme too. The landing and sign-in pages don't use this, so they stay light.
+// the theme too.
 const useThemeClass = () => {
   const { dark } = useTheme()
   useLayoutEffect(() => {
@@ -27,15 +27,6 @@ const useThemeClass = () => {
     }
   }, [dark])
   return dark
-}
-
-// For pages that are always light (landing, sign in): switch to light right away
-export const useLightPage = () => {
-  useLayoutEffect(() => {
-    clearTimeout(lightTimer)
-    document.documentElement.classList.remove('dark')
-    document.documentElement.style.colorScheme = ''
-  }, [])
 }
 
 export default useThemeClass

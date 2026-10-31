@@ -53,6 +53,12 @@ const messageSchema = new mongoose.Schema({
     },
     default: null,
   },
+  // Business cards: { kind: product | order | payment | booking, ...snapshot }. Updated when an order or payment changes.
+  card: { type: mongoose.Schema.Types.Mixed, default: null },
+  // A business's team member who sent this on the business's behalf
+  sentBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  // Sent automatically (greeting, away message, Nexa auto-reply, booking reminder)
+  auto: { type: String, default: null },
   // Image / video / voice note / file stored on Cloudinary
   attachment: {
     type: {
@@ -77,5 +83,7 @@ messageSchema.pre("save", async function () {
   const { expiryFor } = await import("../utils/disappear.js")
   this.expiresAt = await expiryFor(this)
 })
+
+messageSchema.index({ "card.orderId": 1 }, { sparse: true })
 
 export const Message = mongoose.model("Message", messageSchema)

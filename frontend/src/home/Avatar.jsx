@@ -20,8 +20,15 @@ const SIZES = {
 
 const DOTS = { xs: 'size-2.5', sm: 'size-3', md: 'size-3', lg: 'size-4' }
 
-const initialsOf = (name = '') =>
-  name.split(' ').filter(Boolean).map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?'
+// First letters of the first and last words. Brackets, emoji and symbols are
+// skipped, so "Arjun S Nair (You)" gives "AN", not "N(".
+export const initialsOf = (name = '') => {
+  const words = String(name).replace(/\([^)]*\)/g, ' ').match(/[\p{L}\p{N}]+/gu) || []
+  if (!words.length) return '?'
+  const first = [...words[0]][0]
+  const last = words.length > 1 ? [...words[words.length - 1]][0] : ''
+  return (first + last).toUpperCase()
+}
 
 const colorOf = (name = '') => PALETTE[[...name].reduce((sum, c) => sum + c.charCodeAt(0), 0) % PALETTE.length]
 

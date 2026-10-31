@@ -15,6 +15,9 @@ import googleRoutes from "./routes/google.route.js"
 import pushRoutes from "./routes/push.route.js"
 import statusRoutes from "./routes/status.route.js"
 import gifRoutes from "./routes/gif.route.js"
+import businessRoutes from "./routes/business.route.js"
+import taskRoutes from "./routes/task.route.js"
+import { startBusiness } from "./utils/business.js"
 import { startScheduler } from "./utils/scheduler.js"
 import { startAgenda } from "./utils/agenda.js"
 import { startDisappearing } from "./utils/disappear.js"
@@ -28,7 +31,7 @@ const port = process.env.PORT || 3000
 const mongo_uri = process.env.MONGODB_URI
 
 mongoose.connect(mongo_uri)
-  .then(() => { console.log("Connected to MongoDB"); startScheduler(); startAgenda(); startDisappearing() })
+  .then(() => { console.log("Connected to MongoDB"); startScheduler(); startAgenda(); startDisappearing(); startBusiness() })
   .catch((err) => console.log("MongoDB connection error:", err))
 
 app.use(express.json())
@@ -62,6 +65,8 @@ app.use("/google", googleRoutes)
 app.use("/push", pushRoutes)
 app.use("/status", statusRoutes)
 app.use("/gifs", gifRoutes)
+app.use("/business", businessRoutes)
+app.use("/tasks", taskRoutes)
 
 app.get("/", (req, res) => {
   res.send("Kova API is running")

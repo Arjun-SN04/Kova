@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import PollDialog from './PollDialog'
 import axios from 'axios'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuCamera, LuChartColumn, LuCheck, LuSmile, LuSparkles, LuUndo2, LuFileText, LuLoaderCircle, LuMic, LuPaperclip, LuPencil, LuReply, LuSendHorizontal, LuTrash2, LuX } from 'react-icons/lu'
+import { LuCamera, LuChartColumn, LuIndianRupee, LuPackage, LuZap, LuCheck, LuSmile, LuSparkles, LuUndo2, LuFileText, LuLoaderCircle, LuMic, LuPaperclip, LuPencil, LuReply, LuSendHorizontal, LuTrash2, LuX } from 'react-icons/lu'
 import useSendMessage from '../../context/useSendMessage'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
@@ -14,6 +14,10 @@ import EmojiPopover from './EmojiPopover'
 import { canPost } from '../../utils/groups'
 import useVoiceRecorder, { MAX_VOICE_SECONDS } from '../../hooks/useVoiceRecorder'
 import CameraDialog from './CameraDialog'
+import useBusiness from '../../business/store'
+import { PaymentDialog, ProductPicker, useQuickReplies } from '../../business/Compose'
+import AttachMenu from './AttachMenu'
+import { isBusiness } from '../../business/utils'
 
 const MAX_HEIGHT = 160
 const TYPING_IDLE_MS = 2500
@@ -37,6 +41,7 @@ const TypeSent = () => {
   const [cameraOpen, setCameraOpen] = useState(false)
   const [pollOpen, setPollOpen] = useState(false)
   const closePoll = useCallback(() => setPollOpen(false), [])
+  const [bizDialog, setBizDialog] = useState(null)
   const voice = useVoiceRecorder()
   const [AuthUser] = useAuth()
   const inputRef = useRef(null)
@@ -57,6 +62,22 @@ const TypeSent = () => {
   }, [nexaOpen])
   const myId = String(AuthUser?._id)
   const { socket } = useSocket()
+
+  // Business accounts: quick replies ("/"), product cards and payment requests in chats with customers
+  const bizSettings = useBusiness((st) => st.settings)
+  const bizMode = isBusiness(AuthUser) && !!selectedConversation && !selectedConversation.isGroup && !selectedConversation.isSelf && !selectedConversation.isAi
+  const quick = useQuickReplies({ text, setText, settings: bizMode ? bizSettings : null, vars: { name: selectedConversation?.fullName?.split(' ')[0] }, inputRef })
+  const addSent = (msg) => {
+    setMessages((prev) => (prev.some((m) => m._id === msg._id) ? prev : [...prev, msg]))
+    useConversation.getState().upsertPreview(selectedConversation._id, msg)
+  }
+
+  // "Ask about this" on a product card puts text in the box
+  useEffect(() => {
+    const onCompose = (e) => { setText(String(e.detail || '')); requestAnimationFrame(() => inputRef.current?.focus()) }
+    window.addEventListener('nexchat:compose', onCompose)
+    return () => window.removeEventListener('nexchat:compose', onCompose)
+  }, [])
 
   // Typing indicator: tell the other person while I'm typing
   const typingTo = useRef(null)
@@ -232,6 +253,7 @@ const TypeSent = () => {
   }
 
   const onKeyDown = (e) => {
+    if (quick.onKeyDown(e)) return
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() }
     else if (e.key === 'Escape' && (editingMessage || replyingTo)) { e.preventDefault(); cancel() }
     else if (e.key === 'ArrowUp' && !text && !editingMessage) {
@@ -273,7 +295,8 @@ const TypeSent = () => {
 
   const busy = loading || saving
   const canSubmit = (text.trim().length > 0 || (!!pendingFile && !editingMessage) || (!!editingMessage?.attachment)) && !busy && !preparing
-  const firstName = selectedConversation?.fullName?.split(' ')[0]
+  // Businesses go by their full name ("Meera's Bakery", not "Meera's")
+  const firstName = selectedConversation?.business?.enabled ? selectedConversation.fullName : selectedConversation?.fullName?.split(' ')[0]
   const target = editingMessage || replyingTo
   const replyName = replyingTo && (String(replyingTo.senderId) === myId
     ? 'yourself'
@@ -304,6 +327,8 @@ const TypeSent = () => {
       <AnimatePresence>
         {emojiOpen && <EmojiPopover onPick={insertEmoji} onClose={() => setEmojiOpen(false)} toggleRef={emojiBtnRef} />}
       </AnimatePresence>
+
+      {quick.menu}
 
       {nexaOpen && (
         <div ref={nexaRef} role="menu" className="absolute bottom-full right-4 z-30 mb-2 w-56 rounded-xl bg-white p-1 shadow-xl ring-1 ring-slate-200 sm:right-6 lg:right-8 dark:bg-slate-900 dark:ring-slate-800">
@@ -340,7 +365,7 @@ const TypeSent = () => {
 
       <form
         onSubmit={handleSubmit}
-        className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition focus-within:border-indigo-300 focus-within:ring-4 focus-within:ring-indigo-500/10 dark:border-slate-800 dark:bg-slate-900 dark:focus-within:border-indigo-500/50"
+        data-attach-anchor className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition focus-within:border-indigo-300 focus-within:ring-4 focus-within:ring-indigo-500/10 dark:border-slate-800 dark:bg-slate-900 dark:focus-within:border-indigo-500/50"
       >
         {/* Reply / edit context, attached to the top of the box */}
         <AnimatePresence initial={false}>
@@ -469,38 +494,19 @@ const TypeSent = () => {
               hidden
               onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; pickFile(f) }}
             />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
+            <AttachMenu
               disabled={!!editingMessage || busy || preparing}
-              aria-label="Attach a file"
-              title="Attach a photo or file (max 10 MB)"
-              className="flex size-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
-            >
-              <LuPaperclip className="size-4.5" />
-            </button>
-            {navigator.mediaDevices?.getUserMedia && (
-              <button
-                type="button"
-                onClick={() => setCameraOpen(true)}
-                disabled={!!editingMessage || busy || preparing}
-                aria-label="Take a photo"
-                title="Take a photo"
-                className="flex size-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
-              >
-                <LuCamera className="size-4.5" />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setPollOpen(true)}
-              disabled={!!editingMessage || busy}
-              aria-label="Create a poll"
-              title="Create a poll"
-              className="hidden size-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 sm:flex dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
-            >
-              <LuChartColumn className="size-4.5" />
-            </button>
+              items={[
+                { id: 'file', label: 'Photo or file', Icon: LuPaperclip, onSelect: () => fileInputRef.current?.click() },
+                ...(navigator.mediaDevices?.getUserMedia ? [{ id: 'camera', label: 'Camera', Icon: LuCamera, onSelect: () => setCameraOpen(true) }] : []),
+                { id: 'poll', label: 'Poll', Icon: LuChartColumn, onSelect: () => setPollOpen(true) },
+                ...(bizMode ? [
+                  { id: 'product', section: 'Business', label: 'Send a product', Icon: LuPackage, onSelect: () => setBizDialog('product') },
+                  { id: 'payment', section: 'Business', label: 'Request payment', Icon: LuIndianRupee, onSelect: () => setBizDialog('payment') },
+                  ...(bizSettings?.quickReplies?.length || bizSettings?.templates?.length ? [{ id: 'quick', section: 'Business', label: 'Quick replies', note: '/', Icon: LuZap, onSelect: () => { setText('/'); inputRef.current?.focus() } }] : []),
+                ] : []),
+              ]}
+            />
             <button
               ref={emojiBtnRef}
               type="button"
@@ -571,6 +577,8 @@ const TypeSent = () => {
         {cameraOpen && <CameraDialog onClose={() => setCameraOpen(false)} onCapture={pickFile} />}
       </AnimatePresence>
       <PollDialog open={pollOpen} onClose={closePoll} />
+      {bizDialog === 'product' && <ProductPicker biz="me" customerId={selectedConversation._id} onClose={() => setBizDialog(null)} onSent={addSent} />}
+      {bizDialog === 'payment' && <PaymentDialog biz="me" customerId={selectedConversation._id} onClose={() => setBizDialog(null)} onSent={addSent} hasUpi={!!AuthUser?.business?.upiId} />}
 
     </div>
   )

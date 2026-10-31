@@ -15,15 +15,16 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
     <script>
-      // Apply dark mode before the app loads so a refresh doesn't flash light.
-      // The sign-in pages are always light.
+      // Apply the saved theme before the app loads so a refresh doesn't flash.
       try {
-        var lightPages = ['/login', '/signup']
-        var path = location.pathname.replace(/\/$/, '')
-        if (localStorage.getItem('chatTheme') !== 'light' && lightPages.indexOf(path) === -1) {
-          document.documentElement.classList.add('dark')
-          document.documentElement.style.colorScheme = 'dark'
+        var root = document.documentElement
+        var mode = localStorage.getItem('chatTheme') || 'dark'
+        var dark = mode === 'system' ? window.matchMedia('(prefers-color-scheme: dark)').matches : mode !== 'light'
+        if (dark) {
+          root.classList.add('dark')
+          root.style.colorScheme = 'dark'
         }
+        root.dataset.accent = localStorage.getItem('chatAccent') || 'iris'
       } catch (e) {}
     </script>
   </head>
