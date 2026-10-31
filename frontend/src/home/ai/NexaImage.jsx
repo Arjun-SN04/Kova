@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
+import { downloadFile } from '../../utils/attachments'
 import { LuDownload, LuImage, LuRefreshCw, LuSparkles } from 'react-icons/lu'
 
 // Nexa's pictures are drawn on our server (Puter FLUX) and kept on Cloudinary.
@@ -37,9 +38,9 @@ const NexaImage = ({ messageId, action, fresh, onSaved }) => {
         </a>
         <div className="flex items-center gap-2 px-3 py-2">
           <p className="line-clamp-1 flex-1 text-xs text-slate-500 dark:text-slate-400" title={action.prompt}>{action.prompt}</p>
-          <a href={src} download="nexa-image" target="_blank" rel="noreferrer" className="flex size-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:text-slate-100" title="Download" aria-label="Download">
+          <button type="button" onClick={() => downloadFile(src, `nexa-image-${action.id || Date.now()}`)} className="flex size-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:text-slate-100" title="Download" aria-label="Download">
             <LuDownload className="size-3.5" />
-          </a>
+          </button>
         </div>
       </div>
     )

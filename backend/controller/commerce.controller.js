@@ -43,10 +43,30 @@ const orderCard = (order, owner) => ({
   businessName: owner.fullName,
   items: order.items.map((i) => ({ name: i.name, qty: i.qty, price: i.price, image: i.image || "" })),
   total: order.total,
+  subtotal: order.subtotal ?? order.total,
+  discount: order.discount || 0,
+  coupon: order.coupon || "",
   note: order.note,
   status: order.status,
   paid: order.paid,
+  rated: !!order.review,
 })
+
+// ── Discount codes ──
+// { ok, code, discount, label } or { error }
+const applyCoupon = (settings, rawCode, subtotal) => {
+  const code = String(rawCode || "").trim().toUpperCase()
+  if (!code) return { ok: true, code: "", discount: 0 }
+  const c = settings.coupons.find((x) => x.code === code)
+  if (!c || !c.active) return { error: "That code isn't valid" }
+  if (c.expiresAt && c.expiresAt < new Date()) return { error: "That code has expired" }
+  if (c.maxUses && c.uses >= c.maxUses) return { error: "That code has been used up" }
+  if (subtotal < (c.minTotal || 0)) return { error: `Spend ${money(c.minTotal)} or more to use this code` }
+  const raw = c.kind === "percent" ? subtotal * (c.value / 100) : c.value
+  const discount = Math.min(subtotal, Math.round(raw * 100) / 100)
+  return { ok: true, code, discount, label: c.kind === "percent" ? `${c.value}% off` : `${money(c.value)} off` }
+}
+const addHistory = (order, status) => order.history.push({ status, at: new Date() })
 
 const productCard = (p, owner) => ({
   kind: "product",
@@ -99,6 +119,9 @@ export const getPublicBusiness = async (req, res) => {
       Product.find({ business: owner._id }).sort({ position: 1, createdAt: 1 }),
       getSettings(owner._id),
     ])
+    const reviewed = await Order.find({ business: owner._id, review: { $ne: null } }).sort({ "review.at": -1 }).limit(200).select("review customer").populate("customer", "fullName")
+    const rating = reviewed.length ? { average: Math.round((reviewed.reduce((n, o) => n + o.review.rating, 0) / reviewed.length) * 10) / 10, count: reviewed.length } : null
+    const reviews = reviewed.filter((o) => o.review.text).slice(0, 6).map((o) => ({ rating: o.review.rating, text: o.review.text, at: o.review.at, name: o.customer?.fullName?.split(" ")[0] || "Customer" }))
     const me = req.user
     const relation = !me ? "guest" : same(me._id, owner._id) ? "owner" : owner.contacts.some((c) => same(c, me._id)) ? "contact" : "none"
     const { contacts, ...profile } = owner.toObject()
@@ -107,6 +130,9 @@ export const getPublicBusiness = async (req, res) => {
       products,
       services: settings.services.map((s) => ({ _id: s._id, name: s.name, minutes: s.minutes, price: s.price, description: s.description })),
       relation,
+      rating,
+      reviews,
+      hasCoupons: settings.coupons.some((c) => c.active),
       role: me ? roleIn(me._id, owner._id, settings) : null,
     })
   } catch (error) {
@@ -289,7 +315,7 @@ export const markPayment = async (req, res) => {
     const paid = req.body.paid !== false
     await updateCards({ _id: msg._id }, { status: paid ? "paid" : "pending", paidAt: paid ? new Date() : null }, owner._id)
     if (msg.card.orderId) {
-      const order = await Order.findOneAndUpdate({ _id: msg.card.orderId, business: owner._id }, { $set: { paid, paidAt: paid ? new Date() : null } }, { new: true })
+      const order = await Order.findOneAndUpdate({ _id: msg.card.orderId, business: owner._id, paid: !paid }, { $set: { paid, paidAt: paid ? new Date() : null }, $push: { history: { status: paid ? "paid" : "unpaid", at: new Date() } } }, { new: true })
       if (order) await updateCards({ "card.kind": "order", "card.orderId": String(order._id) }, { paid }, owner._id)
     }
     res.status(200).json(await Message.findById(msg._id))
@@ -319,12 +345,16 @@ export const placeOrder = async (req, res) => {
     if (!items.length) return fail(res, 400, "Your cart is empty")
     await ensureCustomer(req.user._id, owner)
     const settings = await BusinessSettings.findOneAndUpdate({ owner: owner._id }, { $inc: { orderSeq: 1 } }, { new: true })
-    const total = Math.round(items.reduce((n, i) => n + i.price * i.qty, 0) * 100) / 100
-    const order = await Order.create({ business: owner._id, customer: req.user._id, number: settings.orderSeq, items, total, note: str(req.body.note, 500) })
+    const subtotal = Math.round(items.reduce((n, i) => n + i.price * i.qty, 0) * 100) / 100
+    const coupon = applyCoupon(settings, req.body.coupon, subtotal)
+    if (coupon.error) return fail(res, 400, coupon.error)
+    const total = Math.round((subtotal - coupon.discount) * 100) / 100
+    const order = await Order.create({ business: owner._id, customer: req.user._id, number: settings.orderSeq, items, subtotal, discount: coupon.discount, coupon: coupon.code, total, note: str(req.body.note, 500), history: [{ status: "new", at: new Date() }] })
+    if (coupon.code) await BusinessSettings.updateOne({ _id: settings._id, "coupons.code": coupon.code }, { $inc: { "coupons.$.uses": 1 } })
     const msg = await deliverText({
       senderId: req.user._id,
       receiverId: owner._id,
-      text: `Order #${order.number}: ${items.map((i) => `${i.qty} × ${i.name}`).join(", ")} · ${money(total)}`,
+      text: `Order #${order.number}: ${items.map((i) => `${i.qty} × ${i.name}`).join(", ")} · ${money(total)}${coupon.code ? ` (code ${coupon.code})` : ""}`,
       card: orderCard(order, owner),
     })
     res.status(201).json({ order, message: msg })
@@ -362,11 +392,13 @@ export const updateOrder = async (req, res) => {
     const before = order.status
     if (req.body.status !== undefined) {
       if (!ORDER_STATUSES.includes(req.body.status)) return fail(res, 400, "Unknown status")
+      if (order.status !== req.body.status) addHistory(order, req.body.status)
       order.status = req.body.status
     }
-    if (req.body.paid !== undefined) {
+    if (req.body.paid !== undefined && !!req.body.paid !== order.paid) {
       order.paid = !!req.body.paid
       order.paidAt = order.paid ? new Date() : null
+      addHistory(order, order.paid ? "paid" : "unpaid")
     }
     await order.save()
     await updateCards({ "card.kind": "order", "card.orderId": String(order._id) }, { status: order.status, paid: order.paid }, owner._id)
@@ -494,6 +526,57 @@ export const updateBooking = async (req, res) => {
     res.status(200).json({ booking: await setBookingStatus(booking, req.body.status, req.user._id) })
   } catch (error) {
     console.log("updateBooking error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// ── Discount code check (cart), order tracking, reviews ─────────
+export const checkCoupon = async (req, res) => {
+  try {
+    const owner = await User.findOne({ username: normalizeUsername(req.params.username), "business.enabled": true }).select("_id")
+    if (!owner) return fail(res, 404, "Business not found")
+    const settings = await getSettings(owner._id)
+    const result = applyCoupon(settings, req.body.code, Math.max(0, Number(req.body.subtotal) || 0))
+    if (result.error) return fail(res, 400, result.error)
+    res.status(200).json(result)
+  } catch (error) {
+    console.log("checkCoupon error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// The customer or the business team: an order with its timeline
+export const trackOrder = async (req, res) => {
+  try {
+    if (!isId(req.params.id)) return fail(res, 404, "Order not found")
+    const order = await Order.findById(req.params.id).populate("business", "fullName username avatar business").populate("customer", "fullName")
+    if (!order) return fail(res, 404, "Order not found")
+    const isCustomer = same(order.customer._id, req.user._id)
+    const settings = isCustomer ? null : await getSettings(order.business._id)
+    const role = isCustomer ? "customer" : roleIn(req.user._id, order.business._id, settings)
+    if (!role) return fail(res, 404, "Order not found")
+    res.status(200).json({ order, role })
+  } catch (error) {
+    console.log("trackOrder error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// { rating: 1-5, text } — once the order is done; can be changed later
+export const reviewOrder = async (req, res) => {
+  try {
+    if (!isId(req.params.id)) return fail(res, 404, "Order not found")
+    const order = await Order.findOne({ _id: req.params.id, customer: req.user._id })
+    if (!order) return fail(res, 404, "Order not found")
+    if (order.status !== "done") return fail(res, 400, "You can rate an order once it's complete")
+    const rating = Math.round(Number(req.body.rating))
+    if (!(rating >= 1 && rating <= 5)) return fail(res, 400, "Pick 1 to 5 stars")
+    order.review = { rating, text: str(req.body.text, 500), at: new Date() }
+    await order.save()
+    await updateCards({ "card.kind": "order", "card.orderId": String(order._id) }, { rated: true }, order.business)
+    res.status(200).json({ review: order.review })
+  } catch (error) {
+    console.log("reviewOrder error:", error)
     fail(res, 500, "Internal server error")
   }
 }

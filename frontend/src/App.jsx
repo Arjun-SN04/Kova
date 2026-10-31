@@ -7,12 +7,15 @@ import Login from './components/Login'
 import HomePage from './components/HomePage'
 import Profile from './components/Profile'
 import InvitePage from './components/InvitePage'
+import GroupLinkPage from './components/GroupLinkPage'
 import BusinessPage from './business/BusinessPage'
 import PublicPage from './business/PublicPage'
+import OrderPage from './business/OrderPage'
 import { takeReturnTo } from './business/utils'
 import { takePendingInvite } from './utils/contacts'
 import { useAuth } from './context/AuthProvider'
 import { PageTransition } from './components/ui'
+import AppLockGate from './components/AppLock'
 
 // ── App ─────────────────────────────────────────────────────
 const page = (el) => <PageTransition>{el}</PageTransition>
@@ -34,6 +37,7 @@ const App = () => {
 
   return (
     <MotionConfig reducedMotion="user">
+      {AuthUser && <AppLockGate key={AuthUser._id} />}
       <AnimatePresence mode="wait" onExitComplete={() => window.scrollTo(0, 0)}>
         <Routes location={location} key={location.pathname}>
           <Route path='/home' element={page(<HomePage />)} />
@@ -41,8 +45,10 @@ const App = () => {
           <Route path='/signup' element={AuthUser ? <Navigate to="/" /> : page(<Signup />)} />
           <Route path='/login' element={AuthUser ? <Navigate to="/" /> : page(<Login />)} />
           <Route path='/invite/:token' element={page(<InvitePage />)} />
+          <Route path='/g/:code' element={page(<GroupLinkPage />)} />
           <Route path='/business' element={AuthUser ? page(<BusinessPage />) : <Navigate to="/login" />} />
           <Route path='/b/:username' element={page(<PublicPage />)} />
+          <Route path='/order/:id' element={AuthUser ? page(<OrderPage />) : <Navigate to="/login" />} />
           <Route path='/profile' element={AuthUser ? page(<Profile />) : <Navigate to="/login" />} />
           <Route path='*' element={<Navigate to={AuthUser ? '/' : '/home'} />} />
         </Routes>

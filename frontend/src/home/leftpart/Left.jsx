@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { LuLayers, LuMoon, LuSquarePen, LuSun, LuUserPlus, LuUsers } from 'react-icons/lu'
+import { LuLayers, LuMoon, LuSquarePen, LuSun, LuUserPlus, LuUsers, LuContact } from 'react-icons/lu'
 import Users from './Users'
 import CallsPanel from './CallsPanel'
 import CommunitiesPanel from './CommunitiesPanel'
@@ -59,6 +59,9 @@ const ChatsPanel = () => {
               </div>
             )}
           </div>
+          <button onClick={() => setContactsDialog('all')} className={iconBtn} title="Contacts" aria-label="Contacts">
+            <LuContact className="size-4.5" />
+          </button>
           <button
             onClick={() => setContactsDialog(incoming ? 'requests' : 'add')}
             className={`${iconBtn} relative`}

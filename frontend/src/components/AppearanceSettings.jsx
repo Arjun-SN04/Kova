@@ -1,5 +1,9 @@
-import React from 'react'
-import { LuCheck, LuPalette } from 'react-icons/lu'
+import React, { useEffect, useState } from 'react'
+import axios from 'axios'
+import useConversation from '../Zustand/UserConversation'
+import WallpaperPicker from './WallpaperPicker'
+import { wallpaperName, wallpaperStyle } from '../utils/wallpapers'
+import { LuCheck, LuChevronRight, LuPalette } from 'react-icons/lu'
 import { ACCENTS, MODES, useTheme } from '../context/ThemeProvider'
 
 // A tiny drawing of the chat screen in light or dark colours
@@ -21,7 +25,14 @@ const MiniChat = ({ dark }) => (
 )
 
 const AppearanceSettings = () => {
-  const { mode, setMode, accent, setAccent } = useTheme()
+  const { mode, setMode, accent, setAccent, dark } = useTheme()
+  const { wallpapers, setWallpapers } = useConversation()
+  const [picking, setPicking] = useState(false)
+  // The settings page can open on its own: load my wallpapers
+  useEffect(() => {
+    axios.get('/api/message/prefs', { withCredentials: true }).then((r) => { if (r.data.wallpapers) setWallpapers(r.data.wallpapers) }).catch(() => {})
+  }, [setWallpapers])
+  const chatCount = Object.keys(wallpapers.chats || {}).length
   return (
     <div className="p-6">
       <div className="flex items-start gap-4">
@@ -71,6 +82,17 @@ const AppearanceSettings = () => {
           </button>
         ))}
       </div>
+
+      <p className="mb-2 mt-6 text-[13px] font-medium text-slate-700 dark:text-slate-300">Chat wallpaper</p>
+      <button type="button" onClick={() => setPicking(true)} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-2 pr-3 text-left transition hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700">
+        <span className="chat-bg block h-14 w-11 shrink-0 rounded-lg ring-1 ring-slate-200 dark:ring-slate-700" style={wallpaperStyle(wallpapers.global, dark, { thumb: true }) || undefined} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">{wallpaperName(wallpapers.global)}</span>
+          <span className="block text-xs text-slate-500 dark:text-slate-400">Default for all chats{chatCount ? ` · ${chatCount} chat${chatCount === 1 ? ' has' : 's have'} their own` : ''}. Change one chat from its info panel.</span>
+        </span>
+        <span className="flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400">Change <LuChevronRight className="size-3.5" /></span>
+      </button>
+      {picking && <WallpaperPicker onClose={() => setPicking(false)} />}
     </div>
   )
 }

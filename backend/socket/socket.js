@@ -26,6 +26,32 @@ const io = new Server(server, {
 // userId -> socketId mapping
 const userSocketMap = {};
 
+// People who turned off "Activity status": nobody sees them online, and they
+// don't see anyone else online either.
+const hiddenActivity = new Set();
+
+// Send each person the list of online people they're allowed to see
+const broadcastPresence = () => {
+  const visible = Object.keys(userSocketMap).filter((id) => !hiddenActivity.has(id));
+  for (const [id, socketId] of Object.entries(userSocketMap)) {
+    io.to(socketId).emit("getOnlineUsers", hiddenActivity.has(id) ? [id] : visible);
+  }
+};
+
+// What `viewer` may see about `target`: online now, or when they were last active.
+// Hidden when either of them turned off Activity status.
+export const presenceOf = (viewer, target) => {
+  const v = String(viewer), t = String(target);
+  if (hiddenActivity.has(v) || hiddenActivity.has(t)) return { visible: false, online: false };
+  return { visible: true, online: !!userSocketMap[t] };
+};
+
+export const setActivityHidden = (userId, hidden) => {
+  if (hidden) hiddenActivity.add(String(userId));
+  else hiddenActivity.delete(String(userId));
+  broadcastPresence();
+};
+
 export const getReceiverSocketId = (receiverId) => {
   return userSocketMap[receiverId.toString()];
 };
@@ -125,8 +151,13 @@ io.on("connection", (socket) => {
     console.log(`✅ User connected | userId: ${userId} | socketId: ${socket.id}`);
   }
 
-  // Broadcast updated online users to everyone
-  io.emit("getOnlineUsers", Object.keys(userSocketMap));
+  // Load their activity setting, then update everyone's online list
+  if (userId && userId !== "undefined") {
+    User.findById(userId).select("privacy").then((u) => {
+      if (u?.privacy?.activity === false) hiddenActivity.add(userId);
+      else hiddenActivity.delete(userId);
+    }).catch(() => {}).finally(broadcastPresence);
+  }
 
   // Typing indicator: relay to the person being typed to, or to everyone in a group
   const relay = (event) => async ({ to, group = false } = {}) => {
@@ -159,9 +190,11 @@ io.on("connection", (socket) => {
       endCall(userId, "ended");
       leaveGroupCalls();
       delete userSocketMap[userId];
+      hiddenActivity.delete(userId);
+      User.updateOne({ _id: userId }, { $set: { lastSeen: new Date() } }).catch(() => {});
       console.log(`❌ User disconnected | userId: ${userId}`);
     }
-    io.emit("getOnlineUsers", Object.keys(userSocketMap));
+    broadcastPresence();
   });
 });
 

@@ -1,3 +1,4 @@
+import crypto from "node:crypto"
 import { Group } from "../models/group.model.js"
 import { Community } from "../models/community.model.js"
 import { Message } from "../models/message.model.js"
@@ -16,6 +17,20 @@ const sameId = (a, b) => String(a?._id ?? a) === String(b?._id ?? b)
 const has = (list, id) => list.some((x) => sameId(x, id))
 const fail = (res, status, error) => res.status(status).json({ error })
 
+// People who want to approve group adds get an invite instead
+const splitByApproval = async (ids) => {
+  const approve = new Set((await User.find({ _id: { $in: ids }, "privacy.groups": "approve" }).select("_id")).map((u) => String(u._id)))
+  return { direct: ids.filter((id) => !approve.has(String(id))), invited: ids.filter((id) => approve.has(String(id))) }
+}
+const sendInvites = async (group, ids, by) => {
+  if (!ids.length) return
+  const fresh = ids.filter((id) => !group.invites.some((i) => sameId(i.user, id)))
+  group.invites.push(...fresh.map((user) => ({ user, by: by._id, at: new Date() })))
+  await group.save()
+  emitToUsers(fresh, "groupInvite", { group: String(group._id) })
+  sendPush(fresh, { title: "Group invite", body: `${by.fullName} invited you to ${group.name}`, tag: `ginvite-${group._id}` }).catch(() => {})
+}
+
 const populate = (query) => query.populate("members", MEMBER_FIELDS).populate("community", "name")
 
 // What the browser gets for a group (no per-user data, so it can be broadcast)
@@ -28,8 +43,12 @@ export const groupView = (g) => ({
   members: g.members,
   admins: g.admins,
   createdBy: g.createdBy,
+  pendingInvites: g.invites?.length || 0,
   community: g.community ? { _id: g.community._id ?? g.community, name: g.community.name } : null,
   announcement: g.announcement,
+  adminsOnly: !!g.adminsOnly,
+  approveJoins: !!g.approveJoins,
+  joinRequestCount: g.joinRequests?.length || 0,
   avatar: g.avatar || null,
   disappearAfter: g.disappearAfter || 0,
   createdAt: g.createdAt,
@@ -113,7 +132,8 @@ export const createGroup = async (req, res) => {
     if (!others.length) return fail(res, 400, "Add at least one contact")
     if (others.length + 1 > MAX_MEMBERS) return fail(res, 400, `Groups can have up to ${MAX_MEMBERS} people`)
 
-    const members = [me._id, ...new Set(others.map(String))]
+    const { direct, invited } = await splitByApproval([...new Set(others.map(String))])
+    const members = [me._id, ...direct]
     const now = new Date()
     const group = await Group.create({
       name,
@@ -123,9 +143,10 @@ export const createGroup = async (req, res) => {
       createdBy: me._id,
       reads: Object.fromEntries(members.map((id) => [String(id), now])),
     })
+    await sendInvites(group, invited, me)
     const full = await populate(Group.findById(group._id))
     emitToUsers(full.members, "groupAdded", groupView(full), me._id)
-    res.status(201).json(groupView(full))
+    res.status(201).json({ ...groupView(full), invited: invited.length })
   } catch (error) {
     console.log("createGroup error:", error)
     fail(res, 500, "Internal server error")
@@ -154,6 +175,8 @@ export const updateGroup = async (req, res) => {
       group.name = name
     }
     if (req.body.description !== undefined) group.description = String(req.body.description).trim()
+    if (typeof req.body.adminsOnly === "boolean" && !group.announcement) group.adminsOnly = req.body.adminsOnly
+    if (typeof req.body.approveJoins === "boolean" && !group.announcement) group.approveJoins = req.body.approveJoins
     await group.save()
     const full = await broadcastGroup(group._id)
     await notifyCommunity(group.community)
@@ -202,13 +225,17 @@ export const addMembers = async (req, res) => {
     if (!ids.length) return fail(res, 400, "No one to add")
     if (group.members.length + ids.length > MAX_MEMBERS) return fail(res, 400, `Groups can have up to ${MAX_MEMBERS} people`)
 
-    group.members.push(...ids)
-    await group.save()
-    await markRead(group._id, ids)
+    const { direct, invited } = await splitByApproval(ids)
+    if (direct.length) {
+      group.members.push(...direct)
+      await group.save()
+      await markRead(group._id, direct)
+    }
+    await sendInvites(group, invited, req.user)
     const full = await broadcastGroup(group._id)
-    emitToUsers(ids, "groupAdded", groupView(full))
+    if (direct.length) emitToUsers(direct, "groupAdded", groupView(full))
     await notifyCommunity(group.community)
-    res.status(200).json(groupView(full))
+    res.status(200).json({ ...groupView(full), invited: invited.length })
   } catch (error) {
     console.log("addMembers error:", error)
     fail(res, 500, "Internal server error")
@@ -314,7 +341,7 @@ export const getGroupMessages = async (req, res) => {
   try {
     const group = await loadMemberGroup(req, res)
     if (!group?._id) return
-    const messages = await Message.find({ groupId: group._id }).sort({ createdAt: 1 })
+    const messages = await Message.find({ groupId: group._id, hiddenFor: { $ne: req.user._id } }).sort({ createdAt: 1 })
     const senderIds = [...new Set(messages.map((m) => String(m.senderId)))]
     const people = await User.find({ _id: { $in: senderIds } }).select(MEMBER_FIELDS)
     res.status(200).json({ messages, people })
@@ -329,7 +356,7 @@ export const sendGroupMessage = async (req, res) => {
     const group = await loadMemberGroup(req, res)
     if (!group?._id) return
     const me = req.user._id
-    if (group.announcement && !isAdmin(group, me)) return fail(res, 403, "Only admins can post announcements")
+    if ((group.announcement || group.adminsOnly) && !isAdmin(group, me)) return fail(res, 403, group.announcement ? "Only admins can post announcements" : "Only admins can send messages in this group")
 
     const { message, replyTo } = req.body
     const text = (message || "").trim()
@@ -357,7 +384,7 @@ export const sendGroupMessage = async (req, res) => {
 
     emitToUsers(group.members, "newMessage", newMessage, me)
     res.status(201).json(newMessage)
-    sendPush(group.members.filter((m) => !sameId(m, me)), { title: group.name, body: `${req.user.fullName.split(" ")[0]}: ${previewOf(newMessage)}`, tag: `group-${group._id}` }).catch(() => {})
+    sendPush(group.members.filter((m) => !sameId(m, me)), { title: group.name, body: `${req.user.fullName.split(" ")[0]}: ${previewOf(newMessage)}`, tag: `group-${group._id}` }, { chatId: group._id }).catch(() => {})
 
     // "@Nexa …": answer in the group (in the background)
     answerMention({ groupId: group._id, message: newMessage, sender: req.user, timeZone: safeZone(req.headers["x-time-zone"]) })
@@ -376,6 +403,165 @@ export const markGroupRead = async (req, res) => {
     res.status(200).json({ ok: true })
   } catch (error) {
     console.log("markGroupRead error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// ── Group invites (for people who approve group adds) ─────────
+export const listGroupInvites = async (req, res) => {
+  try {
+    const groups = await Group.find({ "invites.user": req.user._id }).select("name avatar members invites").populate("invites.by", "fullName")
+    res.status(200).json({
+      invites: groups.map((g) => {
+        const mine = g.invites.find((i) => sameId(i.user, req.user._id))
+        return { group: { _id: g._id, name: g.name, avatar: g.avatar, memberCount: g.members.length }, by: mine?.by ? { _id: mine.by._id, fullName: mine.by.fullName } : null, at: mine?.at }
+      }),
+    })
+  } catch (error) {
+    console.log("listGroupInvites error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+export const answerGroupInvite = async (req, res) => {
+  try {
+    const group = await Group.findOne({ _id: req.params.id, "invites.user": req.user._id })
+    if (!group) return fail(res, 404, "This invite is no longer available")
+    group.invites = group.invites.filter((i) => !sameId(i.user, req.user._id))
+    const accept = req.method === "POST"
+    if (accept && !has(group.members, req.user._id)) {
+      if (group.members.length >= MAX_MEMBERS) { await group.save(); return fail(res, 400, "This group is full") }
+      group.members.push(req.user._id)
+    }
+    await group.save()
+    if (!accept) return res.status(200).json({ declined: true })
+    await markRead(group._id, [req.user._id])
+    const full = await broadcastGroup(group._id)
+    emitToUsers([req.user._id], "groupAdded", groupView(full))
+    await notifyCommunity(group.community)
+    res.status(200).json(groupView(full))
+  } catch (error) {
+    console.log("answerGroupInvite error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// ── Invite links and join requests ─────────────────────────────
+const linkable = (group) => !group.announcement && !group.community
+
+// Admins: the group's invite link (creates one if needed; reset makes a new one)
+export const getInviteLink = async (req, res) => {
+  try {
+    const group = await loadMemberGroup(req, res)
+    if (!group?._id) return
+    if (!isAdmin(group, req.user._id)) return fail(res, 403, "Only admins can share the invite link")
+    if (!linkable(group)) return fail(res, 400, "This group can't have an invite link")
+    if (!group.inviteCode || req.method === "POST") {
+      group.inviteCode = crypto.randomBytes(9).toString("base64url")
+      await group.save()
+    }
+    res.status(200).json({ code: group.inviteCode, approveJoins: group.approveJoins })
+  } catch (error) {
+    console.log("getInviteLink error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+export const removeInviteLink = async (req, res) => {
+  try {
+    const group = await loadMemberGroup(req, res)
+    if (!group?._id) return
+    if (!isAdmin(group, req.user._id)) return fail(res, 403, "Only admins can change the invite link")
+    group.inviteCode = null
+    await group.save()
+    res.status(200).json({ code: null })
+  } catch (error) {
+    console.log("removeInviteLink error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// Anyone signed in: what's behind an invite link
+export const previewInviteLink = async (req, res) => {
+  try {
+    const group = await Group.findOne({ inviteCode: req.params.code }).select("name description avatar members approveJoins joinRequests")
+    if (!group) return fail(res, 404, "This invite link isn't valid any more")
+    const status = has(group.members, req.user._id) ? "member" : group.joinRequests.some((r) => sameId(r.user, req.user._id)) ? "requested" : "none"
+    res.status(200).json({ group: { _id: group._id, name: group.name, description: group.description, avatar: group.avatar, memberCount: group.members.length, approveJoins: group.approveJoins }, status })
+  } catch (error) {
+    console.log("previewInviteLink error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// Join through the link, or ask to join when admins approve new members
+export const joinByLink = async (req, res) => {
+  try {
+    const group = await Group.findOne({ inviteCode: req.params.code })
+    if (!group) return fail(res, 404, "This invite link isn't valid any more")
+    const me = req.user._id
+    if (has(group.members, me)) return res.status(200).json({ status: "member", group: groupView(await populate(Group.findById(group._id))) })
+    if (group.members.length >= MAX_MEMBERS) return fail(res, 400, "This group is full")
+    if (group.approveJoins) {
+      if (!group.joinRequests.some((r) => sameId(r.user, me))) {
+        group.joinRequests.push({ user: me, at: new Date() })
+        await group.save()
+        emitToUsers(group.admins, "groupJoinRequest", { group: String(group._id) })
+        sendPush(group.admins, { title: group.name, body: `${req.user.fullName} asked to join`, tag: `gjoin-${group._id}` }).catch(() => {})
+        await broadcastGroup(group._id)
+      }
+      return res.status(200).json({ status: "requested" })
+    }
+    group.members.push(me)
+    await group.save()
+    await markRead(group._id, [me])
+    const full = await broadcastGroup(group._id)
+    emitToUsers([me], "groupAdded", groupView(full))
+    res.status(200).json({ status: "member", group: groupView(full) })
+  } catch (error) {
+    console.log("joinByLink error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// Admins: people asking to join
+export const listJoinRequests = async (req, res) => {
+  try {
+    const group = await loadMemberGroup(req, res)
+    if (!group?._id) return
+    if (!isAdmin(group, req.user._id)) return fail(res, 403, "Only admins can see join requests")
+    await group.populate("joinRequests.user", MEMBER_FIELDS)
+    res.status(200).json({ requests: group.joinRequests.filter((r) => r.user).map((r) => ({ user: r.user, at: r.at })) })
+  } catch (error) {
+    console.log("listJoinRequests error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// Approve (POST) or decline (DELETE) one request
+export const answerJoinRequest = async (req, res) => {
+  try {
+    const group = await loadMemberGroup(req, res)
+    if (!group?._id) return
+    if (!isAdmin(group, req.user._id)) return fail(res, 403, "Only admins can answer join requests")
+    const userId = req.params.userId
+    if (!group.joinRequests.some((r) => sameId(r.user, userId))) return fail(res, 404, "Request not found")
+    group.joinRequests = group.joinRequests.filter((r) => !sameId(r.user, userId))
+    const approve = req.method === "POST"
+    if (approve && !has(group.members, userId)) {
+      if (group.members.length >= MAX_MEMBERS) return fail(res, 400, "This group is full")
+      group.members.push(userId)
+    }
+    await group.save()
+    if (approve) await markRead(group._id, [userId])
+    const full = await broadcastGroup(group._id)
+    if (approve) {
+      emitToUsers([userId], "groupAdded", groupView(full))
+      sendPush([userId], { title: group.name, body: "Your request to join was approved", tag: `gjoin-${group._id}` }).catch(() => {})
+    }
+    res.status(200).json(groupView(full))
+  } catch (error) {
+    console.log("answerJoinRequest error:", error)
     fail(res, 500, "Internal server error")
   }
 }

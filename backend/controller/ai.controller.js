@@ -7,6 +7,7 @@ import { emitToUsers } from "../utils/notify.js"
 import { deleteFromCloudinary, uploadToCloudinary } from "../config/cloudinary.js"
 import { hasGmail } from "../utils/google.js"
 import { TIMER_CHOICES, nexaFiles } from "../utils/disappear.js"
+import { wantsCreative, writeCreative } from "../utils/creative.js"
 import { parseMedia } from "./gif.controller.js"
 import { generateImage } from "../utils/imageGen.js"
 import { VISION_MODEL, excerptFor, extractDocText, imageForModel, isDoc, isImage } from "../utils/aiFiles.js"
@@ -82,12 +83,16 @@ const APP_FACTS = `Kova facts (only describe these; if something isn't listed, s
 - Communities: pen icon > New community. It has an Announcements group (only admins post). Admins add people from their contacts; members press Join on its groups.
 - Left rail: Chats, Status, Calls, Communities, Starred. Profile (gear): name, @username, photo, password. Light/dark toggle in the left rail.`
 
+// How Nexa shapes an answer: poems as verse, stories as paragraphs, lists as bullets
+const FORMAT_RULES = `Pick the format that fits the request: a poem, song or shayari as an original piece with a **title** line and short lines in stanzas (never bullets); a story, letter, wish or message as short paragraphs; steps, options or several facts as "- " bullets (numbered for steps); a quick question as one or two sentences. Make it as long as the request needs and no longer. Never reproduce existing song lyrics, poems or book text.`
+
 export const systemPrompt = (user, ctx, intents) => [
   `You are Nexa, the friendly AI assistant in Kova (a messenger), chatting with ${user.fullName} (@${user.username}).
 Now: ${formatWhen(new Date(), ctx.timeZone)} (${ctx.timeZone}, ${offsetOf(ctx.timeZone)}). Give times as ISO 8601 with this offset. Coming days: ${nextDays(ctx.timeZone)}.`,
   intents.app ? APP_FACTS : "",
   `Tools: send_message and schedule_message (to a contact, group, or "me"; "me" = a reminder Nexa pops up here). schedule_message can repeat (repeat_every_minutes: 2, 60, 1440 for daily; optional repeat_until / repeat_times); never say you can't repeat. list_scheduled_messages / cancel_scheduled_message to view or stop them.${intents.people ? " get_recent_messages to read a chat (summaries, catch up). create_poll for polls." : ""}
-browser_search: use it for anything current (news, prices, weather, sports, recent facts); never invent news or numbers; don't paste links (sources show under your answer).`,
+browser_search: use it for anything current (news, prices, weather, sports, recent facts); never invent news or numbers; don't paste bare URLs (sources show under your answer).
+Downloads: you can't download or send files from the web. For a song, film, show, book or app, your FIRST line says you can't download it (it's copyrighted), then browser_search it and list where to get it legally: official streaming (YouTube, Spotify, JioSaavn, Apple Music, Gaana), stores, or the artist's page, with each service's offline/download option. Make each service name a Markdown link, e.g. [Spotify](url), using the exact page URL from your search results (never guess a URL; if you have no URL for a service, leave it unlinked). Never mention or link pirate download sites (Pagal sites, MP3 download sites). Add a few useful facts (artist, album, year) if found. Never print full song lyrics. Never reply with only "I can't help with that".`,
   intents.image ? `generate_image: you CAN create images (ignore any earlier reply saying otherwise). Write a vivid English prompt, then reply in one short line.` : "",
   ctx.google
     ? (intents.calendar ? `Google Calendar + Tasks are connected (${ctx.google.email}): get_calendar_events, create_calendar_event (add_meet: true = Google Meet link; is_reminder: true + repeat daily/weekdays/weekly/monthly for reminders), delete_calendar_event, get_tasks, add_task, complete_task, snooze_reminder.
@@ -97,7 +102,7 @@ Reminders ("remind me to call mom at 6", "every day at 9") go on the calendar as
     : intents.mailAsked ? `Gmail isn't connected: if asked about email, tell them to open the calendar button at the top of the Nexa chat and tap Connect Gmail.` : "",
   intents.people ? describeContext(ctx) : `(Contacts and groups aren't listed for this question. If the user wants to message someone, ask who.)`,
   `Rules: only send or schedule when clearly asked; if the person, group or time is unclear, ask one short question. Send the user's own words unless they ask for rewording. After acting, confirm in one short sentence. Never claim something worked unless the tool said ok.
-Style: friendly and brief. By default 2 to 5 short "- " bullets (one line each). Text to send goes in a quote ("> ..."). No headings, intro lines or sign-offs. **Bold** only for button names. At most one emoji. Never use em or en dashes.`,
+Style: friendly and brief. ${FORMAT_RULES} Text to send goes in a quote ("> ..."). No headings, intro lines or sign-offs. At most one emoji. Never use em or en dashes.`,
   intents.visual ? `When it helps, use a Markdown table (2 to 5 columns) or a Mermaid diagram in a \`\`\`mermaid block ("flowchart TD", node ids A, B, C with labels in double quotes, under 12 nodes, no styling), then at most 2 bullets. Never use HTML tags like <br>; in a table cell separate items with "; ".` : "",
   intents.code ? `Code: complete and working. Each file in its own fenced block with language and file name, e.g. \`\`\`js server.js. Keep the explanation to a few bullets.` : "",
 ].filter(Boolean).join("\n\n")
@@ -148,13 +153,57 @@ export const toolsFor = (ctx, intents, forceImage = false) => [
   { type: "browser_search" },
 ]
 
+// Pirate music/film download sites: never shown as links or sources
+const PIRATE_RE = /pagal|mp3|songspk|djpunjab|mr-?jatt|wapking|djmaza|webmusic|downloadming|filmyzilla|filmywap|moviesda|tamilrockers|9xmovies|vegamovies|isaimini|bestwap|raag\.fm|djjohal|riskyjatt|hindigeetmala\.net\/download/i
+const allowedSite = (url = "") => !PIRATE_RE.test(url)
+const normUrl = (u = "") => u.replace(/[#?].*$/, "").replace(/\/+$/, "").toLowerCase()
+
+// Every page the web search returned: Markdown links in a reply must point to one of these
+const searchedUrls = (executed = []) =>
+  executed.filter((t) => t.type === "browser_search").flatMap((t) => (t.search_results?.results || []).map((r) => r.url)).filter(Boolean)
+
+// Keep [text](url) only when the URL came from the search (no made-up or pirate links)
+const keepRealLinks = (text, urls) => {
+  const ok = new Set(urls.filter(allowedSite).map(normUrl))
+  return text.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (all, label, url) => (ok.has(normUrl(url)) ? all : label))
+}
+
+// Music/video services: their names in a reply link to the page the search found
+const SERVICES = [
+  ["Spotify", /open\.spotify\.com|spotify\.com/],
+  ["JioSaavn", /jiosaavn\.com/],
+  ["Apple Music", /music\.apple\.com/],
+  ["Amazon Music", /music\.amazon\./],
+  ["YouTube Music", /music\.youtube\.com/],
+  ["YouTube", /(?:www\.|m\.)?youtube\.com\/watch|youtu\.be\//],
+  ["Gaana", /gaana\.com/],
+  ["Wynk", /wynk\.in/],
+  ["Hungama", /hungama\.com/],
+  ["SoundCloud", /soundcloud\.com/],
+  ["Deezer", /deezer\.com/],
+]
+const linkServices = (text, urls) => {
+  let out = text
+  for (const [name, host] of SERVICES) {
+    const url = urls.find((u) => host.test(u) && allowedSite(u))
+    if (!url) continue
+    const esc = name.replace(/ /g, "\\s")
+    // **Name** (not already inside a link) → [**Name**](url); otherwise the first plain mention
+    const bold = new RegExp(`(?<!\\[)\\*\\*${esc}\\*\\*(?!\\]\\()`)
+    if (bold.test(out)) { out = out.replace(bold, `[**${name}**](${url})`); continue }
+    if (new RegExp(`\\[[^\\]]*${esc}[^\\]]*\\]\\(`).test(out)) continue
+    out = out.replace(new RegExp(`(?<![\\w\\[])${esc}(?![\\w\\]])`), `[${name}](${url})`)
+  }
+  return out
+}
+
 // Links from Groq's web search, pages Nexa actually opened first
 const sourcesOf = (executed = []) => {
   const searches = executed.filter((t) => t.type === "browser_search")
   const opened = new Set(searches.filter((t) => !/"query"/.test(t.arguments || "")).flatMap((t) => (t.search_results?.results || []).map((r) => r.url)))
   const found = searches.filter((t) => /"query"/.test(t.arguments || "")).flatMap((t) => t.search_results?.results || [])
   return found
-    .filter((r) => /^https?:\/\//.test(r.url || "") && r.title)
+    .filter((r) => /^https?:\/\//.test(r.url || "") && r.title && allowedSite(r.url))
     .sort((a, b) => opened.has(b.url) - opened.has(a.url))
     .map((r) => ({ title: String(r.title).slice(0, 120), url: r.url }))
 }
@@ -240,9 +289,14 @@ export const sendAiMessage = async (req, res) => {
     ]
     const actions = []
     const sources = []
+    const searched = [] // every URL the web search returned (links in the reply must be one of these)
     let reply = ""
+    // Poems, songs, shayari: their own careful path (draft + rhyme check)
+    if (!media && !req.file && wantsCreative(text)) {
+      try { reply = await writeCreative(text, `Asked by ${me.fullName}.`) } catch (err) { console.log("creative error:", err.message) }
+    }
     try {
-      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      for (let round = 0; round < MAX_TOOL_ROUNDS && !reply; round++) {
         // An image request: the first turn must call generate_image (the model sometimes refuses otherwise)
         const forceImage = round === 0 && !media && wantsImage(text)
         const options = { tools: toolsFor(ctx, intents, forceImage), maxTokens: 1500, ...(forceImage ? { toolChoice: FORCE_IMAGE } : {}) }
@@ -256,6 +310,7 @@ export const sendAiMessage = async (req, res) => {
           msg = await groqChat(convo, { ...options, maxTokens: 1000 })
         }
         sources.push(...sourcesOf(msg.executed_tools))
+        searched.push(...searchedUrls(msg.executed_tools))
         if (!msg.tool_calls?.length) { reply = msg.content?.trim() || ""; break }
         convo.push({ role: "assistant", content: msg.content || "", tool_calls: msg.tool_calls })
         for (const callItem of msg.tool_calls) {
@@ -274,6 +329,7 @@ export const sendAiMessage = async (req, res) => {
       }
     }
     if (!reply) reply = actions.length ? "Done." : "Sorry, I couldn't finish that. Could you rephrase?"
+    reply = linkServices(keepRealLinks(reply, searched), searched)
     // Replies to a GIF or sticker sometimes come back as a quote
     if (media) reply = reply.replace(/^>\s?/gm, "")
     const links = sources.filter((s, i) => sources.findIndex((o) => o.url === s.url) === i).slice(0, 4)
@@ -353,6 +409,36 @@ export const deleteAiMessage = async (req, res) => {
     res.json({ deleted: String(m._id) })
   } catch (error) {
     console.log("deleteAiMessage error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// Media manager: remove one file from a Nexa message (a photo/document you sent, or an
+// image Nexa made) and free it on Cloudinary. The text stays; an empty message is deleted.
+export const deleteAiFile = async (req, res) => {
+  try {
+    const m = await AiMessage.findOne({ _id: req.params.id, user: req.user._id })
+    if (!m) return res.status(404).json({ error: "Message not found" })
+    const actionId = req.query.action ? String(req.query.action) : null
+    let file = null
+    if (actionId) {
+      const i = m.actions.findIndex((a) => a?.type === "image" && a.id === actionId)
+      if (i < 0) return res.status(404).json({ error: "Image not found" })
+      file = m.actions[i]
+      m.actions.splice(i, 1)
+      m.markModified("actions")
+    } else {
+      if (!m.attachment) return res.status(404).json({ error: "No file on this message" })
+      file = m.attachment
+      m.attachment = null
+    }
+    const empty = !m.content?.trim() && !m.attachment && !m.actions.length
+    if (empty) await AiMessage.deleteOne({ _id: m._id })
+    else await m.save()
+    if (file?.publicId) deleteFromCloudinary([file])
+    res.json(empty ? { deleted: String(m._id) } : { message: m })
+  } catch (error) {
+    console.log("deleteAiFile error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 }
@@ -559,6 +645,15 @@ export const smartReplies = async (req, res) => {
     const chat = await readChat(me, String(req.body.chatId || ""), { count: 12, timeZone: zoneOf(req) })
     const last = chat?.messages[chat.messages.length - 1]
     if (!last || String(last.senderId) === String(me) || last.call || !messageText(last).trim()) return res.status(200).json({ replies: [] })
+    // Nothing to suggest after Nexa's own answers or automatic messages
+    const lastSender = chat.people?.get(String(last.senderId))
+    if (lastSender?.isBot || last.botChat?.length || last.auto) return res.status(200).json({ replies: [] })
+    const from = lastSender?.fullName?.split(" ")[0] || "them"
+    // Short acknowledgements ("ok", "thanks!", "👍") don't need a suggested reply
+    const lastText = messageText(last).trim()
+    const ACK = /^(ok(ay)?|k+|kk|cool|nice|great|sure|yes|yep|yeah|no|nope|thanks?( you)?( so much)?|thank u|thx|ty|tnx|done|got it|alright|fine|good night|gn|bye|see you|lol|haha+|hmm+)[\s!.]*$/i
+    const onlyEmoji = /^[\p{Extended_Pictographic}\p{Emoji_Component}\s]+$/u.test(lastText)
+    if (ACK.test(lastText) || onlyEmoji) return res.status(200).json({ replies: [], for: String(last._id) })
 
     const text = await askGroq([
       {
@@ -566,18 +661,24 @@ export const smartReplies = async (req, res) => {
         content: req.user.business?.enabled && !chat.isGroup
           // Business accounts reply to customers: warm and professional
           ? `"Me" is the business ${req.user.fullName}${req.user.business.category ? ` (${req.user.business.category})` : ""} replying to a customer.
-Suggest 3 short replies to the customer's latest message.
+Suggest 3 short replies to the customer's latest message. If it doesn't need a reply (like "ok" or "thanks"), return [].
 - Each reply under 16 words, polite, warm and professional, in the same language as the chat.
 - Make them different (e.g. answer / apologise and offer a fix / ask a helpful question). No promises about prices or stock that aren't in the chat. At most one emoji in total.
 - Return ONLY a JSON array of 3 strings.`
-          : `Suggest 3 short replies the user ("Me") could send to the latest message in this chat.
-- Each reply under 8 words, natural and casual, in the same language as the chat.
-- Make them different (e.g. yes / no or later / a question). At most one emoji in total.
-- Return ONLY a JSON array of 3 strings.`,
+          : `You write quick replies for "Me" to send back to ${from}.
+Reply ONLY to ${from}'s latest message (shown separately). Earlier messages are just background; don't answer them again.
+Write exactly 3 replies, each a different kind:
+1. a positive reply (yes / agree / congratulate / thank)
+2. a "no", "not now" or a different option
+3. a short follow-up question about what ${from} said
+Rules: under 10 words each, casual, same language and tone as the chat, written as "Me" talking to ${from}. At most one emoji in total.
+Use details from their message. Don't invent facts, times or prices, and don't promise to send or check things they didn't ask for.
+If the latest message is a statement that doesn't need a "no" (like good news), make reply 2 a warm reaction instead.
+Return ONLY a JSON array of 3 strings.`,
       },
-      { role: "user", content: chat.lines.join("\n") },
+      { role: "user", content: `Background (older messages):\n${chat.lines.slice(-7, -1).join("\n") || "(none)"}\n\nLatest message from ${from}, the one to reply to:\n"${lastText}"` },
     ], { model: FAST_MODEL, maxTokens: 300, temperature: 0.7 })
-    const replies = parseList(text).filter((r) => typeof r === "string" && r.trim()).map((r) => r.trim().slice(0, 160)).slice(0, 3)
+    const replies = parseList(text).filter((r) => typeof r === "string" && r.trim()).map((r) => r.trim().replace(/^(me|you)\s*:\s*/i, "").replace(/^["“]|["”]$/g, "").trim().slice(0, 160)).filter(Boolean).slice(0, 3)
     res.status(200).json({ replies, for: String(last._id) })
   } catch (error) {
     console.log("smartReplies error:", error.message)

@@ -31,6 +31,8 @@ const businessSettingsSchema = new mongoose.Schema({
   summarySentOn: { type: String, default: "" }, // YYYY-MM-DD in the business's time zone
   // Alert the team when a customer has waited this many minutes (0 = off)
   unansweredMinutes: { type: Number, default: 15 },
+  // Discount codes customers type in the cart. kind: percent | flat. maxUses 0 = no limit.
+  coupons: [{ code: String, kind: { type: String, enum: ["percent", "flat"], default: "percent" }, value: Number, minTotal: { type: Number, default: 0 }, maxUses: { type: Number, default: 0 }, uses: { type: Number, default: 0 }, expiresAt: { type: Date, default: null }, active: { type: Boolean, default: true } }],
   // Last order number used (orders are #1001, #1002, …)
   orderSeq: { type: Number, default: 1000 },
 }, { timestamps: true })

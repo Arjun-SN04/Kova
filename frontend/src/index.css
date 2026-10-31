@@ -156,19 +156,24 @@
   --color-indigo-700: #4a4d54; --color-violet-700: #4a4d54;
 }
 
-/* Light mode neutrals: a clean cool grey (less blue than Tailwind's slate) */
+/* Light mode neutrals: a soft, cool grey. Surfaces are off-white instead of
+   pure white so the app is easier on the eyes; each layer is one step darker. */
 :root {
-  --color-slate-50: #f7f8fa;
-  --color-slate-100: #eff1f4;
-  --color-slate-200: #e3e6eb;
-  --color-slate-300: #cdd2d9;
-  --color-slate-400: #9aa0ab;
-  --color-slate-500: #6b717d;
-  --color-slate-600: #4c525d;
-  --color-slate-700: #363b44;
-  --color-slate-800: #23272e;
+  --color-slate-50: #f1f3f6;
+  --color-slate-100: #e8ebef;
+  --color-slate-200: #dce0e6;
+  --color-slate-300: #c6ccd4;
+  --color-slate-400: #979eaa;
+  --color-slate-500: #69707c;
+  --color-slate-600: #4b515c;
+  --color-slate-700: #353a43;
+  --color-slate-800: #22262d;
   --color-slate-900: #16191e;
   --color-slate-950: #0c0e11;
+}
+/* Light mode only: panels, cards and bars use this instead of pure white */
+:root:not(.dark) {
+  --color-white: #f9fafb;
 }
 
 /* Dark mode palette: a neutral graphite instead of Tailwind's navy slate.
@@ -286,8 +291,8 @@ body {
 /* Chat background: soft doodle pattern behind the messages */
 .chat-bg {
   /* A light wash of the theme colour, so bubbles stand out from it */
-  background-color: color-mix(in oklab, var(--color-indigo-500) 5%, #eceef2);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%23475569' stroke-opacity='0.08' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 24h26a7 7 0 0 1 7 7v12a7 7 0 0 1-7 7H32l-8 7v-7h-4a7 7 0 0 1-7-7V31a7 7 0 0 1 7-7z'/%3E%3Ccircle cx='27' cy='37' r='1.2'/%3E%3Ccircle cx='33' cy='37' r='1.2'/%3E%3Ccircle cx='39' cy='37' r='1.2'/%3E%3Ccircle cx='132' cy='36' r='9'/%3E%3Cpath d='M104 116l7 7 14-14'/%3E%3Cpath d='M146 134h18M155 125v18'/%3E%3Cpath d='M30 146c5-5 10-5 15 0s10 5 15 0'/%3E%3Cpath d='M120 74h22a6 6 0 0 1 6 6v9a6 6 0 0 1-6 6h-14l-7 6v-6h-1a6 6 0 0 1-6-6v-9a6 6 0 0 1 6-6z'/%3E%3Cpath d='M70 92l4-8 4 8 8 1-6 6 1.5 8-7.5-4-7.5 4 1.5-8-6-6z'/%3E%3C/g%3E%3C/svg%3E");
+  background-color: color-mix(in oklab, var(--color-indigo-500) 3%, #eef0f4);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%2364748b' stroke-opacity='0.055' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 24h26a7 7 0 0 1 7 7v12a7 7 0 0 1-7 7H32l-8 7v-7h-4a7 7 0 0 1-7-7V31a7 7 0 0 1 7-7z'/%3E%3Ccircle cx='27' cy='37' r='1.2'/%3E%3Ccircle cx='33' cy='37' r='1.2'/%3E%3Ccircle cx='39' cy='37' r='1.2'/%3E%3Ccircle cx='132' cy='36' r='9'/%3E%3Cpath d='M104 116l7 7 14-14'/%3E%3Cpath d='M146 134h18M155 125v18'/%3E%3Cpath d='M30 146c5-5 10-5 15 0s10 5 15 0'/%3E%3Cpath d='M120 74h22a6 6 0 0 1 6 6v9a6 6 0 0 1-6 6h-14l-7 6v-6h-1a6 6 0 0 1-6-6v-9a6 6 0 0 1 6-6z'/%3E%3Cpath d='M70 92l4-8 4 8 8 1-6 6 1.5 8-7.5-4-7.5 4 1.5-8-6-6z'/%3E%3C/g%3E%3C/svg%3E");
   background-size: 180px 180px;
 }
 
@@ -297,38 +302,34 @@ body {
 }
 
 /* Logo: the three dots rise one after another like a typing indicator.
-   Plays once on load, and keeps going while the logo is hovered. */
+   Runs all the time (still for people who prefer reduced motion). */
 @keyframes logo-dot {
-
   0%,
-  60%,
+  36%,
   100% {
     transform: translateY(0);
     opacity: 1;
   }
 
-  30% {
-    transform: translateY(-1.6px);
+  18% {
+    transform: translateY(-1.8px);
     opacity: 0.7;
   }
 }
 
+/* Always running: a typing wave, then a short rest */
 .logo-dot {
   transform-box: fill-box;
   transform-origin: center;
-  animation: logo-dot 1.1s ease-in-out 0.3s 2 both;
+  animation: logo-dot 2.4s ease-in-out infinite;
 }
 
 .logo-dot:nth-child(2) {
-  animation-delay: 0.45s;
+  animation-delay: 0.15s;
 }
 
 .logo-dot:nth-child(3) {
-  animation-delay: 0.6s;
-}
-
-.group:hover .logo-dot {
-  animation-iteration-count: infinite;
+  animation-delay: 0.3s;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -377,4 +378,32 @@ body {
   75% {
     transform: rotate(14deg);
   }
+}
+/* Wrong PIN on the app lock screen */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+/* Browser autofill: keep our own input colours (no yellow / olive fill) */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: currentColor;
+  caret-color: currentColor;
+  transition: background-color 600000s 0s, color 600000s 0s;
+}
+
+@layer base {
+/* Keyboard focus: a soft ring in the theme colour instead of the browser's white outline */
+:where(button, a, summary, [role="button"], [role="menuitem"], [role="tab"], [role="radio"], [role="switch"], [role="option"]):focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-indigo-500) 65%, transparent);
+  outline-offset: 2px;
+}
+/* Text boxes show focus with their own border / ring, not an outline */
+:where(input, textarea, select, [contenteditable]):focus-visible {
+  outline: none;
+}
 }

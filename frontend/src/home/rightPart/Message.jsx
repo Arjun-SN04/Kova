@@ -1,17 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
-import { LuAlarmClock, LuBot, LuClipboardList, LuCheck, LuCheckCheck, LuEllipsis, LuLanguages, LuCopy, LuForward, LuPencil, LuBookmark, LuBookmarkX, LuPin, LuPinOff, LuReply, LuSmilePlus, LuSquareCheck, LuStar, LuStarOff, LuTimer, LuTrash2 } from 'react-icons/lu'
+import { LuAlarmClock, LuBot, LuClipboardList, LuCheck, LuCheckCheck, LuEllipsis, LuFileText, LuLanguages, LuCopy, LuDownload, LuForward, LuSave, LuPencil, LuBookmark, LuBookmarkX, LuPin, LuPinOff, LuReply, LuSmilePlus, LuSparkles, LuSquareCheck, LuStar, LuStarOff, LuTimer, LuTrash2, LuVolume2, LuSquare } from 'react-icons/lu'
+import { canSpeak, speak, useSpeech } from '../../utils/speak'
 import useConversation from '../../Zustand/UserConversation'
 import Avatar from '../Avatar'
 import Attachment from './Attachment'
-import ConfirmDialog from '../ConfirmDialog'
-import { attachmentLabel } from '../../utils/attachments'
+import DeleteChoiceDialog from '../DeleteChoiceDialog'
+import { deleteMessagesFor } from '../../utils/deleteMessages'
+import { attachmentLabel, canSaveAs, downloadFile } from '../../utils/attachments'
 import { canEdit, groupReactions, jumpToMessage, toggleReaction } from '../../utils/messages'
 import ReactionPicker from './ReactionPicker'
 import { GoToMessage, RemindMenu, Transcript, Translation, useTranslation } from './NexaExtras'
 import { AiAvatar } from '../Avatar'
 import ReactMarkdown from 'react-markdown'
-import { remarkHtmlBreaks } from '../../utils/markdown'
+import { remarkHtmlBreaks, remarkLineBreaks } from '../../utils/markdown'
 import PollCard from './PollCard'
 import { setKept, setMessagePinned, toggleStar } from '../../utils/chatExtras'
 import ChatCard from '../../business/ChatCard'
@@ -27,8 +29,9 @@ const botMd = {
   a: (props) => <a className="underline underline-offset-2" target="_blank" rel="noreferrer" {...props} />,
 }
 import { loadConversations } from '../../utils/conversations'
+import { useAuth } from '../../context/AuthProvider'
 
-const HTML_BREAKS = [remarkHtmlBreaks]
+const HTML_BREAKS = [remarkHtmlBreaks, remarkLineBreaks]
 
 const formatTime = (date) => new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 const LONG_PRESS_MS = 450
@@ -69,6 +72,12 @@ const ActionButton = ({ onClick, label, danger = false, children }) => (
 // `original`: the message this one replies to (null if it was deleted, undefined if not a reply).
 // In groups, `senderLabel` shows who wrote it and `nameOf(id)` names people in reply quotes
 const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId, original, now, senderLabel = null, nameOf = null, isBot = false }) => {
+  const [AuthUser] = useAuth()
+  // Nexa's answers: anyone in a one-to-one chat can delete them; in groups, whoever asked or an admin
+  const openChat = useConversation((st) => st.selectedConversation)
+  const canDeleteNexa = isBot && (message.botChat?.length > 0 || (!!message.groupId && (String(original?.senderId) === String(myId) || openChat?.admins?.some((a) => String(a._id ?? a) === String(myId)))))
+  // Seen indicators turned off in Privacy: never show the double tick
+  const showSeen = AuthUser?.privacy?.seen !== false
   const {
     setMessages, editingMessage, setEditingMessage, replyingTo, setReplyingTo, highlightedId, setHighlightedId,
     selectionMode, selectedIds, startSelection, toggleSelected, setForwardIds, starredIds,
@@ -109,23 +118,32 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
   const isEditing = editingMessage?._id === id
   const isReplyTarget = replyingTo?._id === id
   const isSelected = selectedIds.includes(id)
+  // Listen: read the text (or a voice note's transcript) aloud
+  const readable = message.poll ? '' : [message.message, message.transcript].filter(Boolean).join('. ')
+  const speaking = useSpeech((st) => st.speakingId === id)
   const editable = itsMe && !message.poll && !message.card && canEdit(message, now)
   const contactFirst = contactName?.split(' ')[0]
 
-  const handleDelete = async () => {
+  // mode: 'everyone' (mine / Nexa answers I may remove) or 'me' (any message)
+  const handleDelete = async (mode) => {
     setDeleting(true)
-    try {
-      await axios.delete(`/api/message/delete/${id}`, { withCredentials: true })
+    const res = await deleteMessagesFor([id], mode)
+    if (res.ok && res.gone.length) {
       setMessages((prev) => prev.filter((m) => m._id !== id))
       if (isEditing) setEditingMessage(null)
       if (isReplyTarget) setReplyingTo(null)
       loadConversations()
-    } catch (err) {
-      console.log(err)
+    } else {
       setDeleting(false)
     }
     setConfirmDelete(false)
   }
+
+  // Download / Save as for any photo, video, voice note or file
+  const att = message.attachment
+  const fileUrl = att ? (att.resourceType === 'raw' ? `/api/message/file/${id}` : att.url) : null
+  const fileName = att ? (att.name && att.name !== 'image' ? att.name : `kova-${att.kind || 'file'}-${id.slice(-6)}`) : ''
+  const saveFile = (saveAs) => downloadFile(fileUrl, fileName, { saveAs })
 
   // Reactions: update instantly, then sync with the server's answer
   const react = async (emoji) => {
@@ -209,6 +227,10 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
         >
           <MenuItem icon={copied ? LuCheck : LuCopy} label={copied ? 'Copied' : 'Copy'} onClick={() => { copyText(); setTimeout(() => setMoreOpen(false), 400) }} />
           <MenuItem icon={LuForward} label="Forward" onClick={close(() => setForwardIds([id]))} />
+          {fileUrl && <MenuItem icon={LuDownload} label="Download" onClick={close(() => saveFile(false))} />}
+          {fileUrl && canSaveAs() && <MenuItem icon={LuSave} label="Save as…" onClick={close(() => saveFile(true))} />}
+          {(message.attachment?.kind === 'image' || /^(application\/pdf|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|text\/plain|text\/csv)$/.test(message.attachment?.mimeType || '')) && !isBot && <MenuItem icon={LuSparkles} label="Ask Nexa about this" onClick={close(() => { setReplyingTo(message); window.dispatchEvent(new CustomEvent('nexchat:compose', { detail: '@Nexa ' })) })} />}
+          {readable && canSpeak() && <MenuItem icon={speaking ? LuSquare : LuVolume2} label={speaking ? 'Stop reading' : 'Listen'} onClick={close(() => speak(id, readable))} />}
           {canTranslate && <MenuItem icon={LuLanguages} label={translation?.text ? 'Hide translation' : 'Translate'} onClick={close(translate)} />}
           <MenuItem icon={starred ? LuStarOff : LuStar} label={starred ? 'Unstar' : 'Star'} onClick={close(() => toggleStar(id))} />
           {!isBot && <MenuItem icon={pinned ? LuPinOff : LuPin} label={pinned ? 'Unpin' : 'Pin'} onClick={close(() => setMessagePinned(id, !pinned))} />}
@@ -217,12 +239,8 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           {message.groupId && !message.card && <MenuItem icon={LuClipboardList} label="Make task" onClick={close(() => setTaskOpen(true))} />}
           {editable && <MenuItem icon={LuPencil} label="Edit" onClick={close(() => setEditingMessage(message))} />}
           <MenuItem icon={LuSquareCheck} label="Select" onClick={close(() => startSelection(id))} />
-          {itsMe && (
-            <>
-              <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
-              <MenuItem icon={LuTrash2} label="Delete" danger onClick={close(() => setConfirmDelete(true))} />
-            </>
-          )}
+          <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
+          <MenuItem icon={LuTrash2} label="Delete" danger onClick={close(() => setConfirmDelete(true))} />
         </div>
       )}
       <ActionButton label="React" onClick={(e) => { placeFrom(e.currentTarget); setMoreOpen(false); setPickerOpen((v) => !v) }}>
@@ -258,6 +276,27 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
         <span className="italic opacity-80">Original message was deleted</span>
       )}
     </button>
+  )
+
+  // On Nexa's answers: the photos / documents it looked at (click to jump to them)
+  const refs = Array.isArray(message.nexaRefs) && message.nexaRefs.length > 0 && (
+    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Looked at</span>
+      {message.nexaRefs.map((ref) => (
+        <button
+          key={ref.messageId}
+          type="button"
+          onClick={(e) => { e.stopPropagation(); if (!selectionMode) jumpToMessage(ref.messageId, setHighlightedId) }}
+          title={`${ref.kind === 'image' ? 'Photo' : 'Document'}: ${ref.name} (click to see it in the chat)`}
+          className="inline-flex max-w-[200px] items-center gap-1.5 rounded-lg bg-slate-100 p-1 pr-2 text-xs text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-200/70 dark:bg-slate-700/60 dark:text-slate-200 dark:ring-slate-600 dark:hover:bg-slate-700"
+        >
+          {ref.kind === 'image' && ref.url
+            ? <img src={ref.url} alt="" className="size-7 shrink-0 rounded-md object-cover" loading="lazy" />
+            : <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300"><LuFileText className="size-3.5" /></span>}
+          <span className="min-w-0 truncate">{ref.kind === 'image' ? 'Photo' : ref.name}</span>
+        </button>
+      ))}
+    </div>
   )
 
   return (
@@ -301,7 +340,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
             : `rounded-2xl text-[14px] leading-relaxed transition ${media ? 'p-1.5' : 'px-3.5 py-2'} ${corners} ${ring} ${deleting ? 'opacity-40' : ''} ${
             itsMe
               ? 'bg-indigo-600 text-white'
-              : 'bg-white text-slate-800 shadow-xs ring-1 ring-slate-900/[0.04] dark:bg-slate-800 dark:text-slate-100 dark:ring-0'
+              : 'bg-[#ffffff] text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-slate-900/[0.05] dark:bg-slate-800 dark:text-slate-100 dark:ring-0'
           } ${!itsMe && !ring ? 'ring-1 ring-slate-200/80 dark:ring-slate-700/60' : ''} ${selectionMode ? 'pointer-events-none' : ''}`}
         >
           {message.forwarded && (
@@ -310,7 +349,8 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
             </p>
           )}
           {quote}
-          {message.attachment && <Attachment attachment={message.attachment} itsMe={itsMe} />}
+          {refs}
+          {message.attachment && <Attachment attachment={message.attachment} itsMe={itsMe} messageId={message._id} label={itsMe ? 'You' : isBot ? 'Nexa' : senderLabel || contactName || 'Voice message'} />}
           <Transcript message={message} itsMe={itsMe} />
           {message.poll && <PollCard message={message} itsMe={itsMe} myId={myId} nameOf={nameOf} />}
           {message.card && <ChatCard message={message} mine={itsMe} />}
@@ -360,7 +400,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
             {message.auto && <span className="inline-flex items-center gap-0.5" title="Sent automatically"><LuBot className="size-3" />{message.auto === 'nexa' ? 'Nexa auto-reply' : 'Automatic'} ·</span>}
             {last && formatTime(message.createdAt)}
             {last && message.edited && ' · edited'}
-            {last && itsMe && String(message.receiverId) !== String(myId) && (message.seen
+            {last && itsMe && String(message.receiverId) !== String(myId) && (message.seen && showSeen
               ? <LuCheckCheck className="size-3.5 text-indigo-500" title="Seen" aria-label="Seen" />
               : <LuCheck className="size-3.5" title="Sent" aria-label="Sent" />)}
           </p>
@@ -370,12 +410,11 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
       {!itsMe && actions}
 
       {taskOpen && <TaskDialog groupId={message.groupId} message={message} onClose={() => setTaskOpen(false)} />}
-      <ConfirmDialog
+      <DeleteChoiceDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        onConfirm={handleDelete}
-        title="Delete this message?"
-        description="It will be removed for both of you. This can't be undone."
+        onDelete={handleDelete}
+        canEveryone={itsMe || canDeleteNexa}
       />
     </div>
   )

@@ -1,18 +1,20 @@
 import express from "express"
-import { getMessage, sendMessage, deleteMessage, editMessage, deleteConversation, markSeen, getConversations, deleteMessages, forwardMessages, reactToMessage } from "../controller/message.controller.js"
+import { openFile, getMessage, sendMessage, deleteMessage, editMessage, deleteConversation, markSeen, getConversations, deleteMessages, deleteForMe, forwardMessages, reactToMessage } from "../controller/message.controller.js"
 import secureRoute from "../middleware/secureRoute.js"
-import { closePoll, createPoll, getChatTimer, getPrefs, keepMessage, listStarred, pinChat, pinMessage, setChatTimer, starMessage, votePoll } from "../controller/messageExtras.controller.js"
+import { closePoll, createPoll, getChatTimer, getPrefs, keepMessage, lockChat, hideChat, setHiddenWord, verifyLockCode, changeLockCode, resetLockedChats, listStarred, pinChat, pinMessage, setChatTimer, starMessage, votePoll } from "../controller/messageExtras.controller.js"
 import { uploadSingle } from "../config/cloudinary.js"
 
 const router = express.Router()
 router.post("/send/:id", secureRoute, uploadSingle("file"), sendMessage)
 router.get("/get/:id", secureRoute, getMessage)
+router.get("/file/:messageId", secureRoute, openFile)
 router.delete("/delete/:messageId", secureRoute, deleteMessage)
 router.put("/edit/:messageId", secureRoute, editMessage)
 router.delete("/conversation/:id", secureRoute, deleteConversation)
 router.get("/conversations", secureRoute, getConversations)
 router.put("/seen/:id", secureRoute, markSeen)
 router.post("/delete-many", secureRoute, deleteMessages)
+router.post("/delete-for-me", secureRoute, deleteForMe)
 router.post("/forward", secureRoute, forwardMessages)
 router.put("/react/:messageId", secureRoute, reactToMessage)
 router.put("/pin/:messageId", secureRoute, pinMessage)
@@ -23,6 +25,12 @@ router.put("/vote/:messageId", secureRoute, votePoll)
 router.put("/poll/:messageId/close", secureRoute, closePoll)
 router.get("/prefs", secureRoute, getPrefs)
 router.put("/pin-chat/:chatId", secureRoute, pinChat)
+router.put("/lock-chat/:chatId", secureRoute, lockChat)
+router.put("/hide-chat/:chatId", secureRoute, hideChat)
+router.put("/hidden-word", secureRoute, setHiddenWord)
+router.post("/locked/verify", secureRoute, verifyLockCode)
+router.put("/locked/code", secureRoute, changeLockCode)
+router.post("/locked/reset", secureRoute, resetLockedChats)
 router.get("/disappear/:chatId", secureRoute, getChatTimer)
 router.put("/disappear/:chatId", secureRoute, setChatTimer)
 router.put("/keep/:messageId", secureRoute, keepMessage)

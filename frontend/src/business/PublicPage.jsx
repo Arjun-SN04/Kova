@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { LuArrowLeft, LuCalendarDays, LuClock, LuGlobe, LuLoaderCircle, LuMail, LuMapPin, LuMessageSquare, LuMinus, LuPackage, LuPlus, LuShoppingBag, LuX } from 'react-icons/lu'
+import { LuArrowLeft, LuCalendarDays, LuStar, LuTag, LuClock, LuGlobe, LuLoaderCircle, LuMail, LuMapPin, LuMessageSquare, LuMinus, LuPackage, LuPlus, LuShoppingBag, LuX } from 'react-icons/lu'
 import useThemeClass from '../hooks/useThemeClass'
 import usePageTitle from '../hooks/usePageTitle'
 import { useAuth } from '../context/AuthProvider'
@@ -138,12 +138,26 @@ const PublicPage = () => {
     if (!qty) delete next[p._id]
     return next
   })
+  // Discount code: checked by the server (again whenever the cart changes)
+  const [codeInput, setCodeInput] = useState('')
+  const [coupon, setCoupon] = useState(null) // { code, discount, label }
+  const [couponError, setCouponError] = useState('')
+  const checkCode = async (code, subtotal) => {
+    try {
+      const res = await axios.post(`/api/business/public/${username}/coupon`, { code, subtotal }, api)
+      setCoupon(res.data.code ? res.data : null); setCouponError('')
+    } catch (err) { setCoupon(null); setCouponError(errorOf(err)) }
+  }
+  useEffect(() => { if (coupon?.code && total > 0) checkCode(coupon.code, total) }, [total]) // eslint-disable-line react-hooks/exhaustive-deps
+  const discount = coupon ? Math.min(total, coupon.discount) : 0
+  const payable = Math.round((total - discount) * 100) / 100
+
   const order = async () => {
     if (needLogin()) return
     setBusy(true); setError('')
     try {
-      await axios.post('/api/business/orders', { business: data.business._id, items: items.map((p) => ({ product: p._id, qty: cart[p._id] })), note }, api)
-      setCart({}); setNote(''); setCartOpen(false)
+      await axios.post('/api/business/orders', { business: data.business._id, items: items.map((p) => ({ product: p._id, qty: cart[p._id] })), note, coupon: coupon?.code || '' }, api)
+      setCart({}); setNote(''); setCartOpen(false); setCoupon(null); setCodeInput('')
       setDone('order')
     } catch (err) { setError(errorOf(err)) } finally { setBusy(false) }
   }
@@ -195,6 +209,7 @@ const PublicPage = () => {
               <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight sm:text-3xl">{owner.fullName}<BusinessBadge business={b} className="size-5" /></h1>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px]">
                 {b.category && <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">{b.category}</span>}
+                {data.rating && <a href="#reviews" className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"><LuStar className="size-3.5 fill-current" />{data.rating.average.toFixed(1)} <span className="font-normal opacity-75">({data.rating.count})</span></a>}
                 {state && <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium ${state.open ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}><span className={`size-1.5 rounded-full ${state.open ? 'bg-emerald-500' : 'bg-slate-400'}`} />{state.label}</span>}
                 <span className="text-slate-400">@{owner.username}</span>
               </div>
@@ -296,6 +311,25 @@ const PublicPage = () => {
                 </div>
               </section>
             )}
+
+            {/* Reviews */}
+            {data.rating && (
+              <section id="reviews">
+                <h2 className="text-xl font-semibold tracking-tight">What customers say</h2>
+                <p className="mt-0.5 flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400"><LuStar className="size-4 fill-amber-400 text-amber-400" />{data.rating.average.toFixed(1)} out of 5 · {data.rating.count} rating{data.rating.count === 1 ? '' : 's'}</p>
+                {data.reviews.length > 0 && (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {data.reviews.map((rv, i) => (
+                      <figure key={i} className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                        <div className="flex gap-0.5">{[1, 2, 3, 4, 5].map((n) => <LuStar key={n} className={`size-4 ${n <= rv.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300 dark:text-slate-600'}`} />)}</div>
+                        <blockquote className="mt-2 text-sm text-slate-700 dark:text-slate-300">“{rv.text}”</blockquote>
+                        <figcaption className="mt-2 text-xs text-slate-500 dark:text-slate-400">{rv.name} · {new Date(rv.at).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}</figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
           </div>
 
           {/* About */}
@@ -337,7 +371,7 @@ const PublicPage = () => {
           <button onClick={() => setCartOpen(true)} className="mx-auto flex w-full max-w-md items-center gap-3 rounded-2xl bg-slate-900 px-5 py-3.5 text-white shadow-2xl shadow-slate-900/30 transition hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500">
             <span className="flex size-8 items-center justify-center rounded-full bg-white/15 text-sm font-semibold">{count}</span>
             <span className="flex-1 text-left text-sm font-medium">View order</span>
-            <span className="font-semibold tabular-nums">{money(total)}</span>
+            <span className="font-semibold tabular-nums">{money(payable)}</span>
             <LuShoppingBag className="size-4" />
           </button>
         </div>
@@ -346,7 +380,7 @@ const PublicPage = () => {
       {/* Cart */}
       <Sheet open={cartOpen} onClose={() => setCartOpen(false)} title="Your order" footer={
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-semibold">Total {money(total)}</span>
+          <span className="text-sm font-semibold">Total {money(payable)}{discount > 0 && <span className="ml-1.5 text-xs font-normal text-slate-400 line-through">{money(total)}</span>}</span>
           <button onClick={order} disabled={busy || !count} className={btn.primary}>{busy ? 'Sending…' : 'Send order'}</button>
         </div>
       }>
@@ -360,6 +394,23 @@ const PublicPage = () => {
             </li>
           ))}
         </ul>
+        {data.hasCoupons && (
+          <div className="mt-3">
+            {coupon ? (
+              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+                <LuTag className="size-4 shrink-0" />
+                <span className="flex-1"><span className="font-semibold">{coupon.code}</span> · {coupon.label} · you save {money(discount)}</span>
+                <button onClick={() => { setCoupon(null); setCodeInput('') }} className="text-xs font-medium underline">Remove</button>
+              </div>
+            ) : (
+              <form onSubmit={(e) => { e.preventDefault(); if (codeInput.trim()) checkCode(codeInput.trim(), total) }} className="flex gap-2">
+                <input value={codeInput} onChange={(e) => { setCodeInput(e.target.value.toUpperCase()); setCouponError('') }} placeholder="Discount code" maxLength={20} className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm uppercase outline-none placeholder:normal-case focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900" />
+                <button disabled={!codeInput.trim()} className={btn.secondary}>Apply</button>
+              </form>
+            )}
+            {couponError && <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{couponError}</p>}
+          </div>
+        )}
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={500} placeholder="Note for the business (e.g. less sugar, pickup at 5 PM)" className={`${textareaCls} mt-3`} />
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Your order goes to the business as a message. They'll confirm it and send a payment request in the chat.</p>
         {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}

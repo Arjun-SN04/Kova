@@ -16,6 +16,8 @@ const messageSchema = new mongoose.Schema({
   // Direct messages have a receiver; group messages have a groupId instead
   receiverId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, required: function () { return !this.groupId } },
   groupId: { type: mongoose.Schema.Types.ObjectId, ref: "Group", default: null, index: true },
+  // "Delete for me": people who removed this message from their own view
+  hiddenFor: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], default: [] },
   // Text is optional when the message has an attachment
   message: { type: String, default: "" },
   edited: { type: Boolean, default: false },
@@ -32,6 +34,8 @@ const messageSchema = new mongoose.Schema({
   call: { type: callInfoSchema, default: null },
   // Nexa's answers inside a one-to-one chat: the two people that chat belongs to
   botChat: { type: [mongoose.Schema.Types.ObjectId], default: undefined },
+  // On Nexa's answers: the photos / documents it looked at [{ messageId, kind, name, url }]
+  nexaRefs: { type: [mongoose.Schema.Types.Mixed], default: undefined },
   // Text of a voice note, filled in when someone taps Transcribe
   transcript: { type: String, default: null },
   // A reminder's link back to the message it's about
@@ -41,7 +45,7 @@ const messageSchema = new mongoose.Schema({
   // Disappearing messages: deleted (with its file) at this time, unless someone keeps it
   expiresAt: { type: Date, default: null, index: true },
   kept: { type: Boolean, default: false },
-  // Pinned at the top of the chat (up to 3 per chat)
+  // Pinned at the top of the chat (up to 10 per chat)
   pinned: { type: { by: mongoose.Schema.Types.ObjectId, at: Date, _id: false }, default: null },
   // A poll: question + options; each option lists who voted for it
   poll: {
@@ -85,5 +89,8 @@ messageSchema.pre("save", async function () {
 })
 
 messageSchema.index({ "card.orderId": 1 }, { sparse: true })
+
+// Who deleted a message "for me" is private
+messageSchema.set("toJSON", { transform: (doc, ret) => { delete ret.hiddenFor; return ret } })
 
 export const Message = mongoose.model("Message", messageSchema)

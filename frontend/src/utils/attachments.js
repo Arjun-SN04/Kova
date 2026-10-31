@@ -99,3 +99,37 @@ export const compressAvatar = async (file) => {
   if (!blob || blob.type !== 'image/webp') blob = await toBlob(canvas, 'image/jpeg', 0.85)
   return new File([blob], `avatar.${blob.type === 'image/webp' ? 'webp' : 'jpg'}`, { type: blob.type })
 }
+
+// Save a file to the device. Cloudinary is another site, so <a download> would just open it:
+// fetch it as a blob first, then save. Falls back to opening it in a new tab.
+const MORE_EXT = { 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'application/pdf': 'pdf', 'text/plain': 'txt' }
+const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' }
+// saveAs: let the person pick the folder and name (Chrome/Edge); other browsers download normally
+export const canSaveAs = () => typeof window !== 'undefined' && 'showSaveFilePicker' in window
+export const downloadFile = async (url, name = 'kova-image', { saveAs = false } = {}) => {
+  try {
+    const res = await fetch(url, { credentials: url.startsWith('/') ? 'include' : 'omit' })
+    if (!res.ok) throw new Error()
+    const blob = await res.blob()
+    const ext = EXT[blob.type] || MORE_EXT[blob.type]
+    const file = ext && !/\.\w{2,5}$/.test(name) ? `${name}.${ext}` : name
+    if (saveAs && canSaveAs()) {
+      try {
+        const handle = await window.showSaveFilePicker({ suggestedName: file })
+        const w = await handle.createWritable()
+        await w.write(blob); await w.close()
+        return true
+      } catch (e) {
+        if (e?.name === 'AbortError') return false // closed the picker
+      }
+    }
+    const href = URL.createObjectURL(blob)
+    const a = Object.assign(document.createElement('a'), { href, download: file })
+    document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(href), 2000)
+    return true
+  } catch {
+    window.open(url, '_blank', 'noopener')
+    return false
+  }
+}

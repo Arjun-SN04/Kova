@@ -9,6 +9,7 @@ import useBusiness from '../store'
 import { CATEGORIES, DAY_FULL, categoryCover, DEFAULT_HOURS, LABEL_COLORS, api, bizUrl, errorOf, shopUrl, timeZones } from '../utils'
 import { Field, PageHeader, Panel, Toggle, btn, inputCls, textareaCls } from './ui'
 import Select from '../../components/ui/Select'
+import { SwitchToPersonal } from '../AccountExtras'
 
 const ROLE_OPTIONS = [{ value: 'agent', label: 'Agent' }, { value: 'admin', label: 'Admin' }]
 
@@ -19,6 +20,7 @@ const SECTIONS = [
   ['labels', 'Labels', ['owner', 'admin']],
   ['nexa', 'Nexa & alerts', ['owner', 'admin']],
   ['services', 'Services', ['owner', 'admin']],
+  ['discounts', 'Discount codes', ['owner', 'admin']],
   ['team', 'Team', ['owner', 'admin']],
   ['share', 'Share & verification', ['owner', 'admin']],
 ]
@@ -166,6 +168,9 @@ const ProfileSection = ({ ws }) => {
         </div>
       </Panel>
       <SaveBar state={state} onSave={save} />
+      <Panel title="Personal account" description="Turn Business off and use Kova as a normal account. Your catalog, orders and settings are kept for when you turn it back on.">
+        <SwitchToPersonal onDone={() => { window.location.href = '/' }} />
+      </Panel>
     </div>
   )
 }
@@ -298,6 +303,39 @@ const ServicesSection = ({ ws }) => {
         )} />
       </Panel>
       <SaveBar state={state} onSave={() => save({ services })} />
+    </div>
+  )
+}
+
+// ── Discount codes ─────────────────────────────────────────────
+const KIND_OPTIONS = [{ value: 'percent', label: '% off' }, { value: 'flat', label: '₹ off' }]
+const DiscountsSection = ({ ws }) => {
+  const toDay = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '')
+  const [coupons, setCoupons] = useState((ws.settings.coupons || []).map((c) => ({ ...c, expiresAt: toDay(c.expiresAt) })))
+  const [state, save] = useSave(ws)
+  return (
+    <div className="space-y-6">
+      <Panel title="Discount codes" description="Customers type a code in the cart on your business page. The discount shows on the order, and you can see how often each code was used.">
+        <ListEditor items={coupons} setItems={setCoupons} addLabel="Add code" empty="No discount codes yet." blank={() => ({ code: '', kind: 'percent', value: 10, minTotal: 0, maxUses: 0, expiresAt: '', active: true })} render={(c, set) => (
+          <div className="space-y-2">
+            <div className="grid gap-2 sm:grid-cols-[1fr_7rem_7rem]">
+              <input value={c.code} onChange={(e) => set({ code: e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '') })} maxLength={20} placeholder="WELCOME10" className={`${inputCls} font-mono uppercase`} aria-label="Code" />
+              <input type="number" min="1" value={c.value} onChange={(e) => set({ value: e.target.value })} className={inputCls} aria-label="Amount" />
+              <Select value={c.kind} onChange={(v) => set({ kind: v })} options={KIND_OPTIONS} aria-label="Type" />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <label className="block text-xs text-slate-500 dark:text-slate-400">Minimum order (₹)<input type="number" min="0" value={c.minTotal} onChange={(e) => set({ minTotal: e.target.value })} className={`${inputCls} mt-1`} /></label>
+              <label className="block text-xs text-slate-500 dark:text-slate-400">Use limit (0 = no limit)<input type="number" min="0" value={c.maxUses} onChange={(e) => set({ maxUses: e.target.value })} className={`${inputCls} mt-1`} /></label>
+              <label className="block text-xs text-slate-500 dark:text-slate-400">Expires (optional)<input type="date" value={c.expiresAt || ''} onChange={(e) => set({ expiresAt: e.target.value })} className={`${inputCls} mt-1`} /></label>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <Toggle checked={c.active !== false} onChange={(v) => set({ active: v })} label="Active" />
+              <span className="text-xs text-slate-500 dark:text-slate-400">Used {c.uses || 0}{Number(c.maxUses) ? ` of ${c.maxUses}` : ''} time{(c.uses || 0) === 1 ? '' : 's'}</span>
+            </div>
+          </div>
+        )} />
+      </Panel>
+      <SaveBar state={state} onSave={() => save({ coupons: coupons.map((c) => ({ ...c, expiresAt: c.expiresAt ? new Date(`${c.expiresAt}T23:59:59`).toISOString() : null })) })} />
     </div>
   )
 }
@@ -471,7 +509,7 @@ const Settings = ({ ws }) => {
     const wanted = new URLSearchParams(window.location.search).get('section')
     return sections.some(([id]) => id === wanted) ? wanted : sections[0][0]
   })
-  const Body = { profile: ProfileSection, messages: MessagesSection, replies: RepliesSection, labels: LabelsSection, nexa: NexaSection, services: ServicesSection, team: TeamSection, share: ShareSection }[section]
+  const Body = { profile: ProfileSection, messages: MessagesSection, replies: RepliesSection, labels: LabelsSection, nexa: NexaSection, services: ServicesSection, discounts: DiscountsSection, team: TeamSection, share: ShareSection }[section]
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" description="How your business looks to customers and how Kova helps you answer them." />

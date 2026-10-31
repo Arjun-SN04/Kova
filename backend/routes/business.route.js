@@ -9,7 +9,7 @@ import {
 } from "../controller/business.controller.js"
 import {
   cancelMyBooking, claimPayment, connectToBusiness, createBooking, createProduct, deleteProduct, getPublicBusiness, getSlots,
-  listBookings, listOrders, listProducts, markPayment, myBookings, myOrders, placeOrder, sendCard, updateBooking, updateOrder, updateProduct,
+  checkCoupon, trackOrder, reviewOrder, listBookings, listOrders, listProducts, markPayment, myBookings, myOrders, placeOrder, sendCard, updateBooking, updateOrder, updateProduct,
 } from "../controller/commerce.controller.js"
 
 const router = express.Router()
@@ -17,6 +17,7 @@ const router = express.Router()
 // Public business page (works signed out)
 router.get("/public/:username", optionalAuth, getPublicBusiness)
 router.get("/public/:username/slots", optionalAuth, getSlots)
+router.post("/public/:username/coupon", optionalAuth, checkCoupon)
 
 router.use(secureRoute)
 
@@ -30,6 +31,8 @@ router.post("/verification", requestVerification)
 router.post("/connect/:bizId", connectToBusiness)
 router.post("/orders", placeOrder)
 router.get("/orders/mine", myOrders)
+router.get("/orders/:id/track", trackOrder)
+router.post("/orders/:id/review", reviewOrder)
 router.post("/bookings", createBooking)
 router.get("/bookings/mine", myBookings)
 router.put("/bookings/:id/cancel", cancelMyBooking)

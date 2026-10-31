@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
+import axios from 'axios'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuArrowLeft, LuEllipsisVertical, LuInfo, LuPhone, LuPin, LuSearch, LuTimer, LuSparkles, LuTrash2, LuVideo } from 'react-icons/lu'
+import { LuArrowLeft, LuEllipsisVertical, LuEye, LuEyeOff, LuImage, LuInfo, LuLock, LuLockOpen, LuPhone, LuPin, LuSearch, LuTimer, LuSparkles, LuTrash2, LuVideo } from 'react-icons/lu'
 import { timerLabel, timerShort, togglePinChat } from '../../utils/chatExtras'
 import { useGroupCall } from '../../context/GroupCallProvider'
 import useConversation from '../../Zustand/UserConversation'
@@ -15,7 +16,7 @@ const iconBtn =
   'flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'
 
 // The ⋯ menu: search, pin, info and clear (calls stay in the header)
-const ChatMenu = ({ isGroup, pinned, searchOpen, infoOpen, onSearch, onPin, onInfo, onClear }) => {
+const ChatMenu = ({ isGroup, pinned, locked, hidden, searchOpen, infoOpen, onSearch, onPin, onLock, onHide, onWallpaper, onInfo, onClear }) => {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   useEffect(() => {
@@ -35,6 +36,9 @@ const ChatMenu = ({ isGroup, pinned, searchOpen, infoOpen, onSearch, onPin, onIn
   const items = [
     { label: searchOpen ? 'Close search' : 'Search in chat', icon: LuSearch, run: onSearch },
     { label: pinned ? 'Unpin chat' : 'Pin chat', icon: LuPin, run: onPin },
+    ...(onLock ? [{ label: locked ? 'Unlock chat' : 'Lock chat', icon: locked ? LuLockOpen : LuLock, run: onLock }] : []),
+    ...(onHide ? [{ label: hidden ? 'Unhide chat' : 'Hide chat', icon: hidden ? LuEye : LuEyeOff, run: onHide }] : []),
+    { label: 'Wallpaper', icon: LuImage, run: onWallpaper },
     { label: infoOpen ? 'Hide info' : isGroup ? 'Group info' : 'Contact info', icon: LuInfo, run: onInfo },
     ...(!isGroup ? [{ label: 'Clear chat', icon: LuTrash2, run: onClear, danger: true }] : []),
   ]
@@ -81,8 +85,35 @@ const ChatMenu = ({ isGroup, pinned, searchOpen, infoOpen, onSearch, onPin, onIn
 }
 
 // Header of the open conversation.
+// "Active 5 min ago" for a contact who's offline (null when hidden or unknown)
+const useLastSeen = (userId) => {
+  const [state, setState] = useState({ id: null, at: null })
+  useEffect(() => {
+    if (!userId) return
+    let alive = true
+    axios.get(`/api/user/presence/${userId}`, { withCredentials: true })
+      .then((r) => { if (alive) setState({ id: String(userId), at: r.data.lastSeen }) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [userId])
+  return userId && state.id === String(userId) ? state.at : null
+}
+
+const lastSeenLabel = (date) => {
+  const d = new Date(date)
+  const mins = Math.round((Date.now() - d.getTime()) / 60000)
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  const today = new Date()
+  const yesterday = new Date(Date.now() - 86_400_000)
+  if (d.toDateString() === today.toDateString()) return `today at ${time}`
+  if (d.toDateString() === yesterday.toDateString()) return `yesterday at ${time}`
+  return `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} at ${time}`
+}
+
 const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpen }) => {
-  const { selectedConversation, typingUsers, catchUp, setCatchUp, nexaThinking, pinnedChats, chatTimers } = useConversation()
+  const { selectedConversation, messages, pinsOpenFor, setPinsOpenFor, typingUsers, catchUp, setCatchUp, nexaThinking, pinnedChats, chatTimers, lockedChats, setLockRequest, setWallpaperPicker, hiddenChats, setHideRequest } = useConversation()
   const { onlineUsers } = useSocket()
   const { call, startCall } = useCall()
   const groupCall = useGroupCall()
@@ -90,9 +121,16 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
   // Is a group call going on here? (shows the Join button)
   useEffect(() => { if (groupId) groupCall?.queryGroup(groupId) }, [groupId]) // eslint-disable-line react-hooks/exhaustive-deps
   const [AuthUser] = useAuth()
+  const sc = selectedConversation
+  const peerOffline = sc && !sc.isGroup && !sc.isSelf && !onlineUsers.map(String).includes(String(sc._id))
+  const lastSeen = useLastSeen(peerOffline ? sc._id : null)
   if (!selectedConversation) return null
 
   const isSelf = !!selectedConversation.isSelf
+  // Header pin button: opens the pinned messages list for this chat
+  const pinCount = messages.filter((m) => m.pinned).length
+  const pinsOpen = pinsOpenFor === String(selectedConversation._id)
+  const setPinsOpen = (v) => setPinsOpenFor(v ? String(selectedConversation._id) : null)
   const isGroup = !!selectedConversation.isGroup
   const typing = nexaThinking[String(selectedConversation._id)] ? 'Nexa' : typingUsers[String(selectedConversation._id)]
 
@@ -132,7 +170,7 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
           {isGroup ? (
             typing
               ? <p className="text-xs font-medium text-indigo-600 dark:text-indigo-400">{typing === 'Nexa' ? 'Nexa is thinking…' : typeof typing === 'string' ? `${typing.split(' ')[0]} is typing…` : 'typing…'}</p>
-              : <p className="truncate text-xs text-slate-500 dark:text-slate-400">{selectedConversation.announcement ? 'Only admins can post' : memberLine()}</p>
+              : <p className="truncate text-xs text-slate-500 dark:text-slate-400">{selectedConversation.announcement || selectedConversation.adminsOnly ? `Only admins can send messages · ${selectedConversation.members?.length || 0} members` : memberLine()}</p>
           ) : isSelf ? (
             <p className="text-xs text-slate-500 dark:text-slate-400">Message yourself</p>
           ) : typing ? (
@@ -141,7 +179,7 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
             <p className="truncate text-xs"><OpenStatus business={selectedConversation.business} /></p>
           ) : (
             <p className={`text-xs ${isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
-              {isOnline ? 'Online' : 'Offline'}
+              {isOnline ? 'Online' : lastSeen ? `Active ${lastSeenLabel(lastSeen)}` : 'Offline'}
             </p>
           )}
         </div>
@@ -155,6 +193,18 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
             title="Summarize what you missed"
           >
             <LuSparkles className="size-3.5" /> Catch me up · {catchUp.count} new
+          </button>
+        )}
+        {pinCount > 0 && (
+          <button
+            onClick={() => setPinsOpen(!pinsOpen)}
+            className={`${iconBtn} relative ${pinsOpen ? 'bg-indigo-50 text-indigo-600! dark:bg-indigo-500/15 dark:text-indigo-300!' : ''}`}
+            title={pinsOpen ? 'Hide pinned messages' : 'Pinned messages'}
+            aria-label={`Pinned messages (${pinCount})`}
+            aria-expanded={pinsOpen}
+          >
+            <LuPin className="size-4.5 -rotate-45" />
+            <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-semibold leading-none text-white">{pinCount}</span>
           </button>
         )}
         {isGroup && !selectedConversation.announcement && (groupCall?.active[groupId] && groupCall.gcall?.groupId !== groupId ? (
@@ -208,6 +258,11 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
           onPin={async () => { const r = await togglePinChat(selectedConversation._id); if (!r.ok) window.alert(r.error) }}
           onInfo={onToggleInfo}
           onClear={onClear}
+          locked={lockedChats.includes(String(selectedConversation._id))}
+          hidden={hiddenChats.includes(String(selectedConversation._id))}
+          onHide={selectedConversation.isAi ? null : () => setHideRequest({ ids: [String(selectedConversation._id)], hidden: !hiddenChats.includes(String(selectedConversation._id)) })}
+          onWallpaper={() => setWallpaperPicker({ chatId: String(selectedConversation._id), name: selectedConversation.fullName })}
+          onLock={selectedConversation.isAi ? null : () => setLockRequest({ action: lockedChats.includes(String(selectedConversation._id)) ? 'unlock' : 'lock', ids: [String(selectedConversation._id)] })}
         />
       </div>
     </header>

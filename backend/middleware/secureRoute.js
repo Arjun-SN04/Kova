@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken"
 import User from "../models/user.model.js"
 import Createtoken from "../jwt/token.js"
+import { runAsViewer } from "../utils/viewer.js"
 
 // Renew the login cookie at most once a day, so active users stay logged in.
 const RENEW_AFTER_SECONDS = 24 * 60 * 60
@@ -27,7 +28,7 @@ const secureRoute = async (req, res, next) => {
     console.log("secureRoute:", error.message)
     return res.status(401).json({ error: "Invalid or expired token" })
   }
-  next()
+  runAsViewer(req.user, next)
 }
 
 export default secureRoute

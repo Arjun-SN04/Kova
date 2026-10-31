@@ -69,3 +69,47 @@ export const setKept = async (message, kept) => {
     store().setMessages((prev) => prev.map((m) => (m._id === res.data._id ? res.data : m)))
   } catch { /* unchanged */ }
 }
+
+// ── Locked chats ──
+// Lock (code only needed the first time, to set it) or unlock (code required)
+export const setChatLocked = async (chatId, locked, code) => {
+  try {
+    const res = await axios.put(`/api/message/lock-chat/${chatId}`, { locked, code }, api)
+    store().setLockedPrefs(res.data)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err.response?.data?.error || "Couldn't change that chat" }
+  }
+}
+export const verifyLockCode = async (code) => {
+  try { await axios.post('/api/message/locked/verify', { code }, api); return { ok: true } } catch (err) { return { ok: false, error: err.response?.data?.error || 'Try again' } }
+}
+export const resetLockCode = async (password, code) => {
+  try { const res = await axios.post('/api/message/locked/reset', { password, code }, api); store().setLockedPrefs(res.data); return { ok: true } } catch (err) { return { ok: false, error: err.response?.data?.error || 'Try again' } }
+}
+
+// ── Hidden chats ──
+// Same as the server: SHA-256 of "userId:word" (trimmed, lower-case), as hex
+export const hashHiddenWord = async (userId, word) => {
+  const data = new TextEncoder().encode(`${userId}:${String(word).trim().toLowerCase()}`)
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+export const setChatHidden = async (chatId, hidden) => {
+  try {
+    const res = await axios.put(`/api/message/hide-chat/${chatId}`, { hidden }, api)
+    store().setHiddenPrefs(res.data)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err.response?.data?.error || "Couldn't change that chat" }
+  }
+}
+export const saveHiddenWord = async (word) => {
+  try {
+    const res = await axios.put('/api/message/hidden-word', { word }, api)
+    store().setHiddenPrefs(res.data)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err.response?.data?.error || 'Could not save' }
+  }
+}

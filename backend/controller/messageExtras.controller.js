@@ -1,4 +1,5 @@
 import crypto from "node:crypto"
+import bcrypt from "bcryptjs"
 import { Message } from "../models/message.model.js"
 import { Conversation } from "../models/conversation.model.js"
 import { Group } from "../models/group.model.js"
@@ -11,7 +12,7 @@ import { sendPush } from "../utils/push.js"
 
 // Pinned messages, starred messages, polls and pinned chats
 
-const MAX_PINNED = 3
+const MAX_PINNED = 10
 const same = (a, b) => String(a?._id ?? a) === String(b?._id ?? b)
 const fail = (res, status, error) => res.status(status).json({ error })
 
@@ -34,8 +35,8 @@ export const pinMessage = async (req, res) => {
     if (message.call || message.botChat?.length) return fail(res, 400, "This message can't be pinned")
     const pin = req.body.pinned !== false
     if (message.groupId && pin) {
-      const group = await Group.findById(message.groupId).select("announcement admins")
-      if (group?.announcement && !group.admins.some((a) => same(a, req.user._id))) return fail(res, 403, "Only admins can pin here")
+      const group = await Group.findById(message.groupId).select("announcement adminsOnly admins")
+      if ((group?.announcement || group?.adminsOnly) && !group.admins.some((a) => same(a, req.user._id))) return fail(res, 403, "Only admins can pin here")
     }
     const changed = []
     if (pin) {
@@ -117,7 +118,7 @@ export const createPollMessage = async (user, { chatId, isGroup, question, optio
   if (isGroup) {
     const group = await Group.findById(chatId)
     if (!group || !group.members.some((m) => same(m, user._id))) throw Object.assign(new Error("You're not in that group"), { status: 403 })
-    if (group.announcement && !group.admins.some((a) => same(a, user._id))) throw Object.assign(new Error("Only admins can post here"), { status: 403 })
+    if ((group.announcement || group.adminsOnly) && !group.admins.some((a) => same(a, user._id))) throw Object.assign(new Error("Only admins can post here"), { status: 403 })
     const msg = await Message.create({ senderId: user._id, groupId: group._id, message: `📊 ${q}`, poll })
     group.reads.set(String(user._id), new Date())
     group.updatedAt = new Date()
@@ -197,8 +198,8 @@ export const closePoll = async (req, res) => {
 const MAX_PINNED_CHATS = 5
 export const getPrefs = async (req, res) => {
   try {
-    const me = await User.findById(req.user._id).select("pinnedChats starred")
-    res.json({ pinnedChats: me.pinnedChats, starred: me.starred.map(String) })
+    const me = await User.findById(req.user._id).select("pinnedChats starred lockedChats lockCode wallpapers hiddenChats hiddenWordHash")
+    res.json({ pinnedChats: me.pinnedChats, starred: me.starred.map(String), lockedChats: me.lockedChats, hasLockCode: !!me.lockCode, hiddenChats: me.hiddenChats, hiddenWordHash: me.hiddenWordHash, wallpapers: me.wallpapers || { global: null, chats: {} } })
   } catch (error) {
     console.log("getPrefs error:", error)
     fail(res, 500, "Internal server error")
@@ -296,6 +297,140 @@ export const keepMessage = async (req, res) => {
     res.json(message)
   } catch (error) {
     console.log("keepMessage error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// ── Locked chats (secret code) ──
+const CODE_RE = /^\d{4,10}$/
+const attempts = new Map() // userId -> { count, until }
+const checkCode = async (me, code) => {
+  const key = String(me._id)
+  const a = attempts.get(key)
+  if (a && a.until > Date.now()) return { ok: false, error: "Too many tries. Wait a few minutes and try again." }
+  const ok = !!me.lockCode && CODE_RE.test(String(code || "")) && await bcrypt.compare(String(code), me.lockCode)
+  if (ok) { attempts.delete(key); return { ok: true } }
+  const count = (a?.count || 0) + 1
+  attempts.set(key, count >= 5 ? { count: 0, until: Date.now() + 5 * 60_000 } : { count, until: 0 })
+  return { ok: false, error: "That code isn't right" }
+}
+const lockedPrefs = (me) => ({ lockedChats: me.lockedChats, hasLockCode: !!me.lockCode })
+
+// Lock or unlock a chat. The first lock sets the secret code; unlocking needs it.
+export const lockChat = async (req, res) => {
+  try {
+    const chatId = String(req.params.chatId)
+    const me = await User.findById(req.user._id).select("lockedChats lockCode contacts")
+    const lock = req.body.locked !== false
+    if (lock) {
+      const mine = same(chatId, me._id) || me.contacts.some((c) => same(c, chatId)) || await Group.exists({ _id: chatId, members: me._id })
+      if (!mine) return fail(res, 404, "Chat not found")
+      if (!me.lockCode) {
+        if (!CODE_RE.test(String(req.body.code || ""))) return fail(res, 400, "Choose a secret code of 4 to 10 digits")
+        me.lockCode = await bcrypt.hash(String(req.body.code), 10)
+      }
+      if (!me.lockedChats.includes(chatId)) me.lockedChats.push(chatId)
+    } else {
+      const check = await checkCode(me, req.body.code)
+      if (!check.ok) return fail(res, 400, check.error)
+      me.lockedChats = me.lockedChats.filter((id) => id !== chatId)
+    }
+    await me.save()
+    emitToUsers([me._id], "prefsUpdated", lockedPrefs(me))
+    res.json(lockedPrefs(me))
+  } catch (error) {
+    console.log("lockChat error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// Open the locked chats folder
+export const verifyLockCode = async (req, res) => {
+  try {
+    const me = await User.findById(req.user._id).select("lockCode")
+    const check = await checkCode(me, req.body.code)
+    if (!check.ok) return fail(res, 400, check.error)
+    res.json({ ok: true })
+  } catch (error) {
+    console.log("verifyLockCode error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+export const changeLockCode = async (req, res) => {
+  try {
+    const me = await User.findById(req.user._id).select("lockCode lockedChats")
+    const check = await checkCode(me, req.body.current)
+    if (!check.ok) return fail(res, 400, check.error)
+    if (!CODE_RE.test(String(req.body.code || ""))) return fail(res, 400, "Choose a secret code of 4 to 10 digits")
+    me.lockCode = await bcrypt.hash(String(req.body.code), 10)
+    await me.save()
+    res.json(lockedPrefs(me))
+  } catch (error) {
+    console.log("changeLockCode error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// Forgot the code: confirm with the account password and choose a new code
+export const resetLockedChats = async (req, res) => {
+  try {
+    const me = await User.findById(req.user._id).select("lockedChats lockCode password")
+    if (!req.body.password || !(await bcrypt.compare(String(req.body.password), me.password))) return fail(res, 400, "Your password isn't right")
+    if (!CODE_RE.test(String(req.body.code || ""))) return fail(res, 400, "Choose a secret code of 4 to 10 digits")
+    me.lockCode = await bcrypt.hash(String(req.body.code), 10)
+    attempts.delete(String(me._id))
+    await me.save()
+    res.json(lockedPrefs(me))
+  } catch (error) {
+    console.log("resetLockedChats error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// ── Hidden chats (shown only when the secret word is typed in search) ──
+export const hiddenWordHash = (userId, word) => crypto.createHash("sha256").update(`${userId}:${String(word).trim().toLowerCase()}`).digest("hex")
+const hiddenPrefs = (me) => ({ hiddenChats: me.hiddenChats, hiddenWordHash: me.hiddenWordHash })
+
+export const hideChat = async (req, res) => {
+  try {
+    const chatId = String(req.params.chatId)
+    const me = await User.findById(req.user._id).select("hiddenChats hiddenWordHash contacts")
+    const hide = req.body.hidden !== false
+    if (hide) {
+      if (!me.hiddenWordHash) return fail(res, 400, "Set a secret word first")
+      const mine = same(chatId, me._id) || me.contacts.some((c) => same(c, chatId)) || await Group.exists({ _id: chatId, members: me._id })
+      if (!mine) return fail(res, 404, "Chat not found")
+      if (!me.hiddenChats.includes(chatId)) me.hiddenChats.push(chatId)
+    } else {
+      me.hiddenChats = me.hiddenChats.filter((id) => id !== chatId)
+    }
+    await me.save()
+    emitToUsers([me._id], "prefsUpdated", hiddenPrefs(me))
+    res.json(hiddenPrefs(me))
+  } catch (error) {
+    console.log("hideChat error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// { word } sets or changes the secret word (3 to 30 characters); { word: null } removes it and unhides everything
+export const setHiddenWord = async (req, res) => {
+  try {
+    const me = await User.findById(req.user._id).select("hiddenChats hiddenWordHash")
+    if (req.body.word === null) {
+      me.hiddenWordHash = null
+      me.hiddenChats = []
+    } else {
+      const word = String(req.body.word || "").trim()
+      if (word.length < 3 || word.length > 30) return fail(res, 400, "Use a word of 3 to 30 characters")
+      me.hiddenWordHash = hiddenWordHash(me._id, word)
+    }
+    await me.save()
+    emitToUsers([me._id], "prefsUpdated", hiddenPrefs(me))
+    res.json(hiddenPrefs(me))
+  } catch (error) {
+    console.log("setHiddenWord error:", error)
     fail(res, 500, "Internal server error")
   }
 }

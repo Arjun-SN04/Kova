@@ -1,8 +1,31 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuDownload, LuExternalLink, LuFileText, LuPause, LuPlay, LuX } from 'react-icons/lu'
-import { formatBytes } from '../../utils/attachments'
+import { LuCheck, LuDownload, LuExternalLink, LuFileText, LuLoaderCircle, LuPause, LuPlay, LuX } from 'react-icons/lu'
+import { downloadFile, formatBytes } from '../../utils/attachments'
+import useAudioPlayer from '../../Zustand/useAudioPlayer'
+import useConversation from '../../Zustand/UserConversation'
+
+const imageName = (a) => (a.name && a.name !== 'image' ? a.name : `kova-photo-${Date.now()}`)
+
+// Download button with a small busy → done state
+const SaveButton = ({ attachment, className, iconClass = 'size-4' }) => {
+  const [state, setState] = useState('idle') // idle | busy | done
+  const save = async (e) => {
+    e.stopPropagation()
+    if (state === 'busy') return
+    setState('busy')
+    await downloadFile(attachment.url, imageName(attachment))
+    setState('done')
+    setTimeout(() => setState('idle'), 1500)
+  }
+  const Icon = state === 'busy' ? LuLoaderCircle : state === 'done' ? LuCheck : LuDownload
+  return (
+    <button type="button" onClick={save} className={className} title="Download" aria-label="Download">
+      <Icon className={`${iconClass} ${state === 'busy' ? 'animate-spin' : ''}`} />
+    </button>
+  )
+}
 
 // Full-screen image viewer
 const Lightbox = ({ attachment, onClose }) => {
@@ -21,6 +44,7 @@ const Lightbox = ({ attachment, onClose }) => {
       onClick={onClose}
     >
       <div className="absolute right-4 top-4 flex gap-2">
+        <SaveButton attachment={attachment} className="flex size-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20" iconClass="size-4.5" />
         <a
           href={attachment.url}
           target="_blank"
@@ -55,55 +79,55 @@ const Lightbox = ({ attachment, onClose }) => {
 
 const formatDuration = (s = 0) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
-// Voice note player. Nothing downloads until you press play (saves bandwidth).
-const AudioPlayer = ({ attachment, itsMe }) => {
-  const audioRef = useRef(null)
-  const [playing, setPlaying] = useState(false)
-  const [current, setCurrent] = useState(0)
-  const [duration, setDuration] = useState(attachment.duration || 0)
+// Voice note player. Plays through the app-wide player (so it keeps going when you switch
+// chats and shows in the bar at the top). Nothing downloads until you press play.
+const AudioPlayer = ({ attachment, itsMe, messageId, label }) => {
+  const { track, playing, current, duration: liveDuration, play, toggle: toggleLive, seek: seekLive } = useAudioPlayer()
+  const id = messageId ? String(messageId) : attachment.url
+  const isThis = track?.id === id
+  const duration = (isThis && liveDuration) || attachment.duration || 0
+  const time = isThis ? current : 0
+  const isPlaying = isThis && playing
 
+  const start = () => {
+    const chat = useConversation.getState().selectedConversation
+    play({
+      id,
+      url: attachment.url,
+      duration: attachment.duration || 0,
+      messageId: messageId ? String(messageId) : null,
+      title: `${label || 'Voice message'}`,
+      subtitle: chat?.isGroup ? chat.name : '', // group name; one-to-one chats don't repeat the name
+      chat,
+    })
+  }
   const toggle = (e) => {
     e.stopPropagation()
-    const a = audioRef.current
-    if (a.paused) {
-      // Pause any other voice note that's playing
-      document.querySelectorAll('audio').forEach((other) => other !== a && other.pause())
-      a.play()
-    } else a.pause()
+    if (isThis) toggleLive()
+    else start()
   }
-
   const seek = (e) => {
     e.stopPropagation()
-    const a = audioRef.current
     if (!duration) return
     const rect = e.currentTarget.getBoundingClientRect()
-    a.currentTime = ((e.clientX - rect.left) / rect.width) * duration
-    if (a.paused) a.play()
+    const t = ((e.clientX - rect.left) / rect.width) * duration
+    if (isThis) seekLive(t)
+    else { start(); setTimeout(() => useAudioPlayer.getState().seek(t), 150) }
   }
 
-  const progress = duration ? Math.min(100, (current / duration) * 100) : 0
+  const progress = duration ? Math.min(100, (time / duration) * 100) : 0
 
   return (
     <div className="flex w-60 max-w-full items-center gap-3 py-0.5">
-      <audio
-        ref={audioRef}
-        src={attachment.url}
-        preload="none"
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => { setPlaying(false); setCurrent(0) }}
-        onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}
-        onLoadedMetadata={(e) => Number.isFinite(e.currentTarget.duration) && setDuration(e.currentTarget.duration)}
-      />
       <button
         type="button"
         onClick={toggle}
-        aria-label={playing ? 'Pause voice message' : 'Play voice message'}
+        aria-label={isPlaying ? 'Pause voice message' : 'Play voice message'}
         className={`flex size-10 shrink-0 items-center justify-center rounded-full transition ${
           itsMe ? 'bg-white text-indigo-600 hover:bg-indigo-50' : 'bg-indigo-600 text-white hover:bg-indigo-500'
         }`}
       >
-        {playing ? <LuPause className="size-4" /> : <LuPlay className="ml-0.5 size-4" />}
+        {isPlaying ? <LuPause className="size-4" /> : <LuPlay className="ml-0.5 size-4" />}
       </button>
       <div className="min-w-0 flex-1">
         <div onClick={seek} className="flex h-6 cursor-pointer items-center" role="slider" aria-label="Seek" aria-valuenow={Math.round(progress)}>
@@ -116,7 +140,7 @@ const AudioPlayer = ({ attachment, itsMe }) => {
           </div>
         </div>
         <p className={`text-[11px] tabular-nums ${itsMe ? 'text-indigo-100' : 'text-slate-500 dark:text-slate-400'}`}>
-          {playing || current ? formatDuration(current) : formatDuration(duration)}
+          {isThis && (isPlaying || time) ? formatDuration(time) : formatDuration(duration)}
         </p>
       </div>
     </div>
@@ -126,14 +150,14 @@ const AudioPlayer = ({ attachment, itsMe }) => {
 // Media / file shown inside a chat bubble.
 // Images use the stored (already compressed) file as-is: no Cloudinary
 // transformations, so viewing costs only bandwidth. Videos load on play only.
-const Attachment = ({ attachment, itsMe }) => {
+const Attachment = ({ attachment, itsMe, messageId = null, label = '' }) => {
   const [open, setOpen] = useState(false)
   const { kind, url, name, size, width, height } = attachment
   const ratio = width && height ? `${width} / ${height}` : undefined
 
   if (kind === 'image') {
     return (
-      <>
+      <div className="group/img relative">
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); setOpen(true) }}
@@ -150,12 +174,17 @@ const Attachment = ({ attachment, itsMe }) => {
             className="max-h-80 w-full max-w-xs object-cover"
           />
         </button>
+        {/* Download: shows on hover (always on touch screens) */}
+        <SaveButton
+          attachment={attachment}
+          className="absolute right-2 top-2 flex size-8 items-center justify-center rounded-full bg-slate-950/55 text-white opacity-0 shadow-sm backdrop-blur-sm transition hover:bg-slate-950/75 focus-visible:opacity-100 group-hover/img:opacity-100 [@media(hover:none)]:opacity-100"
+        />
         <AnimatePresence>{open && <Lightbox attachment={attachment} onClose={() => setOpen(false)} />}</AnimatePresence>
-      </>
+      </div>
     )
   }
 
-  if (kind === 'audio') return <AudioPlayer attachment={attachment} itsMe={itsMe} />
+  if (kind === 'audio') return <AudioPlayer attachment={attachment} itsMe={itsMe} messageId={messageId} label={label} />
 
   if (kind === 'video') {
     return (
@@ -170,9 +199,11 @@ const Attachment = ({ attachment, itsMe }) => {
     )
   }
 
+  // Files open through the server, which hands out a signed link (Cloudinary blocks plain PDF links)
+  const fileHref = messageId && attachment.resourceType === 'raw' ? `/api/message/file/${messageId}` : url
   return (
     <a
-      href={url}
+      href={fileHref}
       target="_blank"
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}

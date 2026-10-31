@@ -20,15 +20,24 @@ const isOnline = (userId) => !!getReceiverSocketId(String(userId))
 
 // Send to every device of these users. onlyOffline: skip people who have Kova open right now
 // (they already see it in the app). Never throws.
-export const sendPush = async (userIds, payload, { onlyOffline = true } = {}) => {
+// chatId: the chat this is about, from the receiver's side. People who locked
+// that chat get a plain "New message" with no name or text.
+export const sendPush = async (userIds, payload, { onlyOffline = true, chatId = null } = {}) => {
   if (!setup()) return
   const targets = [...new Set(userIds.map(String))].filter((id) => !onlyOffline || !isOnline(id))
   if (!targets.length) return
   const subs = await PushSubscription.find({ user: { $in: targets } })
-  const body = JSON.stringify({ icon: "/icon-192.png", badge: "/icon-192.png", url: "/", ...payload })
+  const base = { icon: "/icon-192.png", badge: "/icon-192.png", url: "/" }
+  const body = JSON.stringify({ ...base, ...payload })
+  let locked = new Set()
+  if (chatId) {
+    const { default: User } = await import("../models/user.model.js")
+    locked = new Set((await User.find({ _id: { $in: targets }, $or: [{ lockedChats: String(chatId) }, { hiddenChats: String(chatId) }] }).select("_id")).map((u) => String(u._id)))
+  }
+  const plain = JSON.stringify({ ...base, title: "Kova", body: "New message", tag: "locked" })
   await Promise.all(subs.map(async (s) => {
     try {
-      await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, body, { TTL: 60 * 60, urgency: payload.urgent ? "high" : "normal" })
+      await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, locked.has(String(s.user)) ? plain : body, { TTL: 60 * 60, urgency: payload.urgent ? "high" : "normal" })
     } catch (err) {
       // The browser unsubscribed or the subscription expired: forget it
       if ([404, 410].includes(err.statusCode)) await PushSubscription.deleteOne({ _id: s._id })

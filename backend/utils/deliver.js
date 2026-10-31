@@ -25,7 +25,7 @@ export const deliverText = async ({ senderId, receiverId = null, groupId = null,
   if (groupId) {
     const group = await Group.findById(groupId)
     if (!group || !group.members.some((m) => same(m, senderId))) throw new Error("You're not in that group")
-    if (group.announcement && !group.admins.some((a) => same(a, senderId))) throw new Error("Only admins can post announcements there")
+    if ((group.announcement || group.adminsOnly) && !group.admins.some((a) => same(a, senderId))) throw new Error("Only admins can send messages there")
     const msg = await Message.create({ senderId, groupId, message: body, sentBy, card })
     group.reads.set(String(senderId), new Date())
     group.updatedAt = new Date()

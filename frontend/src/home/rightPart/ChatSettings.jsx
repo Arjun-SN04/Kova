@@ -1,15 +1,16 @@
 import React, { useState } from 'react'
-import { LuPin, LuTimer } from 'react-icons/lu'
+import { LuImage, LuPin, LuTimer } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import { TIMER_OPTIONS, saveChatTimer, togglePinChat } from '../../utils/chatExtras'
 import Select from '../../components/ui/Select'
+import { wallpaperName } from '../../utils/wallpapers'
 
 const row = 'flex w-full items-center gap-3 rounded-xl px-3 py-2.5'
 const iconTile = 'flex size-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300'
 
 // Chat settings in the info panel: disappearing messages + pin to top (pin is here for phones too)
 const ChatSettings = ({ chat, canChangeTimer = true }) => {
-  const { chatTimers, pinnedChats } = useConversation()
+  const { chatTimers, pinnedChats, wallpapers, setWallpaperPicker } = useConversation()
   const [error, setError] = useState('')
   const seconds = chatTimers[String(chat._id)] ?? chat.disappearAfter ?? 0
   const pinned = pinnedChats.includes(String(chat._id))
@@ -34,6 +35,13 @@ const ChatSettings = ({ chat, canChangeTimer = true }) => {
           )}
         </span>
       </div>
+      <button onClick={() => setWallpaperPicker({ chatId: String(chat._id), name: chat.isGroup ? chat.name : chat.fullName })} className={`${row} text-left transition hover:bg-white dark:hover:bg-slate-800`}>
+        <span className={iconTile}><LuImage className="size-4" /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">Wallpaper</span>
+          <span className="block text-xs text-slate-500 dark:text-slate-400">{wallpapers.chats?.[String(chat._id)] ? wallpaperName(wallpapers.chats[String(chat._id)]) : `Same as your default (${wallpaperName(wallpapers.global)})`}</span>
+        </span>
+      </button>
       <button onClick={async () => { setError(''); const r = await togglePinChat(chat._id); if (!r.ok) setError(r.error) }} className={`${row} text-left transition hover:bg-white dark:hover:bg-slate-800`}>
         <span className={iconTile}><LuPin className={`size-4 ${pinned ? '-rotate-45' : ''}`} /></span>
         <span className="min-w-0 flex-1">

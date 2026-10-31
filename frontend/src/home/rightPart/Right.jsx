@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { AnimatePresence } from 'motion/react'
-import { LuUpload } from 'react-icons/lu'
+import { LuArrowLeft, LuLock, LuUpload } from 'react-icons/lu'
 import ChatUser from './ChatUser'
 import Messages from './Messages'
 import TypeSent from './TypeSent'
@@ -22,6 +22,7 @@ import { LogoMark } from '../../components/ui'
 import useConversation from '../../Zustand/UserConversation'
 import { useSocket } from '../../context/SocketProvider'
 import { useAuth } from '../../context/AuthProvider'
+import useWallpaper from '../../hooks/useWallpaper'
 
 // Shown when no conversation is open.
 const Welcome = () => {
@@ -31,9 +32,10 @@ const Welcome = () => {
   const onlineSet = new Set(onlineUsers.map(String))
   const online = contacts.filter((u) => onlineSet.has(String(u._id))).slice(0, 6)
   const firstName = AuthUser?.fullName?.split(' ')[0]
+  const wallpaper = useWallpaper(null)
 
   return (
-    <div className="chat-bg flex flex-1 flex-col items-center justify-center p-8 text-center">
+    <div className="chat-bg flex flex-1 flex-col items-center justify-center p-8 text-center" style={wallpaper || undefined}>
       <LogoMark className="size-14" />
       <h2 className="mt-6 text-2xl font-semibold tracking-tight">Welcome back{firstName ? `, ${firstName}` : ''}</h2>
       <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">
@@ -65,9 +67,28 @@ const Welcome = () => {
   )
 }
 
+// Shown instead of a locked chat until the secret code is entered (asks right away)
+const LockedChat = ({ chat, onBack, onUnlock }) => {
+  useEffect(() => { onUnlock() }, [chat._id]) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="chat-bg flex flex-1 flex-col">
+      <div className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:px-5 dark:border-slate-800 dark:bg-slate-950">
+        <button onClick={onBack} className="flex size-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 md:hidden dark:hover:bg-slate-800" aria-label="Back to chats"><LuArrowLeft className="size-5" /></button>
+        <p className="truncate text-[15px] font-semibold">{chat.isGroup ? chat.name : chat.fullName}</p>
+      </div>
+      <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+        <span className="flex size-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300"><LuLock className="size-6" /></span>
+        <p className="mt-4 text-base font-semibold">This chat is locked</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Enter your secret code to read and send messages.</p>
+        <button onClick={onUnlock} className="mt-5 inline-flex h-10 items-center gap-1.5 rounded-xl bg-indigo-600 px-4 text-sm font-medium text-white transition hover:bg-indigo-500"><LuLock className="size-4" /> Enter code</button>
+      </div>
+    </div>
+  )
+}
+
 const Right = () => {
   const [AuthUser] = useAuth()
-  const { selectedConversation, setSelectedConversation, selectionMode } = useConversation()
+  const { selectedConversation, setSelectedConversation, selectionMode, lockedChats, unlockedUntil, chatOpenedAt, setLockRequest } = useConversation()
   const [infoOpen, setInfoOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [searchFor, setSearchFor] = useState(null) // chat id the search bar is open for
@@ -78,6 +99,11 @@ const Right = () => {
 
   if (!selectedConversation) return <Welcome />
   if (selectedConversation.isAi) return <AiChat />
+  // Locked chat: nothing loads until the code is entered
+  // (unlocked if the code was entered within the last 5 minutes, or while this chat is open)
+  if (lockedChats.includes(String(selectedConversation._id)) && unlockedUntil < chatOpenedAt) {
+    return <LockedChat chat={selectedConversation} onBack={() => setSelectedConversation(null)} onUnlock={() => setLockRequest({ action: 'open', ids: [String(selectedConversation._id)] })} />
+  }
   if (selectedConversation.isCommunity) return <CommunityPage key={selectedConversation._id} community={selectedConversation} />
 
   const dropHandlers = {
@@ -86,8 +112,8 @@ const Right = () => {
     onDrop: (e) => {
       e.preventDefault()
       setDragging(false)
-      const file = e.dataTransfer.files?.[0]
-      if (file) window.dispatchEvent(new CustomEvent('nexchat:attach', { detail: file }))
+      const files = [...(e.dataTransfer.files || [])]
+      if (files.length) window.dispatchEvent(new CustomEvent('nexchat:attach', { detail: files }))
     },
   }
 
@@ -127,6 +153,7 @@ const Right = () => {
             user={selectedConversation}
             onClose={() => setInfoOpen(false)}
             onClear={() => setConfirmClear(true)}
+            onSearch={() => setSearchFor(selectedConversation._id)}
           />
         )}
       </AnimatePresence>

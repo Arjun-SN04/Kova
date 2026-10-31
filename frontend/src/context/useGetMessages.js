@@ -11,7 +11,10 @@ const useGetMessages = () => {
   const isGroup = !!selectedConversation?.isGroup;
 
   useEffect(() => {
-    if (!chatId || selectedConversation?.isCommunity || selectedConversation?.isAi) return;
+    if (!chatId || selectedConversation?.isCommunity || selectedConversation?.isAi) {
+      setLoading(false);
+      return;
+    }
     let stale = false;
     const getMessages = async () => {
       setLoading(true);
@@ -26,13 +29,14 @@ const useGetMessages = () => {
         }
       } catch (error) {
         console.log(error);
+        if (!stale) setMessages([]);
       } finally {
         if (!stale) setLoading(false);
       }
     };
     getMessages();
     return () => { stale = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId, isGroup, setMessages, setGroupPeople]);
 
   return { loading, messages };

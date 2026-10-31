@@ -1,16 +1,53 @@
 import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 import { Link } from 'react-router-dom'
-import { LuBan, LuBriefcase, LuChevronRight } from 'react-icons/lu'
+import { LuBan, LuBriefcase, LuChevronRight, LuUserRound } from 'react-icons/lu'
+import ConfirmDialog from '../home/ConfirmDialog'
+import useBusiness from './store'
 import { useAuth } from '../context/AuthProvider'
 import Avatar from '../home/Avatar'
 import { api, errorOf } from './utils'
+
+// Turn the business account off and go back to a normal (personal) account.
+// The catalog, orders and settings are kept, so it can be turned on again later.
+export const SwitchToPersonal = ({ className = '', onDone }) => {
+  const [AuthUser, setAuthUser] = useAuth()
+  const [open, setOpen] = useState(false)
+  if (!AuthUser?.business?.enabled) return null
+  const confirm = async () => {
+    const res = await axios.put('/api/business/profile', { enabled: false }, api)
+    const user = { ...AuthUser, business: res.data.business }
+    localStorage.setItem('chatUser', JSON.stringify(user))
+    setAuthUser(user)
+    useBusiness.getState().loadMe?.()
+    setOpen(false)
+    onDone?.()
+  }
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} className={`inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white ${className}`}>
+        <LuUserRound className="size-4" /> Switch to personal account
+      </button>
+      <ConfirmDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        onConfirm={confirm}
+        icon={LuUserRound}
+        title="Switch to a personal account?"
+        description="Your business page, badge, opening hours, catalog ordering and bookings turn off, and your team loses access. Your chats stay. Your catalog, orders and settings are kept, so you can turn Business on again any time."
+        confirmLabel="Switch"
+        busyLabel="Switching…"
+      />
+    </>
+  )
+}
 
 // Profile page: a way into the business tools
 export const BusinessCard = () => {
   const [AuthUser] = useAuth()
   const on = !!AuthUser?.business?.enabled
   return (
+    <div>
     <Link to="/business" className="flex items-start gap-4 p-6 transition hover:bg-slate-50 dark:hover:bg-slate-800/40">
       <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300"><LuBriefcase className="size-5" /></div>
       <div className="min-w-0 flex-1">
@@ -19,6 +56,8 @@ export const BusinessCard = () => {
       </div>
       <LuChevronRight className="mt-2.5 size-4 text-slate-400" />
     </Link>
+    {on && <div className="border-t border-slate-100 px-6 py-3 dark:border-slate-800"><SwitchToPersonal /></div>}
+    </div>
   )
 }
 

@@ -15,7 +15,17 @@ const orderSchema = new mongoose.Schema({
   status: { type: String, enum: ORDER_STATUSES, default: "new" },
   paid: { type: Boolean, default: false },
   paidAt: { type: Date, default: null },
+  // Before any discount code, and the code used
+  subtotal: { type: Number, default: null },
+  discount: { type: Number, default: 0 },
+  coupon: { type: String, default: "" },
+  // Every status / payment change, for the tracking page
+  history: [{ _id: false, status: String, at: { type: Date, default: Date.now } }],
+  // The customer's rating once the order is done
+  review: { type: { rating: Number, text: String, at: Date, _id: false }, default: null },
 }, { timestamps: true })
+
+orderSchema.index({ business: 1, "review.at": -1 })
 
 orderSchema.index({ business: 1, number: 1 }, { unique: true })
 

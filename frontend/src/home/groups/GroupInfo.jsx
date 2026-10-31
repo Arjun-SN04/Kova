@@ -1,16 +1,20 @@
 import React, { useRef, useState } from 'react'
 import axios from 'axios'
 import { motion } from 'motion/react'
-import { LuCamera, LuCheck, LuChevronRight, LuLogOut, LuPencil, LuShield, LuShieldOff, LuTrash2, LuUserMinus, LuUserPlus, LuX } from 'react-icons/lu'
+import { LuCamera, LuCheck, LuChevronRight, LuLogOut, LuMegaphone, LuPencil, LuShield, LuShieldOff, LuTrash2, LuUserMinus, LuUserPlus, LuX } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
 import Avatar, { GroupAvatar } from '../Avatar'
 import ConfirmDialog from '../ConfirmDialog'
 import AddPeopleDialog from './AddPeopleDialog'
 import ChatSettings from '../rightPart/ChatSettings'
+import MediaSummary from '../media/MediaSummary'
 import { GroupTasks } from '../../business/Tasks'
 import { communitiesApi, errorOf, groupsApi, isAdminOf, loadCommunities } from '../../utils/groups'
 import { compressAvatar } from '../../utils/attachments'
+import GroupLink from './GroupLink'
+import { ViewablePhoto } from '../../components/PhotoViewer'
+import PhotoEditor from '../../components/PhotoEditor'
 
 const smallBtn = 'flex size-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white'
 
@@ -28,6 +32,7 @@ const GroupInfo = ({ group, onClose }) => {
   const [photoBusy, setPhotoBusy] = useState(false)
 
   // Group photo: square-crop and shrink like profile photos, then upload (null = remove)
+  const [photoEdit, setPhotoEdit] = useState(null) // a new photo waiting in the editor
   const changePhoto = async (file) => {
     setPhotoBusy(true); setError('')
     try {
@@ -124,10 +129,12 @@ const GroupInfo = ({ group, onClose }) => {
         <div className="flex-1 overflow-y-auto p-6">
           <div className="flex flex-col items-center text-center">
             <div className="relative">
-              <GroupAvatar name={group.name} src={group.avatar?.url} announcement={group.announcement} size="lg" />
+              <ViewablePhoto src={group.avatar?.url} name={group.name} subtitle={`Group · ${group.members.length} members`}>
+                <GroupAvatar name={group.name} src={group.avatar?.url} announcement={group.announcement} size="lg" />
+              </ViewablePhoto>
               {amAdmin && !group.announcement && (
                 <>
-                  <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) changePhoto(f) }} />
+                  <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setPhotoEdit(f) }} />
                   <button
                     onClick={() => photoInput.current?.click()}
                     disabled={photoBusy}
@@ -175,13 +182,32 @@ const GroupInfo = ({ group, onClose }) => {
             </button>
           )}
 
+          <MediaSummary chat={group} />
           {!group.announcement && <ChatSettings chat={group} canChangeTimer={amAdmin} />}
+          {!group.announcement && amAdmin && (
+            <label className="mt-3 flex cursor-pointer items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-900">
+              <LuMegaphone className="size-4 shrink-0 text-slate-400" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">Only admins can send messages</span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">Members can still read, react and vote in polls.</span>
+              </span>
+              <input type="checkbox" role="switch" className="peer sr-only" checked={!!group.adminsOnly} onChange={(e) => run(async () => { const res = await groupsApi.update(group._id, { adminsOnly: e.target.checked }); upsertGroup(res.data) })} />
+              <span className="relative h-6 w-11 shrink-0 rounded-full bg-slate-300 transition-colors peer-checked:bg-indigo-600 dark:bg-slate-700 after:absolute after:left-0.5 after:top-0.5 after:size-5 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-5" />
+            </label>
+          )}
+          {!group.announcement && !group.community && amAdmin && <GroupLink group={group} />}
+          {!group.announcement && !amAdmin && group.adminsOnly && (
+            <p className="mt-3 flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300"><LuMegaphone className="size-4 text-slate-400" /> Only admins can send messages in this group.</p>
+          )}
           {!group.announcement && <GroupTasks groupId={group._id} />}
 
           {error && <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
           <div className="mt-6 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{group.members.length} members</p>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{group.members.length} members</p>
+              {group.pendingInvites > 0 && <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{group.pendingInvites} invited · waiting for them to accept</p>}
+            </div>
             {amAdmin && !group.announcement && (
               <button onClick={openAdd} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-500/10">
                 <LuUserPlus className="size-3.5" /> Add
@@ -241,6 +267,7 @@ const GroupInfo = ({ group, onClose }) => {
         onAdd={addPeople}
         emptyText={group.community ? 'Everyone in the community is already here.' : 'All your contacts are already here.'}
       />
+      {photoEdit && <PhotoEditor source={photoEdit} title="Edit group photo" onSave={changePhoto} onClose={() => setPhotoEdit(null)} />}
       <ConfirmDialog
         open={!!confirm}
         onClose={() => setConfirm(null)}

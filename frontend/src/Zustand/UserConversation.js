@@ -9,11 +9,18 @@ const saveCallsSeenAt = (time) => {
   try { localStorage.setItem(SEEN_KEY, String(time)) } catch { /* ignore */ }
 }
 
+const UNLOCK_MS = 5 * 60_000
+
 const useConversation = create((set) => ({
   selectedConversation: null,
+  chatOpenedAt: 0,
   // Switching chats also cancels any reply/edit in progress
   setSelectedConversation: (selectedConversation) =>
-    set({ selectedConversation, replyingTo: null, editingMessage: null, pendingFile: null, selectionMode: false, selectedIds: [] }),
+    set((s) => ({
+      selectedConversation, chatOpenedAt: Date.now(), replyingTo: null, editingMessage: null, pendingFiles: [], selectionMode: false, selectedIds: [], pinsOpenFor: null,
+      // Opening a locked chat while still unlocked keeps the unlock going for another 5 minutes
+      unlockedUntil: s.unlockedUntil > Date.now() && s.lockedChats.includes(String(selectedConversation?._id)) ? Date.now() + UNLOCK_MS : s.unlockedUntil,
+    })),
 
   // Multi-select mode for forwarding / copying / deleting several messages
   selectionMode: false,
@@ -33,8 +40,9 @@ const useConversation = create((set) => ({
   setForwardIds: (forwardIds) => set({ forwardIds }),
 
   // File chosen for the next message: { file, kind, previewUrl, originalSize }
-  pendingFile: null,
-  setPendingFile: (pendingFile) => set({ pendingFile }),
+  // Files chosen in the message box, waiting to be sent: [{ id, file, kind, previewUrl, originalSize }]
+  pendingFiles: [],
+  setPendingFiles: (next) => set((s) => ({ pendingFiles: typeof next === 'function' ? next(s.pendingFiles) : next })),
 
   // Message the composer is replying to / editing (only one at a time)
   replyingTo: null,
@@ -98,6 +106,43 @@ const useConversation = create((set) => ({
   // Chats pinned to the top of my list (ids in pin order) and messages I starred
   pinnedChats: [],
   setPinnedChats: (pinnedChats) => set({ pinnedChats }),
+  // Chat wallpapers ({ global, chats }) and the open wallpaper picker ({ chatId?, name? } or null)
+  wallpapers: { global: null, chats: {} },
+  setWallpapers: (wallpapers) => set({ wallpapers: { global: wallpapers?.global || null, chats: wallpapers?.chats || {} } }),
+  // Pinned messages list is open for this chat id (header pin button); switching chats closes it
+  pinsOpenFor: null,
+  setPinsOpenFor: (pinsOpenFor) => set({ pinsOpenFor, pinsExpanded: false }),
+  // The open bar starts compact; the chevron expands it into the full list
+  pinsExpanded: false,
+  setPinsExpanded: (pinsExpanded) => set({ pinsExpanded }),
+  wallpaperPicker: null,
+  setWallpaperPicker: (wallpaperPicker) => set({ wallpaperPicker }),
+  // Hidden chats: out of the list until the secret word is typed in search
+  hiddenChats: [],
+  hiddenWordHash: null,
+  setHiddenPrefs: ({ hiddenChats, hiddenWordHash }) => set((s) => ({
+    hiddenChats: hiddenChats ?? s.hiddenChats,
+    hiddenWordHash: hiddenWordHash === undefined ? s.hiddenWordHash : hiddenWordHash,
+  })),
+  // Ask to hide chats (set the secret word first if there isn't one): { ids: [] }
+  hideRequest: null,
+  setHideRequest: (hideRequest) => set({ hideRequest }),
+  // Locked chats: hidden from the list until the secret code is entered (lockedOpen)
+  lockedChats: [],
+  hasLockCode: false,
+  lockedOpen: false,
+  setLockedPrefs: ({ lockedChats, hasLockCode }) => set((s) => ({
+    lockedChats: lockedChats ?? s.lockedChats,
+    hasLockCode: hasLockCode ?? s.hasLockCode,
+  })),
+  setLockedOpen: (lockedOpen) => set({ lockedOpen }),
+  // After the code is entered, locked chats open freely until this time (memory only:
+  // a page refresh asks for the code again)
+  unlockedUntil: 0,
+  unlockNow: () => set({ unlockedUntil: Date.now() + UNLOCK_MS }),
+  // Ask for the secret code: { action: 'open' | 'lock' | 'unlock', ids: [] }
+  lockRequest: null,
+  setLockRequest: (lockRequest) => set({ lockRequest }),
   starredIds: [],
   setStarredIds: (starredIds) => set({ starredIds }),
   setStarred: (id, on) => set((state) => ({

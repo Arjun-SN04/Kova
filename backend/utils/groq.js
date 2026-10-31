@@ -17,7 +17,7 @@ const toolsFor = (model, tools) => {
   return list.length ? list : null
 }
 
-const call = async (key, model, messages, { tools: allTools, toolChoice, maxTokens, temperature }) => {
+const call = async (key, model, messages, { tools: allTools, toolChoice, maxTokens, temperature, reasoning = "low" }) => {
   const tools = toolsFor(model, allTools)
   const res = await fetch(URL, {
     method: "POST",
@@ -29,7 +29,7 @@ const call = async (key, model, messages, { tools: allTools, toolChoice, maxToke
       max_completion_tokens: maxTokens,
       ...(tools ? { tools, tool_choice: toolChoice || "auto" } : {}),
       // gpt-oss models think before answering; keep it quick and hide the thinking
-      ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low", include_reasoning: false } : {}),
+      ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: reasoning, include_reasoning: false } : {}),
     }),
     signal: AbortSignal.timeout(45_000),
   })
@@ -50,7 +50,7 @@ export const tidy = (text) =>
 // or throws an Error with a friendly message.
 // toolChoice: "auto" (default), or { type: "function", function: { name } } to require that tool
 // only: use just `model` (e.g. the vision model; the others can't see images)
-export const groqChat = async (messages, { tools = null, toolChoice = null, maxTokens = 700, temperature = 0.6, model: preferred = null, only = false } = {}) => {
+export const groqChat = async (messages, { tools = null, toolChoice = null, maxTokens = 700, temperature = 0.6, model: preferred = null, only = false, reasoning = "low" } = {}) => {
   const all = keys()
   if (!all.length) throw new Error("Nexa isn't set up on this server yet.")
   const models = only && preferred ? [preferred] : [preferred, process.env.GROQ_MODEL || "openai/gpt-oss-120b", FALLBACK_MODEL].filter((m, i, a) => m && a.indexOf(m) === i)
@@ -59,7 +59,7 @@ export const groqChat = async (messages, { tools = null, toolChoice = null, maxT
     for (let attempt = 0; attempt < all.length; attempt++) {
       const key = all[next++ % all.length]
       try {
-        const { status, data } = await call(key, model, messages, { tools, toolChoice, maxTokens, temperature })
+        const { status, data } = await call(key, model, messages, { tools, toolChoice, maxTokens, temperature, reasoning })
         const message = data.choices?.[0]?.message
         if (status === 200 && message && (message.content?.trim() || message.tool_calls?.length)) return { ...message, content: tidy(String(message.content || "").replace(/<think>[\s\S]*?<\/think>\s*/g, "")) }
         // Rate limited, bad key or server trouble: try the next key

@@ -8,8 +8,9 @@ export const LogoMark = ({ className = 'size-8' }) => {
     <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#8b5cf6" />
-          <stop offset="1" stopColor="#6d28d9" />
+          {/* Theme colour (Profile → Appearance); falls back to the original violet */}
+          <stop offset="0" style={{ stopColor: 'var(--color-indigo-500, #8b5cf6)' }} />
+          <stop offset="1" style={{ stopColor: 'var(--color-indigo-600, #6d28d9)' }} />
         </linearGradient>
       </defs>
       <rect width="32" height="32" rx="9" fill={`url(#${id})`} />
@@ -17,11 +18,11 @@ export const LogoMark = ({ className = 'size-8' }) => {
         d="M10.5 8.5h11a3.5 3.5 0 0 1 3.5 3.5v6a3.5 3.5 0 0 1-3.5 3.5H16l-4.5 3.5v-3.5h-1A3.5 3.5 0 0 1 7 18v-6a3.5 3.5 0 0 1 3.5-3.5z"
         fill="#fff"
       />
-      {/* Dots do a small "typing" wave on load and while hovered (see .logo-dot in index.css) */}
+      {/* Dots do a small "typing" wave, over and over (see .logo-dot in index.css) */}
       <g className="logo-bubble">
-        <circle className="logo-dot" cx="12.5" cy="15" r="1.4" fill="#6d28d9" />
-        <circle className="logo-dot" cx="16" cy="15" r="1.4" fill="#6d28d9" />
-        <circle className="logo-dot" cx="19.5" cy="15" r="1.4" fill="#6d28d9" />
+        <circle className="logo-dot" cx="12.5" cy="15" r="1.4" style={{ fill: 'var(--color-indigo-600, #6d28d9)' }} />
+        <circle className="logo-dot" cx="16" cy="15" r="1.4" style={{ fill: 'var(--color-indigo-600, #6d28d9)' }} />
+        <circle className="logo-dot" cx="19.5" cy="15" r="1.4" style={{ fill: 'var(--color-indigo-600, #6d28d9)' }} />
       </g>
     </svg>
   )

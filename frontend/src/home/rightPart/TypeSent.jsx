@@ -2,21 +2,23 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import PollDialog from './PollDialog'
 import axios from 'axios'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuCamera, LuChartColumn, LuIndianRupee, LuPackage, LuZap, LuCheck, LuSmile, LuSparkles, LuUndo2, LuFileText, LuLoaderCircle, LuMic, LuPaperclip, LuPencil, LuReply, LuSendHorizontal, LuTrash2, LuX } from 'react-icons/lu'
+import { LuCalendarDays, LuCamera, LuChartColumn, LuIndianRupee, LuPackage, LuZap, LuCheck, LuSmile, LuSparkles, LuUndo2, LuFileText, LuLoaderCircle, LuMic, LuPaperclip, LuPencil, LuPlus, LuReply, LuSendHorizontal, LuTrash2, LuX } from 'react-icons/lu'
 import useSendMessage from '../../context/useSendMessage'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
 import { useSocket } from '../../context/SocketProvider'
-import { canEdit, jumpToMessage } from '../../utils/messages'
+import { jumpToMessage } from '../../utils/messages'
 import { loadConversations } from '../../utils/conversations'
 import { ACCEPT, MAX_FILE_BYTES, attachmentLabel, formatBytes, prepareFile } from '../../utils/attachments'
 import EmojiPopover from './EmojiPopover'
 import { canPost } from '../../utils/groups'
+import useInputHistory from '../../hooks/useInputHistory'
 import useVoiceRecorder, { MAX_VOICE_SECONDS } from '../../hooks/useVoiceRecorder'
 import CameraDialog from './CameraDialog'
 import useBusiness from '../../business/store'
 import { PaymentDialog, ProductPicker, useQuickReplies } from '../../business/Compose'
 import AttachMenu from './AttachMenu'
+import EventDialog from '../groups/EventDialog'
 import { isBusiness } from '../../business/utils'
 
 const MAX_HEIGHT = 160
@@ -33,15 +35,18 @@ const TypeSent = () => {
   const {
     selectedConversation, messages, setMessages,
     replyingTo, setReplyingTo, editingMessage, setEditingMessage, setHighlightedId,
-    pendingFile, setPendingFile,
+    pendingFiles, setPendingFiles,
   } = useConversation()
-  const [preparing, setPreparing] = useState(false)
-  const [progress, setProgress] = useState(null) // 0..1 while uploading
+  const [preparing, setPreparing] = useState(0) // files still being prepared
+  const [progress, setProgress] = useState(null) // 0..1 for the whole batch while uploading
+  const [sendingIndex, setSendingIndex] = useState(0)
+  const pendingFile = pendingFiles[0] || null
   const fileInputRef = useRef(null)
   const [cameraOpen, setCameraOpen] = useState(false)
   const [pollOpen, setPollOpen] = useState(false)
   const closePoll = useCallback(() => setPollOpen(false), [])
   const [bizDialog, setBizDialog] = useState(null)
+  const [eventOpen, setEventOpen] = useState(false)
   const voice = useVoiceRecorder()
   const [AuthUser] = useAuth()
   const inputRef = useRef(null)
@@ -66,6 +71,9 @@ const TypeSent = () => {
   // Business accounts: quick replies ("/"), product cards and payment requests in chats with customers
   const bizSettings = useBusiness((st) => st.settings)
   const bizMode = isBusiness(AuthUser) && !!selectedConversation && !selectedConversation.isGroup && !selectedConversation.isSelf && !selectedConversation.isAi
+  // ↑ / ↓: bring back text you sent in this chat, like a terminal
+  const sentTexts = React.useMemo(() => messages.filter((m) => String(m.senderId) === myId && m.message && !m.poll && !m.card).map((m) => m.message), [messages, myId])
+  const history = useInputHistory(sentTexts, { text, setText, inputRef })
   const quick = useQuickReplies({ text, setText, settings: bizMode ? bizSettings : null, vars: { name: selectedConversation?.fullName?.split(' ')[0] }, inputRef })
   const addSent = (msg) => {
     setMessages((prev) => (prev.some((m) => m._id === msg._id) ? prev : [...prev, msg]))
@@ -107,39 +115,53 @@ const TypeSent = () => {
   const handleChange = (e) => {
     const value = e.target.value
     setText(value)
+    history.reset()
     if (editingMessage) return
     if (value.trim()) typingSignal()
     else stopTypingSignal()
   }
 
   // ── Attachments ──────────────────────────────────────────
-  const pickFile = async (file) => {
-    if (!file || editingMessage) return
+  // Several files can be chosen at once (up to MAX_PENDING); each is sent as its own message
+  const MAX_PENDING = 10
+  const pickFiles = async (input) => {
+    const files = (Array.isArray(input) ? input : [input]).filter(Boolean)
+    if (!files.length || editingMessage) return
     setError('')
-    setPreparing(true)
-    try {
-      setPendingFile(await prepareFile(file))
-      inputRef.current?.focus()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setPreparing(false)
+    const room = MAX_PENDING - useConversation.getState().pendingFiles.length
+    if (room <= 0) { setError(`You can send up to ${MAX_PENDING} files at a time`); return }
+    if (files.length > room) setError(`Only the first ${room} file${room === 1 ? '' : 's'} were added (up to ${MAX_PENDING} at a time)`)
+    const take = files.slice(0, room)
+    setPreparing((n) => n + take.length)
+    for (const file of take) {
+      try {
+        const ready = await prepareFile(file)
+        setPendingFiles((list) => [...list, { ...ready, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }])
+      } catch (err) {
+        setError(`${file.name}: ${err.message}`)
+      } finally {
+        setPreparing((n) => n - 1)
+      }
     }
+    inputRef.current?.focus()
   }
-
-  // Free the local preview when the file is removed or replaced
-  useEffect(() => () => { if (pendingFile?.previewUrl) URL.revokeObjectURL(pendingFile.previewUrl) }, [pendingFile])
+  const pickFile = (file) => pickFiles([file])
+  const removePending = (id) => setPendingFiles((list) => {
+    const gone = list.find((f) => f.id === id)
+    if (gone?.previewUrl) URL.revokeObjectURL(gone.previewUrl)
+    return list.filter((f) => f.id !== id)
+  })
 
   // Files dropped onto the chat area arrive through this event
   useEffect(() => {
-    const onAttach = (e) => pickFile(e.detail)
+    const onAttach = (e) => pickFiles(Array.isArray(e.detail) ? e.detail : [e.detail])
     window.addEventListener('nexchat:attach', onAttach)
     return () => window.removeEventListener('nexchat:attach', onAttach)
   })
 
   const onPaste = (e) => {
-    const file = e.clipboardData?.files?.[0]
-    if (file && !editingMessage) { e.preventDefault(); pickFile(file) }
+    const files = [...(e.clipboardData?.files || [])]
+    if (files.length && !editingMessage) { e.preventDefault(); pickFiles(files) }
   }
 
   const focusEnd = () => {
@@ -236,30 +258,43 @@ const TypeSent = () => {
     e?.preventDefault()
     if (loading || saving || preparing) return
     if (editingMessage) return saveEdit()
-    if (!text.trim() && !pendingFile) return
+    const queue = useConversation.getState().pendingFiles
+    if (!text.trim() && !queue.length) return
     const value = text
     const replyId = replyingTo?._id || null
-    const file = pendingFile?.file || null
     stopTypingSignal()
     setText('')
     setUndoText(null)
     setReplyingTo(null)
-    if (file) setProgress(0)
-    const sendError = await sendMessage(value, replyId, file, setProgress)
+    if (!queue.length) {
+      const sendError = await sendMessage(value, replyId, null, setProgress)
+      if (sendError) { setError(sendError); setText(value) }
+      inputRef.current?.focus()
+      return
+    }
+    // Files go one by one; the text and the reply go with the first
+    setProgress(0)
+    for (let i = 0; i < queue.length; i++) {
+      setSendingIndex(i)
+      const item = queue[i]
+      const sendError = await sendMessage(i === 0 ? value : '', i === 0 ? replyId : null, item.file, (p) => setProgress((i + p) / queue.length))
+      if (sendError) {
+        setError(queue.length > 1 ? `${item.file.name}: ${sendError}` : sendError)
+        if (i === 0) setText(value)
+        break
+      }
+      removePending(item.id)
+    }
     setProgress(null)
-    if (sendError) { setError(sendError); setText(value) }
-    else if (file) setPendingFile(null)
+    setSendingIndex(0)
     inputRef.current?.focus()
   }
 
   const onKeyDown = (e) => {
     if (quick.onKeyDown(e)) return
+    if (!editingMessage && history.onKeyDown(e)) return
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() }
     else if (e.key === 'Escape' && (editingMessage || replyingTo)) { e.preventDefault(); cancel() }
-    else if (e.key === 'ArrowUp' && !text && !editingMessage) {
-      const lastMine = [...messages].reverse().find((m) => String(m.senderId) === myId)
-      if (lastMine && canEdit(lastMine)) { e.preventDefault(); setEditingMessage(lastMine) }
-    }
   }
 
   // ── Voice notes ──────────────────────────────────────────
@@ -294,7 +329,7 @@ const TypeSent = () => {
   useEffect(() => () => voice.cancel(), [selectedConversation?._id])
 
   const busy = loading || saving
-  const canSubmit = (text.trim().length > 0 || (!!pendingFile && !editingMessage) || (!!editingMessage?.attachment)) && !busy && !preparing
+  const canSubmit = (text.trim().length > 0 || (pendingFiles.length > 0 && !editingMessage) || (!!editingMessage?.attachment)) && !busy && !preparing
   // Businesses go by their full name ("Meera's Bakery", not "Meera's")
   const firstName = selectedConversation?.business?.enabled ? selectedConversation.fullName : selectedConversation?.fullName?.split(' ')[0]
   const target = editingMessage || replyingTo
@@ -317,7 +352,7 @@ const TypeSent = () => {
   if (!canPost(selectedConversation, myId)) {
     return (
       <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-4 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
-        Only community admins can send messages here.
+        {selectedConversation.announcement ? 'Only community admins can send messages here.' : 'Only admins can send messages in this group.'}
       </div>
     )
   }
@@ -407,44 +442,44 @@ const TypeSent = () => {
           )}
         </AnimatePresence>
 
-        {/* Chosen file */}
-        {(pendingFile || preparing) && !editingMessage && (
-          <div className="relative flex items-center gap-3 border-b border-slate-100 px-3 py-2.5 dark:border-slate-800">
-            {preparing ? (
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
-                <LuLoaderCircle className="size-5 animate-spin text-slate-400" />
-              </span>
-            ) : pendingFile.kind === 'image' ? (
-              <img src={pendingFile.previewUrl} alt="" className="size-12 shrink-0 rounded-lg object-cover ring-1 ring-slate-200 dark:ring-slate-700" />
-            ) : pendingFile.kind === 'video' ? (
-              <video src={pendingFile.previewUrl} muted className="size-12 shrink-0 rounded-lg bg-black object-cover" />
-            ) : (
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
-                <LuFileText className="size-5" />
-              </span>
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{preparing ? 'Preparing file…' : pendingFile.file.name}</p>
-              {!preparing && (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {progress !== null
-                    ? `Uploading ${Math.round(progress * 100)}%`
-                    : pendingFile.originalSize > pendingFile.file.size
-                      ? `${formatBytes(pendingFile.file.size)} · compressed from ${formatBytes(pendingFile.originalSize)}`
-                      : formatBytes(pendingFile.file.size)}
-                </p>
+        {/* Chosen files */}
+        {(pendingFiles.length > 0 || preparing > 0) && !editingMessage && (
+          <div className="relative border-b border-slate-100 px-3 py-2.5 dark:border-slate-800">
+            <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
+              {pendingFiles.map((f, i) => (
+                <div key={f.id} className={`group relative w-20 shrink-0 ${progress !== null && i < sendingIndex ? 'opacity-40' : ''}`}>
+                  {f.kind === 'image' ? (
+                    <img src={f.previewUrl} alt="" className="size-20 rounded-lg object-cover ring-1 ring-slate-200 dark:ring-slate-700" />
+                  ) : f.kind === 'video' ? (
+                    <video src={f.previewUrl} muted className="size-20 rounded-lg bg-black object-cover" />
+                  ) : (
+                    <span className="flex size-20 flex-col items-center justify-center gap-1 rounded-lg bg-indigo-50 px-1 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
+                      <LuFileText className="size-5" />
+                      <span className="w-full truncate text-center text-[10px]">{f.file.name.split('.').pop()?.toUpperCase()}</span>
+                    </span>
+                  )}
+                  <p className="mt-1 truncate text-[10px] text-slate-500 dark:text-slate-400" title={f.file.name}>{formatBytes(f.file.size)}</p>
+                  {progress === null && (
+                    <button type="button" onClick={() => removePending(f.id)} aria-label={`Remove ${f.file.name}`} className="absolute -right-1.5 -top-1.5 flex size-6 items-center justify-center rounded-full bg-slate-900 text-white shadow ring-2 ring-white transition hover:bg-red-600 dark:bg-slate-700 dark:ring-slate-900">
+                      <LuX className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {Array.from({ length: preparing }, (_, i) => (
+                <span key={`prep-${i}`} className="flex size-20 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800"><LuLoaderCircle className="size-5 animate-spin text-slate-400" /></span>
+              ))}
+              {progress === null && pendingFiles.length < MAX_PENDING && (
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="flex size-20 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 text-[11px] font-medium text-slate-500 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-400" aria-label="Add more files">
+                  <LuPlus className="size-5" /> Add
+                </button>
               )}
             </div>
-            {!preparing && progress === null && (
-              <button
-                type="button"
-                onClick={() => setPendingFile(null)}
-                aria-label="Remove file"
-                className="flex size-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
-              >
-                <LuX className="size-4" />
-              </button>
-            )}
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {progress !== null
+                ? `Sending ${Math.min(sendingIndex + 1, pendingFiles.length + sendingIndex)} of ${pendingFiles.length + sendingIndex} · ${Math.round(progress * 100)}%`
+                : preparing ? 'Preparing…' : `${pendingFiles.length} file${pendingFiles.length === 1 ? '' : 's'} · ${pendingFiles.length > 1 ? 'each is sent as its own message, your text goes with the first' : 'add a caption below'}`}
+            </p>
             {progress !== null && (
               <div className="absolute inset-x-0 bottom-0 h-0.5 bg-slate-100 dark:bg-slate-800">
                 <div className="h-full bg-indigo-500 transition-[width] duration-200" style={{ width: `${Math.round(progress * 100)}%` }} />
@@ -492,7 +527,8 @@ const TypeSent = () => {
               type="file"
               accept={ACCEPT}
               hidden
-              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; pickFile(f) }}
+              multiple
+              onChange={(e) => { const fs = [...(e.target.files || [])]; e.target.value = ''; pickFiles(fs) }}
             />
             <AttachMenu
               disabled={!!editingMessage || busy || preparing}
@@ -500,6 +536,7 @@ const TypeSent = () => {
                 { id: 'file', label: 'Photo or file', Icon: LuPaperclip, onSelect: () => fileInputRef.current?.click() },
                 ...(navigator.mediaDevices?.getUserMedia ? [{ id: 'camera', label: 'Camera', Icon: LuCamera, onSelect: () => setCameraOpen(true) }] : []),
                 { id: 'poll', label: 'Poll', Icon: LuChartColumn, onSelect: () => setPollOpen(true) },
+                ...(selectedConversation?.isGroup ? [{ id: 'event', label: 'Event', Icon: LuCalendarDays, onSelect: () => setEventOpen(true) }] : []),
                 ...(bizMode ? [
                   { id: 'product', section: 'Business', label: 'Send a product', Icon: LuPackage, onSelect: () => setBizDialog('product') },
                   { id: 'payment', section: 'Business', label: 'Request payment', Icon: LuIndianRupee, onSelect: () => setBizDialog('payment') },
@@ -577,6 +614,7 @@ const TypeSent = () => {
         {cameraOpen && <CameraDialog onClose={() => setCameraOpen(false)} onCapture={pickFile} />}
       </AnimatePresence>
       <PollDialog open={pollOpen} onClose={closePoll} />
+      {eventOpen && <EventDialog groupId={selectedConversation._id} onClose={() => setEventOpen(false)} />}
       {bizDialog === 'product' && <ProductPicker biz="me" customerId={selectedConversation._id} onClose={() => setBizDialog(null)} onSent={addSent} />}
       {bizDialog === 'payment' && <PaymentDialog biz="me" customerId={selectedConversation._id} onClose={() => setBizDialog(null)} onSent={addSent} hasUpi={!!AuthUser?.business?.upiId} />}
 

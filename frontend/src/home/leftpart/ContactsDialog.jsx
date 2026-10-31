@@ -5,8 +5,9 @@ import { AnimatePresence, motion } from 'motion/react'
 import { QRCodeCanvas } from 'qrcode.react'
 import {
   LuAtSign, LuCheck, LuCopy, LuDownload, LuInbox, LuLoaderCircle, LuMessageCircle,
-  LuQrCode, LuRefreshCw, LuSearch, LuShare2, LuUserPlus, LuX,
+  LuQrCode, LuRefreshCw, LuSearch, LuShare2, LuUserMinus, LuUserPlus, LuUsers, LuX,
 } from 'react-icons/lu'
+import ConfirmDialog from '../ConfirmDialog'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
 import Avatar from '../Avatar'
@@ -14,6 +15,7 @@ import { inviteUrl, loadRequests, normalizeUsername, USERNAME_RE, USERNAME_RULES
 import { selfContact } from '../../utils/conversations'
 
 const TABS = [
+  { id: 'all', label: 'Friends', Icon: LuUsers },
   { id: 'add', label: 'Add', Icon: LuUserPlus },
   { id: 'requests', label: 'Requests', Icon: LuInbox },
   { id: 'invite', label: 'My QR', Icon: LuQrCode },
@@ -316,6 +318,72 @@ const InviteTab = () => {
   )
 }
 
+// ── All my contacts: message them, or remove them ────────────
+const AllTab = ({ openChat, goTo }) => {
+  const allContacts = useConversation((s) => s.contacts)
+  const hiddenChats = useConversation((s) => s.hiddenChats)
+  // Hidden chats stay out of here too (type the secret word in the chat search to see them)
+  const contacts = allContacts.filter((u) => !hiddenChats.includes(String(u._id)))
+  const [query, setQuery] = useState('')
+  const [removing, setRemoving] = useState(null)
+  const [error, setError] = useState('')
+  const q = query.trim().toLowerCase().replace(/^@/, '')
+  const shown = [...contacts]
+    .filter((u) => !q || u.fullName?.toLowerCase().includes(q) || u.username?.includes(q))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName))
+
+  const remove = async () => {
+    setError('')
+    try {
+      await axios.delete(`/api/contacts/${removing._id}`, api)
+      const st = useConversation.getState()
+      if (String(st.selectedConversation?._id) === String(removing._id)) st.setSelectedConversation(null)
+      st.removeContact(removing._id)
+      setRemoving(null)
+    } catch (err) {
+      setError(errorOf(err, 'Could not remove this contact.'))
+      setRemoving(null)
+    }
+  }
+
+  return (
+    <div>
+      <div className="relative">
+        <LuSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${contacts.length} contact${contacts.length === 1 ? '' : 's'}`} className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900" autoFocus />
+      </div>
+      {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {contacts.length === 0 ? (
+        <div className="py-10 text-center">
+          <p className="text-sm font-medium">No contacts yet</p>
+          <button onClick={() => goTo('add')} className={`${primaryBtn} mt-3`}><LuUserPlus className="size-4" /> Add someone</button>
+        </div>
+      ) : (
+        <div className="mt-3 -mx-3 space-y-0.5">
+          {shown.length === 0 && <p className="px-3 py-6 text-center text-sm text-slate-500">No one matches “{query}”</p>}
+          {shown.map((u) => (
+            <PersonRow key={u._id} user={u}>
+              <button onClick={() => openChat(u)} className={secondaryBtn} title={`Message ${u.fullName}`}><LuMessageCircle className="size-4" /> Message</button>
+              <button onClick={() => setRemoving(u)} className="flex size-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10" aria-label={`Remove ${u.fullName}`} title="Remove from contacts"><LuUserMinus className="size-4" /></button>
+            </PersonRow>
+          ))}
+        </div>
+      )}
+      <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">Your chat list shows people you’ve chatted with. Message anyone here and they appear there again.</p>
+      <ConfirmDialog
+        open={!!removing}
+        onClose={() => setRemoving(null)}
+        onConfirm={remove}
+        icon={LuUserMinus}
+        title={`Remove ${removing?.fullName || ''}?`}
+        description="You’ll no longer be connected: neither of you can message or call the other until one of you adds the other again. Your chat history isn’t deleted."
+        confirmLabel="Remove"
+        busyLabel="Removing…"
+      />
+    </div>
+  )
+}
+
 // ── Dialog shell ─────────────────────────────────────────────
 const ContactsDialog = () => {
   const { contactsDialog: tab, setContactsDialog, setSelectedConversation, requests } = useConversation()
@@ -347,7 +415,7 @@ const ContactsDialog = () => {
           <motion.div
             role="dialog"
             aria-modal="true"
-            aria-label="Add contacts"
+            aria-label="Contacts"
             onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -362,7 +430,7 @@ const ContactsDialog = () => {
               </button>
             </div>
 
-            <div className="mx-5 mt-3 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+            <div className="mx-5 mt-3 grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
               {TABS.map(({ id, label, Icon }) => (
                 <button
                   key={id}
@@ -383,6 +451,7 @@ const ContactsDialog = () => {
             </div>
 
             <div className="min-h-64 overflow-y-auto p-5">
+              {tab === 'all' && <AllTab openChat={openChat} goTo={setContactsDialog} />}
               {tab === 'add' && <AddTab openChat={openChat} goTo={setContactsDialog} />}
               {tab === 'requests' && <RequestsTab />}
               {tab === 'invite' && <InviteTab />}

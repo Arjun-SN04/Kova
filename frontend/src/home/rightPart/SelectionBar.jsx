@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import axios from 'axios'
 import { LuCheck, LuCopy, LuForward, LuTrash2, LuX } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
-import ConfirmDialog from '../ConfirmDialog'
+import DeleteChoiceDialog from '../DeleteChoiceDialog'
+import { canDeleteForEveryone, deleteMessagesFor } from '../../utils/deleteMessages'
 import { useAuth } from '../../context/AuthProvider'
 import { loadConversations } from '../../utils/conversations'
 import { attachmentLabel } from '../../utils/attachments'
@@ -24,14 +24,14 @@ const BarButton = ({ onClick, disabled, title, danger, children }) => (
 
 // Replaces the composer while selecting messages: copy, forward or delete them together.
 const SelectionBar = () => {
-  const { messages, setMessages, selectedIds, clearSelection, setForwardIds } = useConversation()
+  const { messages, setMessages, selectedIds, clearSelection, setForwardIds, nexaId, selectedConversation } = useConversation()
   const [AuthUser] = useAuth()
   const [confirm, setConfirm] = useState(false)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
 
   const selected = messages.filter((m) => selectedIds.includes(m._id))
-  const allMine = selected.length > 0 && selected.every((m) => String(m.senderId) === String(AuthUser?._id))
+  const allMine = selected.length > 0 && selected.every((m) => canDeleteForEveryone(m, { myId: AuthUser?._id, nexaId, messages, chat: selectedConversation }))
   const count = selected.length
 
   // Esc leaves selection mode
@@ -50,19 +50,16 @@ const SelectionBar = () => {
     } catch { /* clipboard not available */ }
   }
 
-  const remove = async () => {
+  // 'everyone' when all are mine, otherwise only 'me'
+  const remove = async (mode) => {
     setError('')
-    try {
-      const res = await axios.post('/api/message/delete-many', { ids: selectedIds }, { withCredentials: true })
-      const gone = new Set(res.data.deleted)
-      setMessages((prev) => prev.filter((m) => !gone.has(m._id)))
-      loadConversations()
-      setConfirm(false)
-      clearSelection()
-    } catch (err) {
-      setError(err.response?.data?.error || 'Could not delete. Try again.')
-      setConfirm(false)
-    }
+    const res = await deleteMessagesFor(selectedIds, mode)
+    setConfirm(false)
+    if (!res.ok) { setError(res.error); return }
+    const gone = new Set(res.gone)
+    setMessages((prev) => prev.filter((m) => !gone.has(String(m._id))))
+    loadConversations()
+    clearSelection()
   }
 
   return (
@@ -91,21 +88,21 @@ const SelectionBar = () => {
         </BarButton>
         <BarButton
           onClick={() => setConfirm(true)}
-          disabled={!allMine}
+          disabled={!count}
           danger
-          title={count && !allMine ? 'You can only delete your own messages' : 'Delete'}
+          title="Delete"
         >
           <LuTrash2 className="size-4" />
           <span className="hidden sm:inline">Delete</span>
         </BarButton>
       </div>
 
-      <ConfirmDialog
+      <DeleteChoiceDialog
         open={confirm}
         onClose={() => setConfirm(false)}
-        onConfirm={remove}
-        title={`Delete ${count} message${count === 1 ? '' : 's'}?`}
-        description="They will be removed for both of you, along with any photos or files. This can't be undone."
+        onDelete={remove}
+        count={count}
+        canEveryone={allMine}
       />
     </div>
   )

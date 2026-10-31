@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken"
 import User from "../models/user.model.js"
+import { runAsViewer } from "../utils/viewer.js"
 
 // Like secureRoute, but lets signed-out visitors through (req.user stays null).
 // Used by public pages such as a business's shop page.
@@ -14,7 +15,7 @@ const optionalAuth = async (req, res, next) => {
   } catch {
     req.user = null
   }
-  next()
+  runAsViewer(req.user, next)
 }
 
 export default optionalAuth

@@ -10,7 +10,7 @@ export const sendUrl = (chat) => (chat?.isGroup ? `/api/groups/${chat._id}/messa
 export const isAdminOf = (chat, userId) => (chat?.admins || []).some((a) => String(a?._id ?? a) === String(userId))
 
 // Can I send in this chat? Announcement groups are admins-only.
-export const canPost = (chat, userId) => !chat?.announcement || isAdminOf(chat, userId)
+export const canPost = (chat, userId) => !(chat?.announcement || chat?.adminsOnly) || isAdminOf(chat, userId)
 
 export const loadCommunities = async () => {
   try {
@@ -44,3 +44,15 @@ export const communitiesApi = {
 
 // Friendly error text from a failed request
 export const errorOf = (err, fallback = 'Something went wrong. Try again.') => err.response?.data?.error || fallback
+
+// Invite links and join requests
+export const groupLinks = {
+  get: (id) => axios.get(`/api/groups/${id}/link`, api),
+  reset: (id) => axios.post(`/api/groups/${id}/link`, {}, api),
+  remove: (id) => axios.delete(`/api/groups/${id}/link`, api),
+  preview: (code) => axios.get(`/api/groups/link/${encodeURIComponent(code)}`, api),
+  join: (code) => axios.post(`/api/groups/link/${encodeURIComponent(code)}`, {}, api),
+  requests: (id) => axios.get(`/api/groups/${id}/requests`, api),
+  answer: (id, userId, approve) => (approve ? axios.post(`/api/groups/${id}/requests/${userId}`, {}, api) : axios.delete(`/api/groups/${id}/requests/${userId}`, api)),
+}
+export const groupLinkUrl = (code) => `${window.location.origin}/g/${code}`

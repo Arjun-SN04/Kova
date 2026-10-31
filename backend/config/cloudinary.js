@@ -134,3 +134,15 @@ export const uploadAvatarSingle = (field) => (req, res, next) =>
     const message = err.code === "LIMIT_FILE_SIZE" ? "Image is too large (max 2 MB)" : err.message
     res.status(400).json({ error: message })
   })
+
+// A short-lived signed link for a stored file. Cloudinary blocks plain links to PDF/ZIP
+// files on many accounts (401), but signed API downloads always work.
+export const fileDownloadUrl = (attachment, minutes = 60) => {
+  if (!attachment?.publicId || attachment.resourceType !== "raw") return attachment?.url || null
+  ensureConfig()
+  return cloudinary.utils.private_download_url(attachment.publicId, "", {
+    resource_type: "raw",
+    type: "upload",
+    expires_at: Math.floor(Date.now() / 1000) + minutes * 60,
+  })
+}

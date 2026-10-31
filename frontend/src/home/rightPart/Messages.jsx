@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthProvider'
 import { AnimatePresence, motion } from 'motion/react'
 import { jumpToMessage } from '../../utils/messages'
 import { LuArrowDown, LuBookmark, LuFileText, LuImage, LuLink } from 'react-icons/lu'
+import useWallpaper from '../../hooks/useWallpaper'
 
 const GROUP_GAP_MS = 5 * 60 * 1000 // messages within 5 minutes are grouped
 
@@ -173,10 +174,14 @@ const NEAR_BOTTOM_PX = 150
 
 const Messages = () => {
   const { loading, messages } = useGetMessages()
-  const { selectedConversation, typingUsers, groupPeople, nexaId, pendingJump, setPendingJump, setHighlightedId, nexaThinking } = useConversation()
+  const { selectedConversation, typingUsers, groupPeople, nexaId, pendingJump, setPendingJump, setHighlightedId, nexaThinking, chatOpenedAt } = useConversation()
+  const wallpaper = useWallpaper(selectedConversation?._id)
   const [AuthUser] = useAuth()
   const scrollRef = useRef(null)
-  const lastConversation = useRef(null)
+  const contentRef = useRef(null)
+  const currentChatId = selectedConversation?._id ? String(selectedConversation._id) : null
+  const scrolledChatId = useRef(null)
+  const lastChatOpenedAt = useRef(0)
   const lastCount = useRef(0)
   const [atBottom, setAtBottom] = useState(true)
   const [newCount, setNewCount] = useState(0)
@@ -198,34 +203,92 @@ const Messages = () => {
   const personOf = (id) => (nexaId && String(id) === String(nexaId) ? { fullName: 'Nexa', isBot: true } : people[String(id)] || { fullName: 'Former member' })
   const nameOf = (id) => personOf(id).fullName.split(' ')[0]
 
-  const scrollToBottom = (behavior = 'smooth') => {
+  const userScrolledAway = useRef(false)
+
+  const scrollToBottom = (behavior = 'auto') => {
     const el = scrollRef.current
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior })
+    if (!el) return
+    userScrolledAway.current = false
+    if (behavior === 'auto') {
+      el.scrollTop = el.scrollHeight
+    }
+    el.scrollTo({ top: el.scrollHeight, behavior })
     setNewCount(0)
+    setAtBottom(true)
   }
 
   const onScroll = () => {
     const el = scrollRef.current
+    if (!el) return
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX
     setAtBottom(near)
-    if (near) setNewCount(0)
+    if (near) {
+      setNewCount(0)
+      userScrolledAway.current = false
+    } else {
+      userScrolledAway.current = true
+    }
   }
 
-  // Jump to the bottom when opening a chat. For new messages, only follow them
-  // if you're already near the bottom (or you sent it); otherwise count them.
+  // When opening a chat, scroll to bottom after its messages have loaded.
+  // For new messages, follow them if already near bottom, otherwise increment badge.
   useEffect(() => {
-    const switched = lastConversation.current !== selectedConversation?._id
-    const added = messages.length - lastCount.current
-    lastConversation.current = selectedConversation?._id
-    lastCount.current = messages.length
+    if (loading || pendingJump) return
 
-    if (switched) { scrollToBottom('auto'); setAtBottom(true); return }
+    const chatChanged = scrolledChatId.current !== currentChatId
+    const reOpened = chatOpenedAt && lastChatOpenedAt.current !== chatOpenedAt
+
+    if (chatChanged || reOpened) {
+      scrolledChatId.current = currentChatId
+      lastChatOpenedAt.current = chatOpenedAt
+      lastCount.current = messages.length
+      userScrolledAway.current = false
+      scrollToBottom('auto')
+      requestAnimationFrame(() => scrollToBottom('auto'))
+      return
+    }
+
+    const added = messages.length - lastCount.current
+    lastCount.current = messages.length
     if (added <= 0) return
+
     const last = messages[messages.length - 1]
-    if (atBottom || String(last?.senderId) === myId) scrollToBottom()
-    else setNewCount((n) => n + added)
+    if (atBottom || String(last?.senderId) === myId) {
+      scrollToBottom('smooth')
+    } else {
+      setNewCount((n) => n + added)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, selectedConversation?._id])
+  }, [loading, messages, currentChatId, chatOpenedAt, pendingJump, atBottom, myId])
+
+  // As images or content elements expand (e.g. photos loading asynchronously),
+  // keep the view pinned to the bottom if the chat was just opened or the user is near the bottom.
+  useEffect(() => {
+    const el = scrollRef.current
+    const target = contentRef.current
+    if (!el) return
+
+    const onContentChange = () => {
+      if (pendingJump) return
+      const near = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX
+      if (near || !userScrolledAway.current) {
+        el.scrollTop = el.scrollHeight
+        setAtBottom(true)
+      }
+    }
+
+    el.addEventListener('load', onContentChange, true)
+    let observer = null
+    if (target && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(onContentChange)
+      observer.observe(target)
+    }
+
+    return () => {
+      el.removeEventListener('load', onContentChange, true)
+      if (observer) observer.disconnect()
+    }
+  }, [currentChatId, pendingJump])
 
   // Keep the typing bubble in view
   useEffect(() => {
@@ -284,9 +347,9 @@ const Messages = () => {
   })
 
   return (
-    <div className="chat-bg relative flex min-h-0 flex-1 flex-col">
+    <div className="chat-bg relative flex min-h-0 flex-1 flex-col" style={wallpaper || undefined}>
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
-        <div className="h-full px-4 sm:px-6 lg:px-8">
+        <div ref={contentRef} className="h-full px-4 sm:px-6 lg:px-8">
           {loading ? (
             <LoadingSkeleton />
           ) : messages.length > 0 ? (
@@ -314,7 +377,7 @@ const Messages = () => {
             transition={{ duration: 0.15 }}
             onClick={() => scrollToBottom()}
             aria-label="Jump to latest message"
-            className="absolute bottom-4 right-4 flex size-10 items-center justify-center rounded-full bg-white text-slate-600 shadow-lg ring-1 ring-slate-200 transition hover:text-slate-900 sm:right-6 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700"
+            className="absolute bottom-4 right-4 flex size-10 items-center justify-center rounded-full bg-white text-slate-600 shadow-lg ring-1 ring-slate-200 transition hover:bg-slate-50 hover:text-slate-900 sm:right-6 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-700 dark:hover:text-white"
           >
             <LuArrowDown className="size-4.5" />
             {newCount > 0 && (

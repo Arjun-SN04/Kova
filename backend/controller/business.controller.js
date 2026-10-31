@@ -11,6 +11,7 @@ import { emitToUsers } from "../utils/notify.js"
 import { safeZone, sendNexaMessage } from "../utils/agenda.js"
 import { normalizeUsername } from "../utils/username.js"
 import { deleteFromCloudinary, uploadToCloudinary } from "../config/cloudinary.js"
+import { maskSeen, seenShared } from "../utils/privacy.js"
 import { buildSummary, cleanHours, DEFAULT_HOURS, getSettings, hoursState, roleIn, sendAsBusiness, teamOf } from "../utils/business.js"
 
 const same = (a, b) => String(a?._id ?? a) === String(b?._id ?? b)
@@ -137,7 +138,7 @@ export const requestVerification = async (req, res) => {
 }
 
 // ── Workspace overview and settings ────────────────────────────
-const LIST_LIMITS = { quickReplies: 100, templates: 50, labels: 30, faq: 100, services: 30, broadcastLists: 30 }
+const LIST_LIMITS = { quickReplies: 100, templates: 50, labels: 30, faq: 100, services: 30, broadcastLists: 30, coupons: 50 }
 
 export const getOverview = async (req, res) => {
   try {
@@ -167,8 +168,24 @@ export const updateSettings = async (req, res) => {
       faq: (x) => ({ q: str(x.q, 300), a: str(x.a, 1500) }),
       services: (x) => ({ name: str(x.name, 80), minutes: Math.min(480, Math.max(10, Math.round(Number(x.minutes) || 30))), price: Math.max(0, Number(x.price) || 0), description: str(x.description, 300) }),
       broadcastLists: (x) => ({ name: str(x.name, 60), members: (Array.isArray(x.members) ? x.members : []).filter(isId).slice(0, 1000) }),
+      coupons: (x) => {
+        const kind = x.kind === "flat" ? "flat" : "percent"
+        const value = Math.max(0, Number(x.value) || 0)
+        const old = settings.coupons.find((c) => isId(x._id) && same(c._id, x._id))
+        const expires = x.expiresAt ? new Date(x.expiresAt) : null
+        return {
+          code: str(x.code, 20).toUpperCase().replace(/[^A-Z0-9_-]/g, ""),
+          kind,
+          value: kind === "percent" ? Math.min(100, value) : value,
+          minTotal: Math.max(0, Number(x.minTotal) || 0),
+          maxUses: Math.max(0, Math.round(Number(x.maxUses) || 0)),
+          uses: old?.uses || 0,
+          expiresAt: expires && !Number.isNaN(expires.getTime()) ? expires : null,
+          active: x.active !== false,
+        }
+      },
     }
-    const required = { quickReplies: "shortcut", templates: "name", labels: "name", faq: "q", services: "name", broadcastLists: "name" }
+    const required = { quickReplies: "shortcut", templates: "name", labels: "name", faq: "q", services: "name", broadcastLists: "name", coupons: "code" }
     for (const [key, fn] of Object.entries(clean)) {
       if (!Array.isArray(b[key])) continue
       // Keep existing ids so labels on customers keep pointing at the same label
@@ -176,6 +193,9 @@ export const updateSettings = async (req, res) => {
     }
     const shortcuts = settings.quickReplies.map((q) => q.shortcut)
     if (new Set(shortcuts).size !== shortcuts.length) return fail(res, 400, "Two quick replies use the same shortcut")
+    const codes = settings.coupons.map((c) => c.code)
+    if (new Set(codes).size !== codes.length) return fail(res, 400, "Two discount codes are the same")
+    if (settings.coupons.some((c) => !c.value)) return fail(res, 400, "Give every discount code an amount")
     await settings.save()
     await settings.populate("team.user", PERSON)
     emitToUsers(teamOf(owner._id, settings), "businessSettings", { business: String(owner._id) })
@@ -369,10 +389,11 @@ export const getCustomerChat = async (req, res) => {
     // Opening a customer's chat from the inbox counts as reading it
     if (messages.length) {
       const updated = await Message.updateMany({ receiverId: owner._id, senderId: req.params.customerId, seen: false }, { $set: { seen: true } })
-      if (updated.modifiedCount) emitToUsers([req.params.customerId], "messagesSeen", { by: String(owner._id) })
+      if (updated.modifiedCount && await seenShared(owner._id, req.params.customerId)) emitToUsers([req.params.customerId], "messagesSeen", { by: String(owner._id) })
     }
     const senders = await User.find({ _id: { $in: [...new Set(messages.map((m) => String(m.sentBy || "")).filter(Boolean))] } }).select("fullName")
-    res.status(200).json({ messages, staff: Object.fromEntries(senders.map((u) => [String(u._id), u.fullName])), role })
+    const shared = await seenShared(owner._id, req.params.customerId)
+    res.status(200).json({ messages: shared ? messages : maskSeen(messages, owner._id), staff: Object.fromEntries(senders.map((u) => [String(u._id), u.fullName])), role })
   } catch (error) {
     console.log("getCustomerChat error:", error)
     fail(res, 500, "Internal server error")

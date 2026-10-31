@@ -241,7 +241,7 @@ export const GMAIL_TOOLS = [
 // Everyone and every group the user can message, for the prompt and for checking tool calls
 export const loadNexaContext = async (user, timeZone) => {
   const me = await User.findById(user._id).populate("contacts", "fullName username")
-  const groups = await Group.find({ members: user._id }).select("name announcement admins community").populate("community", "name")
+  const groups = await Group.find({ members: user._id }).select("name announcement adminsOnly admins community").populate("community", "name")
   const people = new Map(me.contacts.map((c) => [String(c._id), c]))
   const groupMap = new Map(groups.map((g) => [String(g._id), g]))
   const google = await getAccount(user._id).catch(() => null)
@@ -294,7 +294,7 @@ export const runNexaTool = async (name, args, ctx) => {
       if (sendAt.getTime() > Date.now() + 366 * 24 * 3600_000) return { result: { error: "Messages can be scheduled up to a year ahead." } }
       if (to.groupId) {
         const g = ctx.groups.get(String(to.groupId))
-        if (g.announcement && !g.admins.some((a) => String(a) === String(me))) return { result: { error: "Only admins can post in that announcements group" } }
+        if ((g.announcement || g.adminsOnly) && !g.admins.some((a) => String(a) === String(me))) return { result: { error: "Only admins can send messages in that group" } }
       }
       // Repeating reminders/messages
       let repeat = null

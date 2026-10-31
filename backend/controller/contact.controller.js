@@ -6,9 +6,9 @@ import { Customer } from "../models/customer.model.js"
 import { Report } from "../models/report.model.js"
 
 // What contacts can see about each other
-export const CONTACT_FIELDS = "fullName username email avatar createdAt business"
+export const CONTACT_FIELDS = "fullName username email avatar about createdAt business"
 // What a stranger sees before you're connected (no email)
-const STRANGER_FIELDS = "fullName username avatar business"
+const STRANGER_FIELDS = "fullName username avatar about business"
 
 const notify = (userId, event, data) => {
   const socketId = getReceiverSocketId(userId)

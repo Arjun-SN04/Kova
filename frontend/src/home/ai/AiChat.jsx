@@ -1,9 +1,11 @@
+import useInputHistory from '../../hooks/useInputHistory'
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuArrowLeft, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuMessageCircle, LuSendHorizontal, LuSmile, LuSparkles, LuTrash2, LuX } from 'react-icons/lu'
+import { LuArrowLeft, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImages, LuMessageCircle, LuSendHorizontal, LuSmile, LuSparkles, LuSquare, LuTrash2, LuVolume2, LuX } from 'react-icons/lu'
+import { canSpeak, speak, useSpeech } from '../../utils/speak'
 import { selfContact } from '../../utils/conversations'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
@@ -11,6 +13,8 @@ import { AiAvatar } from '../Avatar'
 import ConfirmDialog from '../ConfirmDialog'
 import Mermaid from './Mermaid'
 import NexaImage from './NexaImage'
+import MediaManager from '../media/MediaManager'
+import { deleteNexaItems, nexaMediaItems } from '../../utils/mediaItems'
 import GoogleCalendarDialog from './GoogleCalendarDialog'
 import { clearGoogleResult, peekGoogleResult } from '../../utils/google'
 import { AgendaCard, DraftCard, EventCard, ReminderCard, SnoozedCard, TaskCard } from './AgendaCards'
@@ -18,9 +22,11 @@ import { useSocket } from '../../context/SocketProvider'
 import { compressImage, formatBytes } from '../../utils/attachments'
 import { TIMER_OPTIONS, timerLabel } from '../../utils/chatExtras'
 import MediaPicker from '../media/MediaPicker'
-import { remarkHtmlBreaks } from '../../utils/markdown'
+import { remarkHtmlBreaks, remarkLineBreaks } from '../../utils/markdown'
+import useWallpaper from '../../hooks/useWallpaper'
+import { AI_CHAT } from '../../utils/ai'
 
-const REMARK = [remarkGfm, remarkHtmlBreaks]
+const REMARK = [remarkGfm, remarkHtmlBreaks, remarkLineBreaks]
 
 const api = { withCredentials: true }
 const MAX_HEIGHT = 140
@@ -275,13 +281,13 @@ const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved, 
         {(message.actions || []).map((a, i) => (a.type === 'image'
           ? <NexaImage key={a.id || i} messageId={message._id} action={a} fresh={isFresh(message)} onSaved={onImageSaved} />
           : a.type === 'sources' ? <Sources key={i} items={a.items || []} />
-          : a.type === 'agenda' ? <AgendaCard key={i} action={a} greeting={greeting} />
-          : a.type === 'event' ? <EventCard key={i} action={a} messageId={message._id} onSaved={onImageSaved} />
-          : a.type === 'snoozed' ? <SnoozedCard key={i} action={a} />
-          : a.type === 'reminder' ? <ReminderCard key={i} action={a} status={statuses[a.id]} onStop={onCancel} />
-          : a.type === 'task' ? <TaskCard key={i} action={a} />
-          : a.type === 'draft' ? <DraftCard key={i} action={a} />
-          : <ActionCard key={i} action={a} status={a.id ? statuses[a.id] : null} onCancel={onCancel} onOpen={onOpen} />
+            : a.type === 'agenda' ? <AgendaCard key={i} action={a} greeting={greeting} />
+              : a.type === 'event' ? <EventCard key={i} action={a} messageId={message._id} onSaved={onImageSaved} />
+                : a.type === 'snoozed' ? <SnoozedCard key={i} action={a} />
+                  : a.type === 'reminder' ? <ReminderCard key={i} action={a} status={statuses[a.id]} onStop={onCancel} />
+                    : a.type === 'task' ? <TaskCard key={i} action={a} />
+                      : a.type === 'draft' ? <DraftCard key={i} action={a} />
+                        : <ActionCard key={i} action={a} status={a.id ? statuses[a.id] : null} onCancel={onCancel} onOpen={onOpen} />
         ))}
         <p className="mt-1 flex items-center gap-2 px-1 text-[11px] text-slate-400">
           {message.createdAt && formatTime(message.createdAt)}
@@ -289,6 +295,7 @@ const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved, 
             {copied ? <LuCheck className="size-3" /> : <LuCopy className="size-3" />}
             {copied ? 'Copied' : 'Copy'}
           </button>
+          <ListenButton id={`ai-${message._id}`} text={message.content} />
           <MessageTools message={message} onKeep={onKeep} onDelete={onDelete} />
         </p>
       </div>
@@ -300,6 +307,18 @@ const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved, 
 const isFresh = (message) => Date.now() - new Date(message.createdAt).getTime() < 2 * 60 * 1000
 
 // Keep (stop it disappearing) and Delete, under each message in the Nexa chat
+// Read the answer aloud (tap again to stop)
+const ListenButton = ({ id, text }) => {
+  const speaking = useSpeech((st) => st.speakingId === id)
+  if (!canSpeak() || !text?.trim()) return null
+  return (
+    <button onClick={() => speak(id, text)} className={`inline-flex items-center gap-1 transition hover:text-slate-700 focus:opacity-100 dark:hover:text-slate-200 ${speaking ? 'text-indigo-600 opacity-100 dark:text-indigo-400' : 'opacity-0 group-hover:opacity-100'}`} aria-label={speaking ? 'Stop reading' : 'Listen'}>
+      {speaking ? <LuSquare className="size-3" /> : <LuVolume2 className="size-3" />}
+      {speaking ? 'Stop' : 'Listen'}
+    </button>
+  )
+}
+
 const MessageTools = ({ message, onKeep, onDelete, align = 'left' }) => {
   const [confirm, setConfirm] = useState(false)
   if (String(message._id).startsWith('temp-')) return null
@@ -369,6 +388,7 @@ const MyBubble = memo(({ message, onKeep, onDelete }) => (
 
 // Private chat with Nexa, Kova's AI assistant (answers come from Groq via the server)
 const AiChat = () => {
+  const wallpaper = useWallpaper(AI_CHAT._id)
   const [AuthUser] = useAuth()
   const { setSelectedConversation, contacts, groups, scheduledVersion } = useConversation()
   const [statuses, setStatuses] = useState({}) // scheduled message id -> pending | sent | cancelled | failed
@@ -386,6 +406,8 @@ const AiChat = () => {
   const { socket } = useSocket()
   const scrollRef = useRef(null)
   const inputRef = useRef(null)
+  // Your past questions, for ↑ / ↓ in the message box
+  const sentTexts = useMemo(() => messages.filter((m) => m.role === 'user' && m.content).map((m) => m.content), [messages])
   const firstName = AuthUser?.fullName?.split(' ')[0]
 
   useEffect(() => {
@@ -398,7 +420,7 @@ const AiChat = () => {
 
   // Is Google connected? (dot on the calendar button)
   useEffect(() => {
-    axios.get('/api/google/status', api).then((res) => setGoogleConnected(res.data.connected)).catch(() => {})
+    axios.get('/api/google/status', api).then((res) => setGoogleConnected(res.data.connected)).catch(() => { })
   }, [])
   const onGoogleStatus = useCallback((s) => setGoogleConnected(s.connected), [])
 
@@ -406,7 +428,7 @@ const AiChat = () => {
   const [timer, setTimer] = useState(86400)
   const [timerOpen, setTimerOpen] = useState(false)
   useEffect(() => {
-    axios.get('/api/ai/settings', api).then((res) => setTimer(res.data.disappearAfter)).catch(() => {})
+    axios.get('/api/ai/settings', api).then((res) => setTimer(res.data.disappearAfter)).catch(() => { })
   }, [])
   const changeTimer = async (secs) => {
     setTimerOpen(false)
@@ -446,7 +468,7 @@ const AiChat = () => {
   useEffect(() => {
     axios.get('/api/ai/scheduled?all=1', api)
       .then((res) => setStatuses(Object.fromEntries(res.data.scheduled.map((j) => [j._id, j.status]))))
-      .catch(() => {})
+      .catch(() => { })
   }, [scheduledVersion, messages.length])
 
   const cancelScheduled = async (id) => {
@@ -611,7 +633,19 @@ const AiChat = () => {
     setConfirmClear(false)
   }
 
+  // Media, links and docs: files you sent, images Nexa made, web sources
+  const [libraryOpen, setLibraryOpen] = useState(false)
+  const mediaItems = useMemo(() => nexaMediaItems(messages), [messages])
+  const deleteMedia = async (list) => {
+    const res = await deleteNexaItems(list)
+    const gone = new Set(res.deletedMessages)
+    const fresh = new Map((res.updated || []).map((m) => [String(m._id), m]))
+    setMessages((prev) => prev.filter((m) => !gone.has(String(m._id))).map((m) => fresh.get(String(m._id)) || m))
+    return res
+  }
+  const history = useInputHistory(sentTexts, { text, setText, inputRef })
   const onKeyDown = (e) => {
+    if (history.onKeyDown(e)) return
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask() }
   }
 
@@ -628,7 +662,21 @@ const AiChat = () => {
             {thinking ? 'thinking…' : timer ? `AI assistant · messages disappear after ${timerLabel(timer)}` : 'AI assistant'}
           </p>
         </div>
-        <div className="relative ml-auto">
+        <button onClick={() => setLibraryOpen(true)} className="ml-auto flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800" title="Media, links and docs" aria-label="Media, links and docs">
+          <LuImages className="size-4.5" />
+        </button>
+        <MediaManager
+          open={libraryOpen}
+          onClose={() => setLibraryOpen(false)}
+          title="Media, links and docs"
+          subtitle="Your chat with Nexa"
+          items={mediaItems}
+          onDelete={deleteMedia}
+          deleteNote={(tab) => (tab === 'links'
+            ? 'The Nexa messages with these links are deleted. This can’t be undone.'
+            : 'The files are removed from the chat and from storage. The message text stays. This can’t be undone.')}
+        />
+        <div className="relative">
           <button onClick={() => setTimerOpen((o) => !o)} className={`flex size-9 items-center justify-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 ${timer ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} title={`Disappearing messages: ${timerLabel(timer)}`} aria-label="Disappearing messages" aria-expanded={timerOpen}>
             <LuTimer className="size-4.5" />
           </button>
@@ -658,7 +706,7 @@ const AiChat = () => {
         )}
       </header>
 
-      <div ref={scrollRef} className="chat-bg min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="chat-bg min-h-0 flex-1 overflow-y-auto" style={wallpaper || undefined}>
         <div className="h-full px-4 sm:px-6 lg:px-8">
           {loading ? null : messages.length === 0 && !thinking ? (
             <div className="flex h-full flex-col items-center justify-center py-10 text-center">
@@ -714,7 +762,7 @@ const AiChat = () => {
             ref={inputRef}
             rows={1}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => { setText(e.target.value); history.reset() }}
             onKeyDown={onKeyDown}
             maxLength={4000}
             placeholder={pending ? 'Ask about this file (optional)' : 'Message Nexa'}

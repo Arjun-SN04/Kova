@@ -50,11 +50,19 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Camera capture**: take a photo with the device camera (front/back switch on phones), retake or use it.
 - **Voice notes**: record up to 2 minutes from the microphone, with an inline player (play/pause, seek, duration).
 - **In-browser image compression** before upload (typically 90%+ smaller).
-- **Full-screen photo viewer**.
+- **Delete for me / for everyone**: deleting a message, a selection, media from the media manager, or clearing a chat asks which one you want. "For everyone" is offered when every message is yours (or a Nexa answer you may remove) and frees the files on Cloudinary. "For me" hides it from your view only (`hiddenFor` on the message, never sent to other people). Once everyone in the chat has deleted a message for themselves, it's removed for good and its file freed. Code: `POST /api/message/delete-for-me`, `DELETE /api/message/conversation/:id?for=me`, `home/DeleteChoiceDialog.jsx`.
+- **Download / Save as…** in the ⋯ menu of every photo, video, voice note and file. Save as lets you choose the folder and name in Chrome and Edge.
+- **Media, links and docs**: open a chat's Contact or Group info (or the photos button at the top of the Nexa chat) to see every photo, video, document, link and voice note in that chat, grouped by month in tabs. Open photos full screen with previous / next, download, jump to the message, or select several to download or delete. Deleting removes the messages for everyone and frees the files on Cloudinary (you can only delete what you sent). In Nexa, deleting a photo or file removes just that file and keeps the message text. Code: `home/media/MediaManager.jsx`, `MediaSummary.jsx`, `utils/mediaItems.js`, and `DELETE /api/ai/messages/:id/file`.
+- **Contact info panel**: profile, Audio / Video / Search buttons, media preview, details with a copy button for the username, chat settings, and a separate section for clear, remove, block and report.
+- **Full-screen photo viewer**, with a **Download** button. Photos in chat also show a download button on hover (always visible on touch screens). Downloads fetch the file first, so they save instead of opening a new tab.
 
 ### Nexa, the AI assistant
 - **Nexa** is a built-in assistant pinned in the chat list (under "Message yourself"). Ask how to use NexChat, or anything else: writing a message, ideas, explanations, summaries.
 - Answers come as short bullet points (drafts to send come as a quote you can copy). Nexa never uses em or en dashes. The chat looks like any other NexChat conversation.
+- **Poems, songs and shayari**: Nexa writes them through a separate path (`utils/creative.js`). It writes three drafts at once, built around one specific moment, with planned rhymes and short lines. A checker scores each one for missing rhymes, repeated end words, overused words and long lines, and an editor pass fixes those exact problems on the best draft (up to two rounds). It answers in the script you typed in (Roman Hindi stays Roman) and only writes original pieces, never existing lyrics. Other answers pick their own format: verses, paragraphs, bullets or a short sentence.
+- **Listen**: **Listen** under any Nexa answer, and in the ⋯ menu of any message with text or a transcript, reads it aloud with the device's own voices (`utils/speak.js`; Hindi voice for Devanagari, Indian English for Roman Hindi). Tap again to stop.
+- **Pinned messages**: up to 10 per chat. Pinning an 11th unpins the oldest. A pin button with a count sits next to the call buttons in the chat header. It opens a compact bar (tap to jump through the pins), and the chevron expands it into a list of every pin, each with jump and unpin. It closes when you switch chats.
+- **Message history like a terminal**: in the Nexa box, **↑** brings back your earlier questions (newest first) and **↓** goes forward, ending on what you were typing. Normal chats work the same way with the messages you sent in that chat (edit a message from its ⋯ menu). Shared hook: `hooks/useInputHistory.js`.
 - Opening Nexa with an empty chat shows a short greeting and six starter suggestions (send, schedule, remind, catch up, search the web, create an image). Ask **"What can you do?"** to see all twelve, plus a note on what Nexa adds to every chat. Tapping an example puts it in the box to edit before sending. It remembers the conversation, so follow-up questions work. The chat is private to you and can be cleared.
 - **Nexa can act for you** (ask in plain words):
   - *Send a message*: "tell Arjun I'm running 10 minutes late".
@@ -78,6 +86,10 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Groups**: create a group from your contacts with a name and description. Everything works in groups: replies, reactions, files, voice notes, edit/delete/forward, and typing ("Priya is typing…"). Each message shows who sent it.
 - **Admins** can rename the group, add contacts, remove people, and make others admin. Anyone can leave; the group always keeps at least one admin.
 - **Communities** bring related groups together. Creating one adds an **Announcements** group where only admins post and every member is included. Admins add people and create groups inside the community; members see all its groups and can **join** any of them.
+- **Only admins can send messages**: a switch in group info for any group. Members can still read, react and vote; the message box says why it's closed.
+- **Invite links with join requests**: admins share a link (`/g/<code>`, copy / share / reset / turn off). With **Approve new members** on, people who open it ask to join and admins approve or decline them in group info.
+- **Events**: **+** → Event in a group posts an event card (date, time, place, details). Members answer **Going / Maybe / Can't go**, the card shows who's going, anyone can **add it to their calendar** (.ics), and the group gets a reminder an hour before. The organiser or an admin can cancel it.
+- **Group invites for people who approve adds**: someone whose privacy says "Only with my approval" gets an invite with Join / Decline instead of being added directly; group info shows how many invites are waiting.
 - Groups and communities appear in the chat list and in a **Groups** tab (each community with its groups underneath). Unread counts, previews and changes (new groups, renames, members joining or leaving) update live.
 
 ### Calls
@@ -90,7 +102,7 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Calls tab**: a recent-calls list (incoming, outgoing, missed, with duration), grouping repeated calls ("Missed (2)"), search, call-back buttons, a **New call** picker, and "Clear call log". A badge shows missed calls you haven't looked at yet.
 
 ### Presence and status
-- **Online indicators** for every contact.
+- **Online indicators** for every contact, and **last active** ("Active 5 min ago", "Active yesterday at 9:12 PM") in the chat header when they're offline.
 - **Typing indicator** in the chat header, the contact list, and as an animated bubble in the chat.
 - **Read receipts**: ✓ sent, ✓✓ seen (updates live when the other person opens the chat).
 - **Unread counts** per contact and in the browser tab title, stored on the server so they survive a reload.
@@ -103,6 +115,16 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Remove contact** from the contact info panel (chat history is kept).
 - **Block and report** from the contact info panel. Blocking removes the contact both ways and stops new requests, invites and messages; unblock in Profile → Blocked accounts. Reports (spam, scam, abuse) go to the app admins.
 - **Message yourself**: a private chat pinned at the top for notes, links and files.
+- **Who can see my photo / about**: Everyone, My contacts, or Nobody (Profile → Privacy). Applied wherever your profile goes out (contacts, search, groups, invites). Business logos stay public.
+- **About**: a short line on your profile (up to 140 characters), shown in contact info.
+- **Who can add me to groups**: My contacts, or Only with my approval (you get an invite to accept).
+- **Locked chats**: lock chats behind a secret code (4 to 10 digits, set the first time). They look like any other chat in the list; opening one asks for the code and nothing loads until it's entered. After the code is entered, locked chats open freely for 5 minutes (each opening restarts the 5 minutes); a page refresh always asks again. Their notifications just say "New message". Code fields have an eye button to show what you type. Forgot the code? Reset it with your account password; nothing is deleted. 5 wrong tries pause for 5 minutes.
+- **Hidden chats**: hide any chat (⋯ → Hide chat, or select chats → Hide). Hidden chats leave the chat list, search, Contacts and unread badges, and their notifications say "New message". Typing your secret word in the chat search box shows them (capitals don't matter); clearing the search hides them again. Set, change or turn off the word in Profile → Hidden chats. The server keeps only a SHA-256 of the word, never the word itself.
+- **App lock**: a PIN (4–6 digits) to open Kova on this device, locking immediately or after 1 / 15 / 60 minutes away, with optional **fingerprint / face / device unlock** (WebAuthn). "Forgot PIN? Log out" removes it.
+- **Chat list = real chats**: people show in the list once you have a chat with them (or it's pinned, unread or open). Deleting a chat removes them from the list. **Contacts** (the address-book icon at the top) lists everyone you're connected to, with search, **Message** (they come back to the list) and **Remove** (disconnects you both; history isn't deleted). Searching the chat list also finds contacts without a chat.
+- **Voice notes keep playing**: one app-wide player. While a voice note plays, a bar at the top shows who it's from, a seekable progress bar, 1× / 1.5× / 2× speed and ×; it keeps playing when you switch chats, and clicking the title jumps back to the message.
+- **Switch back to a personal account**: Profile → Business tools, or Business → Settings → Profile & hours. Turns the business page, badge, ordering and bookings off; the catalog, orders and settings are kept for later.
+- **Select chats**: right-click (or long-press on touch, or the select button) to pick several chats, then **Pin**, **Mark read**, **Lock** or **Delete** them together.
 
 ### Navigation
 - **Section rail** on the left (WhatsApp-style) with **Chats**, **Calls** and **Communities**, each with a badge (unread chats, new missed calls, unread community messages). Theme, settings, log out and your profile sit at the bottom. On phones it becomes a bottom tab bar.
@@ -127,6 +149,9 @@ Any account can turn on **Business** (Profile → Business tools, or the briefca
 - **Broadcast lists**: one message to many customers (a list, everyone with a label, or all), delivered as separate private chats.
 - **Catalog**: items with photo, price, description and stock. Send any item in a chat as a **product card** (**+** in the message box → Send a product); customers tap "Ask about this" or open the shop.
 - **Orders**: customers order from the business page; the order arrives as a card in the chat. The business changes the status (new → confirmed → ready → out for delivery → done) and the customer is told in the chat, with a template or the default text. **Order history** per customer and overall.
+- **Discount codes**: Settings → Discount codes: % or ₹ off, minimum order, use limit, expiry, on/off, with a usage count. Customers apply a code in the cart; the server checks it again when the order is placed.
+- **Order tracking page** (`/order/<id>`): timeline (placed → confirmed → ready / out for delivery → completed, or cancelled) with times, items with photos, discount and payment status. It updates live. Linked from the order card ("Track order") and from Business → Orders.
+- **Reviews and ratings**: once an order is complete the customer rates it (1–5 stars + a comment) from the tracking page or the order card. The business page shows the average, the number of ratings and recent reviews (first name only); Business → Orders shows each order's rating.
 - **Payment requests**: an amount (optionally for an order) as a card with **Pay with UPI** (deep link) and the UPI ID to copy. The customer taps "I've paid", the business confirms with "Mark as paid", and the order is marked paid.
 - **Bookings**: services with a length and price; customers pick a day and a free slot (from opening hours, skipping booked times). Bookings appear in the chat as a card, in the Bookings screen, and in the business's Google Calendar with a Meet link when Google is connected. Customers get a reminder message the day before; either side can cancel.
 - **Team and shared inbox**: add staff by username as **Admin** (inbox, catalog, settings) or **Agent** (inbox, customers, orders, bookings). They use their own accounts and reply **as the business** from the shared inbox (filters: unread, waiting, mine, unassigned, leads, needs a person). Chats can be **assigned** to a team member. Staff only see customer chats, never the owner's other chats.
@@ -141,11 +166,23 @@ Any account can turn on **Business** (Profile → Business tools, or the briefca
 - **Profile photo** upload, change and remove (cropped and compressed in the browser).
 - Change display name, username and password.
 - **Dark theme by default**, with a light theme toggle in the app and on the landing page (remembered per browser).
+- **Chat wallpapers**: pick a default for all chats in Profile → Appearance → Chat wallpaper, or a different one per chat (chat ⋯ menu → Wallpaper, or the chat's info panel). Choose from 51 presets (doodle patterns, textures like dots / grid / lines, soft colours, gradients and 18 photos, each with a light and a dark look), **upload your own photo**, or keep Classic. A **Dim** slider keeps messages readable, and photos get a little darker in dark mode. A chat can go back to "Use my default". Saved to your account (`User.wallpapers`), so they follow you to every device; uploaded photos are deleted from Cloudinary when no longer used.
+- **Ask Nexa about photos and documents in any chat**: type `@Nexa` with a question in a one-to-one or group chat. Nexa looks at the photo or document (PDF, Word, TXT, CSV) you replied to, the one sent with the question, or the latest ones in the chat (up to 4 photos, 1 document). Photos use the vision model (`GROQ_VISION_MODEL`); documents are read and the relevant part is used. Each answer starts with **Looked at** chips (a thumbnail or the file name); click one to jump to it. If a document can't be opened, Nexa says so instead of guessing. **⋯ → Ask Nexa about this** on a photo or document starts a question for you.
+- **@Nexa can create images and summaries in any chat**: "@Nexa create an image of our beach trip plan" turns the request (and the chat, if it refers to it) into a picture and posts it in the chat (10 per person per day; needs an image provider, see `utils/imageGen.js`, best is a free Cloudflare Workers AI key). "@Nexa summarise this chat" / "give a conclusion" / "recap" reads the last 150 messages and posts key points, decisions, to-dos and a conclusion.
+- **Delete Nexa's answers**: in a one-to-one chat either person can delete them; in a group, the person who asked or an admin. They're removed for everyone in the chat.
+- **Opening files**: PDFs and other files open through `GET /message/file/:messageId`, which checks you're in the chat and hands out a short-lived signed Cloudinary link (plain links to PDFs are blocked by Cloudinary on many accounts).
+- **Reply suggestions**: up to 3 one-tap replies to the latest message someone sent you: a yes, a no or not now, and a follow-up question. They skip Nexa's answers, automatic messages and simple "ok" / "thanks" messages. Hide them with ×; bring them back with **✨ Suggestions** (remembered per device).
+- **Send several files at once**: pick, paste or drop up to 10 photos, videos or documents together. They show as a strip of thumbnails (remove any, or add more), then go out as separate messages in order, with your text on the first. Progress shows "Sending 2 of 5".
 - **One "+" menu in the message box** for photos and files, the camera, polls, and (for business accounts) sending a product, requesting a payment and quick replies. Emoji stays as its own button.
+- **Privacy** (Profile → Privacy), both working both ways like WhatsApp:
+  - **Activity status:** turn it off and nobody sees you online, and you don't see anyone else online. The server sends each person their own filtered online list.
+  - **Seen indicators:** turn it off and people don't see the double tick when you've read their messages, and you don't see it on theirs. Messages are still marked read for unread counts; only the indicator is hidden.
+  - Saved via `PUT /user/privacy { activity, seen }` in `User.privacy`.
+- **Photo editor**: choosing a new profile or group photo opens an editor first, and **Edit photo** in Profile edits the current one. Drag to position, zoom (slider or scroll), straighten, rotate, flip, 7 filters (Vivid, Warm, Cool, Fade, Mono, Noir) and brightness / contrast / saturation, with a circle guide for how it looks as an avatar. Saved as a 512 px square. Clicking a profile or group photo opens it full size.
 - **Copy or share your username** from Profile: **Copy** puts `@username` on the clipboard; **Share** opens the device's share sheet with your username and invite link (or copies that message where sharing isn't supported).
 - **Account settings** use a two-column layout on wide screens: profile details, password and blocked accounts on the left; appearance, notifications and business tools on the right.
-- **Appearance settings** (Profile → Appearance): **Light, Dark or System** mode (System follows the device), and six colour themes: **Iris** (violet, the default), **Ocean**, **Lagoon**, **Forest**, **Rose** and **Graphite**. A theme recolours buttons, links, selected chats, your message bubbles and Nexa. It's saved per browser (`chatTheme`, `chatAccent`) and applied before the app loads, so pages don't flash. The palettes are in `index.css` (`:root[data-accent=…]` swaps Tailwind's `indigo` and `violet`).
-- **Light mode**: clean cool greys, and the chat background is a soft wash of the theme colour so message bubbles stand out.
+- **Appearance settings** (Profile → Appearance): **Light, Dark or System** mode (System follows the device), and six colour themes: **Ocean** (blue, the default), **Iris** (violet), **Lagoon**, **Forest**, **Rose** and **Graphite**. The logo, the browser-tab icon and the mobile address bar follow the chosen theme. A theme recolours buttons, links, selected chats, your message bubbles and Nexa. It's saved per browser (`chatTheme`, `chatAccent`) and applied before the app loads, so pages don't flash. The palettes are in `index.css` (`:root[data-accent=…]` swaps Tailwind's `indigo` and `violet`).
+- **Light mode**: soft off-white surfaces (not pure white) on clean cool greys, and the chat background is a soft wash of the theme colour so message bubbles stand out.
 - **Graphite dark palette**: dark mode uses neutral greys instead of navy. `index.css` remaps every `slate-*` and `zinc-*` colour under `.dark`, so all screens follow one palette.
 - **One dropdown style everywhere**: every dropdown uses the shared `Select` component (`components/ui/Select.jsx`) instead of the browser's own. Its menu opens above dialogs and scrolling panels, flips up when there's no room below, gets a search box for long lists (like time zones), and works with the keyboard (arrows, Enter, Escape, type to jump).
 
@@ -407,7 +444,7 @@ flowchart LR
 - **Camera**: `getUserMedia` streams the camera into a `<video>`. A canvas captures the frame (mirrored for selfies), and the photo goes through the same compression and preview.
 - **Voice notes**: `MediaRecorder` records Opus audio at about 32 kbps (roughly 240 KB per minute), with a 2-minute cap (auto-sent at the limit). Cloudinary stores audio as a "video" resource in `nexchat/voice`.
 - **Server checks**: Multer accepts only allowed MIME types (no SVG) and at most 10 MB, then the buffer is streamed straight to Cloudinary. Nothing is written to the server's disk.
-- **Display**: images are shown from their stored URL with their real aspect ratio (no layout jump), and open in a full-screen viewer. Videos and voice notes use `preload="none"`, so nothing downloads until you press play. Files show a download card.
+- **Display**: images are shown from their stored URL with their real aspect ratio (no layout jump), and open in a full-screen viewer. Photos and Nexa images download through `downloadFile` in `utils/attachments.js` (fetched as a blob, because `<a download>` doesn't work for Cloudinary links). Videos and voice notes use `preload="none"`, so nothing downloads until you press play. Files show a download card.
 
 ### Keeping Cloudinary within the free plan
 - Compress before upload (photos and profile photos).
@@ -556,7 +593,11 @@ erDiagram
 | BusinessSettings | `owner` (unique), `greeting / away { on, text }`, `quickReplies [{ shortcut, text }]`, `templates`, `labels [{ name, color }]`, `faq`, `services [{ name, minutes, price }]`, `broadcastLists`, `team [{ user, role }]`, `nexaAutoReply, leadDetection, dailySummary, unansweredMinutes, orderSeq` |
 | Customer | `business, customer` (unique pair), `labels, notes, internalNotes [{ by, text, at }], followUp { at, note, done }, assignedTo, lead, needsHuman, firstAt, lastInAt, lastOutAt, waitingSince, alertedAt, greetedAt, awayAt` |
 | Product | `business, name, description, price, inStock, image { url, publicId }, position` |
-| Order | `business, customer, number` (#1001…), `items [{ product, name, price, qty, image }], total, note, status, paid, paidAt` |
+| Order | `business, customer, number` (#1001…), `items [{ product, name, price, qty, image }], subtotal, discount, coupon, total, note, status, paid, paidAt, history [{ status, at }], review { rating, text, at }` |
+| BusinessSettings.coupons | `[{ code, kind (percent/flat), value, minTotal, maxUses, uses, expiresAt, active }]` |
+| Event | `group, title, description, location, startsAt, createdBy, rsvps [{ user, status }], cancelled, remindedAt` |
+| User (privacy) | `wallpapers { global, chats }, about, lastSeen, privacy { activity, seen, photo, about, groups }, lockedChats [chatId], lockCode` (bcrypt hash, never sent out) |
+| Group (extras) | `adminsOnly, inviteCode, approveJoins, joinRequests [{ user, at }], invites [{ user, by, at }]` |
 | Booking | `business, customer, service { id, name, minutes, price }, start, end, note, status (booked/cancelled/done), eventId, meetLink, remindedAt` |
 | Task | `group, text, assignee, due, done, doneAt, doneBy, message, createdBy` |
 | Report | `reporter, target, reason (spam/scam/abuse/other), details, status` |
@@ -577,9 +618,13 @@ All routes except sign up, sign in and sign out require the `jwt` cookie. The fr
 | GET | `/allusers` | – | My contacts (same as `GET /contacts`) |
 | GET | `/username-available/:username` | – | `{ available, error }` for the live username check (no auth needed) |
 | GET | `/me` | – | My profile |
-| PUT | `/update` | `{ fullName?, username? }` or `{ currentPassword, newPassword }` | Update name, username or password |
+| PUT | `/update` | `{ fullName?, username?, about? }` or `{ currentPassword, newPassword }` | Update name, username, about or password |
 | PUT | `/avatar` | multipart `avatar` (JPG/PNG/WebP, ≤ 2 MB) | Upload or replace my profile photo |
 | DELETE | `/avatar` | – | Remove my profile photo |
+| PUT | `/privacy` | `{ activity?, seen?, photo?, about?, groups? }` | Privacy settings (`photo` / `about`: everyone \| contacts \| nobody; `groups`: contacts \| approve) |
+| GET | `/presence/:id` | – | A contact's `{ online, lastSeen }` (empty when either side hides activity) |
+| POST | `/wallpaper/image` | multipart `image` (≤ 2 MB) | Upload a photo for a wallpaper → `{ url, publicId }` |
+| PUT | `/wallpaper` | `{ chatId?, wallpaper }` | Set my default (no `chatId`) or one chat's wallpaper; `wallpaper` = `{ kind: "preset", id, dim }`, `{ kind: "image", url, publicId, dim }` or `null` (reset) |
 
 ### Contacts — `/contacts`
 | Method | Path | Body | Description |
@@ -614,6 +659,13 @@ All routes except sign up, sign in and sign out require the `jwt` cookie. The fr
 | GET | `/:id/messages` | – | `{ messages, people }` (people = everyone who sent a message) |
 | POST | `/:id/messages` | JSON or multipart, same as direct messages | Send to the group |
 | PUT | `/:id/read` | – | Mark the group as read |
+| PUT | `/:id` | `{ adminsOnly?, approveJoins? }` | Only admins can send / approve people who use the invite link (admins) |
+| GET / POST / DELETE | `/:id/link` | – | Get (creates) / reset / turn off the invite link (admins) |
+| GET / POST | `/link/:code` | – | Preview the group behind a link / join it (or ask to join) |
+| GET | `/:id/requests` | – | People asking to join (admins) |
+| POST / DELETE | `/:id/requests/:userId` | – | Approve / decline (admins) |
+| GET | `/invites` | – | Groups I've been invited to (approval privacy) |
+| POST / DELETE | `/invites/:id` | – | Join / decline an invite |
 
 ### Communities — `/communities`
 | Method | Path | Body | Description |
@@ -673,14 +725,17 @@ Sending and forwarding only work to your contacts (or yourself). Edit, delete, r
 
 | Method | Path | Who | Description |
 |---|---|---|---|
-| GET | `/public/:username` | anyone | Business page: profile, open status, catalog, services, my relation |
+| GET | `/public/:username` | anyone | Business page: profile, open status, catalog, services, rating and recent reviews, my relation |
 | GET | `/public/:username/slots?service=&date=YYYY-MM-DD` | anyone | Free booking slots |
 | GET | `/me` | me | My business profile, businesses I work for, `isAdmin` |
 | PUT | `/profile` | me | Turn Business on/off, edit profile, hours, UPI ID |
 | PUT | `/cover` | me | Upload the business page cover photo (multipart field `cover`, max 2 MB); send no file to go back to the stock photo |
 | POST | `/verification` | me | Ask for the verified badge |
 | POST | `/connect/:bizId` | customer | Message a business without a request |
-| POST / GET | `/orders`, `/orders/mine` | customer | Place an order `{ business, items: [{ product, qty }], note }` / my orders |
+| POST / GET | `/orders`, `/orders/mine` | customer | Place an order `{ business, items: [{ product, qty }], note, coupon? }` / my orders |
+| POST | `/public/:username/coupon` | anyone | Check a discount code `{ code, subtotal }` → `{ code, discount, label }` |
+| GET | `/orders/:id/track` | customer or team | An order with its status timeline (`history`) for the tracking page |
+| POST | `/orders/:id/review` | customer | Rate a completed order `{ rating: 1-5, text? }` |
 | POST / GET | `/bookings`, `/bookings/mine` | customer | Book `{ business, serviceId, start, note }` / my bookings |
 | PUT | `/bookings/:id/cancel` | customer | Cancel my booking |
 | PUT | `/payments/:messageId/claim` | customer | "I've paid" on a payment card |
@@ -709,6 +764,14 @@ Sending and forwarding only work to your contacts (or yourself). Edit, delete, r
 | PUT | `/:id` | `{ text?, assignee?, due?, done? }` | Edit or tick off |
 | DELETE | `/:id` | – | Delete (the card shows "Deleted") |
 
+### Events — `/events`
+| Method | Path | Body | Description |
+|---|---|---|---|
+| GET | `/group/:groupId` | – | Upcoming events in a group |
+| POST | `/` | `{ groupId, title, startsAt, location?, description? }` | New event (posts an event card; the organiser is "going") |
+| PUT | `/:id/rsvp` | `{ status: going \| maybe \| no \| null }` | Answer (null clears it) |
+| DELETE | `/:id` | – | Cancel (organiser or admin) |
+
 ---
 
 ## Real-time events
@@ -717,7 +780,7 @@ The socket connects with `?userId=<id>`.
 
 | Event | Direction | Payload | Purpose |
 |---|---|---|---|
-| `getOnlineUsers` | server → all | `[userId]` | Online presence |
+| `getOnlineUsers` | server → each person | `[userId]` | Online presence, filtered per person (Activity status) |
 | `userUpdated` | server → contacts | user | Name, username or profile photo changed |
 | `contactRequest` | server → recipient | `{ _id, from }` | New contact request |
 | `contactRequestRemoved` | server → other person | `{ _id }` | Request declined or cancelled |
@@ -751,6 +814,9 @@ The socket connects with `?userId=<id>`.
 | `businessAlert` | server → business team | `{ business, customer, name, minutes }` | A customer has waited too long for a reply |
 | `businessTeam` | server → person | `{ business, removed? }` | Added to or removed from a business team |
 | `tasksUpdated` | server → group members | `{ groupId }` | A group's tasks changed |
+| `groupInvite` | server → invited person | `{ group }` | Invited to a group (approval privacy) |
+| `groupJoinRequest` | server → group admins | `{ group }` | Someone asked to join through the invite link |
+| `prefsUpdated` | server → me | `{ pinnedChats? , lockedChats?, hasLockCode? }` | Pinned or locked chats changed on another device |
 
 ---
 
@@ -868,7 +934,10 @@ CLOUDFLARE_API_TOKEN=
 NEXA_IMAGES_PER_DAY=15             # per person
 # Fallbacks: Puter FLUX (npm run puter:login fills this in), then SubNP's free API (no key)
 PUTER_AUTH_TOKEN=
-# Nexa's web search uses Groq's built-in browser_search (gpt-oss models): no extra key
+# Nexa's web search uses Groq's built-in browser_search (gpt-oss models): no extra key.
+# Asked to download a song, film or app, Nexa says it can't (copyright), searches, and links each official service
+# (Spotify, JioSaavn, Apple Music…) to the page it found. Links in replies must come from the search; known pirate
+# download sites are filtered out of links and sources (PIRATE_RE in ai.controller.js).
 
 # Push notifications (generate once: npx web-push generate-vapid-keys)
 VAPID_PUBLIC_KEY=

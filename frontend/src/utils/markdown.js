@@ -14,3 +14,17 @@ export const remarkHtmlBreaks = () => (tree) => {
   }
   walk(tree)
 }
+
+// A single newline inside a paragraph is a real line break (poems, addresses, short lines).
+// Markdown would join those lines into one, so split the text there.
+export const remarkLineBreaks = () => (tree) => {
+  const walk = (node) => {
+    if (!node.children || node.type === 'code' || node.type === 'inlineCode') return
+    node.children = node.children.flatMap((c) => {
+      if (c.type !== 'text' || !c.value.includes('\n')) return [c]
+      return c.value.split('\n').flatMap((part, i) => (i ? [{ type: 'break' }, { type: 'text', value: part }] : [{ type: 'text', value: part }]))
+    })
+    node.children.forEach(walk)
+  }
+  walk(tree)
+}

@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import axios from 'axios'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuArrowLeft, LuAtSign, LuCamera, LuKeyRound, LuLoaderCircle, LuLock, LuMail, LuTrash2, LuUser } from 'react-icons/lu'
+import { LuArrowLeft, LuAtSign, LuCamera, LuKeyRound, LuLoaderCircle, LuLock, LuMail, LuQuote, LuSlidersHorizontal, LuTrash2, LuUser } from 'react-icons/lu'
 import { useAuth } from '../context/AuthProvider'
 import { Alert, Button, Card, Input, Logo } from './ui'
 import usePageTitle from '../hooks/usePageTitle'
@@ -12,9 +12,14 @@ import Logout from '../home/leftpart/Logout'
 import NotificationSettings from './NotificationSettings'
 import AppearanceSettings from './AppearanceSettings'
 import UsernameShare from './UsernameShare'
+import PrivacySettings from './PrivacySettings'
+import HiddenChatsSettings from './HiddenChatsSettings'
+import AppLockSettings from './AppLockSettings'
 import { BlockedAccounts, BusinessCard } from '../business/AccountExtras'
 import { checkUsernameFree, normalizeUsername, USERNAME_RULES } from '../utils/contacts'
 import { initialsOf } from '../home/Avatar'
+import { ViewablePhoto } from './PhotoViewer'
+import PhotoEditor from './PhotoEditor'
 
 const TABS = [
   { id: 'profile', label: 'Profile', Icon: LuUser },
@@ -42,7 +47,7 @@ const Profile = () => {
   const colorIdx = (AuthUser?.fullName?.charCodeAt(0) || 0) % AVATAR_COLORS.length
 
   const { register: regProfile, handleSubmit: handleProfile, formState: { errors: profileErrors } } = useForm({
-    defaultValues: { fullName: AuthUser?.fullName || '', username: AuthUser?.username || '' }
+    defaultValues: { fullName: AuthUser?.fullName || '', username: AuthUser?.username || '', about: AuthUser?.about || '' }
   })
   const { register: regPass, handleSubmit: handlePass, formState: { errors: passErrors }, watch, reset: resetPass } = useForm()
   const newPass = watch('newPassword', '')
@@ -56,10 +61,16 @@ const Profile = () => {
     setAuthUser(user)
   }
 
-  const onPickPhoto = async (e) => {
+  // A new photo opens the editor first (crop, rotate, filters); the editor calls uploadPhoto
+  const [editSource, setEditSource] = useState(null) // File | url
+  const onPickPhoto = (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
+    if (!file.type.startsWith('image/')) { showMsg('error', 'Please choose an image'); return }
+    setEditSource(file)
+  }
+  const uploadPhoto = async (file) => {
     setPhotoBusy(true)
     try {
       const body = new FormData()
@@ -67,8 +78,6 @@ const Profile = () => {
       const res = await axios.put('/api/user/avatar', body, { withCredentials: true })
       saveUser(res.data.user)
       showMsg('success', 'Your profile photo has been updated.')
-    } catch (err) {
-      showMsg('error', err.response?.data?.error || err.message || 'Could not update your photo.')
     } finally {
       setPhotoBusy(false)
     }
@@ -96,7 +105,7 @@ const Profile = () => {
   const onUpdateProfile = async (data) => {
     setIsLoading(true)
     try {
-      const res = await axios.put('/api/user/update', { fullName: data.fullName, username: data.username }, { withCredentials: true })
+      const res = await axios.put('/api/user/update', { fullName: data.fullName, username: data.username, about: data.about }, { withCredentials: true })
       const updated = res.data.user
       localStorage.setItem('chatUser', JSON.stringify(updated))
       setAuthUser(updated)
@@ -140,7 +149,9 @@ const Profile = () => {
         <Card className="mt-8 flex flex-col gap-5 p-6 sm:flex-row sm:items-center">
           <div className="relative w-fit shrink-0">
             {AuthUser?.avatar?.url ? (
-              <img src={AuthUser.avatar.url} alt="Your profile photo" className="size-20 rounded-2xl object-cover shadow-md" />
+              <ViewablePhoto src={AuthUser.avatar.url} name={AuthUser.fullName} subtitle="Your profile photo" className="rounded-2xl!">
+                <img src={AuthUser.avatar.url} alt="Your profile photo" className="size-20 rounded-2xl object-cover shadow-md" />
+              </ViewablePhoto>
             ) : (
               <div className={`flex size-20 items-center justify-center rounded-2xl bg-linear-to-br ${AVATAR_COLORS[colorIdx]} text-2xl font-semibold text-white shadow-md`}>
                 {initials}
@@ -171,6 +182,11 @@ const Profile = () => {
             <Button variant="secondary" size="sm" leftIcon={LuCamera} disabled={photoBusy} onClick={() => photoInput.current?.click()}>
               {AuthUser?.avatar?.url ? 'Change photo' : 'Upload photo'}
             </Button>
+            {AuthUser?.avatar?.url && (
+              <Button variant="secondary" size="sm" leftIcon={LuSlidersHorizontal} disabled={photoBusy} onClick={() => setEditSource(AuthUser.avatar.url)}>
+                Edit photo
+              </Button>
+            )}
             {AuthUser?.avatar?.url && (
               <Button variant="ghost" size="sm" leftIcon={LuTrash2} disabled={photoBusy} onClick={removePhoto} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10">
                 Remove
@@ -238,6 +254,14 @@ const Profile = () => {
                           })}
                         />
                         <Input
+                          label="About"
+                          icon={LuQuote}
+                          placeholder="Available · Baker in Kochi"
+                          maxLength={140}
+                          hint="A short line on your profile (up to 140 characters)."
+                          {...regProfile('about')}
+                        />
+                        <Input
                           label="Email address"
                           type="email"
                           icon={LuMail}
@@ -282,7 +306,10 @@ const Profile = () => {
               </div>
             </Card>
             <Card className="overflow-hidden">
-              <BlockedAccounts />
+              <PrivacySettings />
+            </Card>
+            <Card className="overflow-hidden">
+              <HiddenChatsSettings />
             </Card>
           </div>
           <div className="flex flex-col gap-6">
@@ -295,12 +322,19 @@ const Profile = () => {
             <Card className="overflow-hidden">
               <NotificationSettings />
             </Card>
+            <Card className="overflow-hidden">
+              <AppLockSettings />
+            </Card>
+            <Card className="overflow-hidden">
+              <BlockedAccounts />
+            </Card>
 
             <Card className="overflow-hidden">
               <BusinessCard />
             </Card>
           </div>
         </div>
+        {editSource && <PhotoEditor source={editSource} title="Edit profile photo" onSave={uploadPhoto} onClose={() => setEditSource(null)} />}
       </main>
     </div>
   )

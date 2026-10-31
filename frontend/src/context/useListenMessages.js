@@ -60,7 +60,12 @@ const useListenMessages = () => {
     const handleChatTimer = ({ chatId, seconds }) => store().setChatTimer(chatId, seconds)
 
     // Pinned chats changed (maybe in another tab)
-    const handlePrefs = ({ pinnedChats }) => store().setPinnedChats(pinnedChats)
+    const handlePrefs = (prefs) => {
+      if (prefs.pinnedChats) store().setPinnedChats(prefs.pinnedChats)
+      if (prefs.lockedChats) store().setLockedPrefs(prefs)
+      if (prefs.wallpapers) store().setWallpapers(prefs.wallpapers)
+      if (prefs.hiddenChats) store().setHiddenPrefs(prefs)
+    }
 
     // Nexa wrote by itself (morning brief, meeting reminder): unread dot unless its chat is open
     const handleNexaMessage = () => {
@@ -83,7 +88,8 @@ const useListenMessages = () => {
     }
 
     const handleMessageEdited = (updated) => {
-      store().setMessages((prev) => prev.map((m) => (m._id === updated._id ? updated : m)))
+      // Keep the seen state we already know (seen indicators may be hidden)
+      store().setMessages((prev) => prev.map((m) => (m._id === updated._id ? { ...updated, seen: m.seen } : m)))
       loadConversations()
     }
 

@@ -3,13 +3,13 @@ import useConversation from '../../Zustand/UserConversation'
 import Avatar from '../Avatar'
 import { shortTime } from '../../utils/conversations'
 import { attachmentLabel } from '../../utils/attachments'
-import { LuFileText, LuImage, LuMic, LuPhone, LuPhoneMissed, LuPin, LuVideo } from 'react-icons/lu'
+import { LuFileText, LuImage, LuLock, LuMic, LuPhone, LuPhoneMissed, LuPin, LuVideo } from 'react-icons/lu'
 import { describeCall } from '../../utils/calls'
 import { BusinessBadge } from '../../business/BusinessInfo'
 import { LabelChip } from '../../business/CustomerPanel'
 
 // One row in the contact list.
-const User = ({ user, online, unread, preview, typing, myId, pinned = false, labels = [], lead = false, waiting = false }) => {
+const User = ({ user, online, unread, preview, typing, myId, pinned = false, labels = [], lead = false, waiting = false, locked = false }) => {
   const { selectedConversation, setSelectedConversation, clearUnread, setCatchUp, nexaId } = useConversation()
   const userId = user._id?.toString()
   const isSelected = selectedConversation?._id?.toString() === userId
@@ -60,7 +60,9 @@ const User = ({ user, online, unread, preview, typing, myId, pinned = false, lab
         </div>
         <div className="mt-0.5 flex items-center gap-2">
           <p className={`min-w-0 flex-1 truncate text-[13px] ${unread && !isSelected ? 'font-medium text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'}`}>
-            {typing ? (
+            {locked ? (
+              <span className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400"><LuLock className="size-3.5" /> Locked chat</span>
+            ) : typing ? (
               <span className="font-medium text-indigo-600 dark:text-indigo-400">{typing === 'Nexa' ? 'Nexa is thinking…' : 'typing…'}</span>
             ) : preview?.call ? (
               (() => {
@@ -92,7 +94,7 @@ const User = ({ user, online, unread, preview, typing, myId, pinned = false, lab
             )}
           </p>
           {waiting && !unread && <span className="size-2 shrink-0 rounded-full bg-amber-500" title="Waiting for your reply" aria-label="Waiting for your reply" />}
-          {unread > 0 && !isSelected && (
+          {unread > 0 && !isSelected && !locked && (
             <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[11px] font-semibold text-white">
               {unread > 99 ? '99+' : unread}
             </span>

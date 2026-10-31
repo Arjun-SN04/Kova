@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
-import { LuClock, LuDownload, LuIndianRupee, LuLoaderCircle, LuMessageSquare, LuPackage, LuShoppingBag, LuWallet } from 'react-icons/lu'
+import { Link } from 'react-router-dom'
+import { LuClock, LuDownload, LuStar, LuIndianRupee, LuLoaderCircle, LuMessageSquare, LuPackage, LuShoppingBag, LuWallet } from 'react-icons/lu'
 import Avatar from '../../home/Avatar'
 import Sheet from '../../home/groups/Sheet'
 import { ORDER_STATUSES, api, bizUrl, downloadCsv, errorOf, fillTemplate, formatDay, money, statusOf } from '../utils'
@@ -117,9 +118,15 @@ const Orders = ({ ws }) => {
                         <span className="absolute -bottom-1.5 -right-1.5 rounded-full ring-2 ring-white dark:ring-slate-900"><Avatar name={o.customer?.fullName} src={o.customer?.avatar?.url} size="xs" /></span>
                       </div>
                       <div className="ml-1 min-w-0">
-                        <p className="text-sm font-semibold"><span className="text-slate-400">#{o.number}</span> · {o.customer?.fullName || 'Customer'}</p>
+                        <p className="text-sm font-semibold"><Link to={`/order/${o._id}`} className="text-slate-400 hover:text-indigo-600 hover:underline" title="Open tracking page">#{o.number}</Link> · {o.customer?.fullName || 'Customer'}</p>
                         <p className="truncate text-[13px] text-slate-500 dark:text-slate-400">{o.items.map((i) => `${i.qty} × ${i.name}`).join(', ')}</p>
                         {o.note && <p className="truncate text-xs italic text-slate-400">“{o.note}”</p>}
+                        {(o.coupon || o.review) && (
+                          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs">
+                            {o.coupon && <span className="rounded bg-emerald-50 px-1.5 py-px font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">{o.coupon} · −{money(o.discount)}</span>}
+                            {o.review && <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400" title={o.review.text || undefined}><LuStar className="size-3 fill-current" />{o.review.rating}{o.review.text ? ` · “${o.review.text.slice(0, 40)}${o.review.text.length > 40 ? '…' : ''}”` : ''}</span>}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <p className="w-24 text-xs text-slate-500 dark:text-slate-400">{formatDay(o.createdAt)}</p>

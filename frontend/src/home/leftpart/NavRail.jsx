@@ -12,11 +12,12 @@ import useBusiness from '../../business/store'
 // Unread chats, missed calls since I last opened Calls, unread community messages
 export const useNavBadges = () => {
   const [AuthUser] = useAuth()
-  const { unreadCounts, calls, callsSeenAt, groups, statusFeed } = useConversation()
+  const { unreadCounts, calls, callsSeenAt, groups, statusFeed, lockedChats, hiddenChats } = useConversation()
   const communityGroups = new Set(groups.filter((g) => g.community).map((g) => String(g._id)))
   const total = (filter) => Object.entries(unreadCounts).filter(([id]) => filter(id)).reduce((n, [, c]) => n + c, 0)
   return {
-    chats: total(() => true),
+    // Locked chats don't count, so the badge doesn't give them away
+    chats: total((id) => !lockedChats.includes(id) && !hiddenChats.includes(id)),
     calls: calls.filter((c) =>
       String(c.callee?._id) === String(AuthUser?._id) && c.status === 'missed' && new Date(c.startedAt).getTime() > callsSeenAt).length,
     communities: total((id) => communityGroups.has(id)),

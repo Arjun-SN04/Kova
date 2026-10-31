@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
 import axios from 'axios'
 import { Link } from 'react-router-dom'
-import { LuCalendarCheck, LuCheck, LuCircleCheck, LuCopy, LuExternalLink, LuIndianRupee, LuMessageSquare, LuPackage, LuShoppingBag, LuSquare, LuSquareCheck, LuVideo } from 'react-icons/lu'
+import { LuCalendarCheck, LuCalendarPlus, LuCheck, LuMapPin, LuCircleCheck, LuCopy, LuExternalLink, LuIndianRupee, LuMessageSquare, LuPackage, LuShoppingBag, LuSquare, LuSquareCheck, LuVideo } from 'react-icons/lu'
 import { api, errorOf, formatWhen, money, statusOf, upiLink } from './utils'
+import { useAuth } from '../context/AuthProvider'
+import useConversation from '../Zustand/UserConversation'
 
 // Business cards inside a chat bubble: product, order, payment request, booking and group task.
 // The bubble's colours depend on who sent it, so cards use neutral surfaces with their own colours.
@@ -77,9 +79,17 @@ const OrderCard = ({ card, mine }) => {
         ))}
       </ul>
       {card.note && <p className="mx-3 mb-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">“{card.note}”</p>}
+      {card.discount > 0 && (
+        <p className="flex justify-between px-3 pb-2 text-[13px] text-emerald-700 dark:text-emerald-400"><span>Code {card.coupon}</span><span className="tabular-nums">−{money(card.discount)}</span></p>
+      )}
       <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2.5 dark:border-slate-800">
         <PaidChip paid={card.paid} />
         <p className="text-sm font-semibold tabular-nums">Total {money(card.total)}</p>
+      </div>
+      <div className="flex items-center gap-2 border-t border-slate-100 px-3 py-2 dark:border-slate-800">
+        <Link to={`/order/${card.orderId}`} className={secondary}>Track order</Link>
+        {mine && card.status === 'done' && !card.rated && <Link to={`/order/${card.orderId}#review`} className={primary}>Rate your order</Link>}
+        {card.rated && <span className="ml-auto text-[11px] text-slate-400">Rated ★</span>}
       </div>
     </div>
   )
@@ -204,6 +214,72 @@ const TaskCard = ({ card }) => {
   )
 }
 
+// ── Group event with RSVP ──
+const icsDate = (d) => new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+const downloadIcs = (card) => {
+  const start = new Date(card.startsAt)
+  const end = new Date(start.getTime() + 60 * 60_000)
+  const esc = (t) => String(t || '').replace(/[\\,;]/g, (m) => `\\${m}`).replace(/\n/g, '\\n')
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kova//Events//EN', 'BEGIN:VEVENT', `UID:${card.eventId}@kova`, `DTSTAMP:${icsDate(new Date())}`, `DTSTART:${icsDate(start)}`, `DTEND:${icsDate(end)}`, `SUMMARY:${esc(card.title)}`, card.location && `LOCATION:${esc(card.location)}`, card.description && `DESCRIPTION:${esc(card.description)}`, 'END:VEVENT', 'END:VCALENDAR'].filter(Boolean).join('\r\n')
+  const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }))
+  const a = Object.assign(document.createElement('a'), { href: url, download: `${card.title.replace(/[^\w ]+/g, '').trim() || 'event'}.ics` })
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+const RSVP = [['going', 'Going'], ['maybe', 'Maybe'], ['no', 'Can’t go']]
+
+const EventCard = ({ card }) => {
+  const [AuthUser] = useAuth()
+  const group = useConversation((s) => s.selectedConversation)
+  const { busy, error, run } = useAction()
+  const myId = String(AuthUser?._id)
+  const mine = card.rsvps?.[myId] || null
+  const start = new Date(card.startsAt)
+  const [now] = useState(() => Date.now())
+  const past = start.getTime() < now - 3 * 3600_000
+  const canCancel = !card.cancelled && !past && (card.createdBy === myId || group?.admins?.some((a) => String(a._id ?? a) === myId))
+  const names = card.goingNames || []
+  const going = card.counts?.going || 0
+  const who = going ? (going <= names.length && names.length <= 3 ? names.join(', ') : `${names.slice(0, 2).join(', ')} and ${going - Math.min(2, names.length)} more`) : 'Nobody yet'
+  return (
+    <div className={`${shell} w-80`}>
+      <div className="flex gap-3 p-3">
+        <div className={`flex w-12 shrink-0 flex-col items-center justify-center rounded-lg py-1.5 ${card.cancelled ? 'bg-slate-100 text-slate-400 dark:bg-slate-800' : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200'}`}>
+          <span className="text-[10px] font-semibold uppercase">{start.toLocaleDateString([], { month: 'short' })}</span>
+          <span className="text-lg font-semibold leading-tight">{start.getDate()}</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{card.cancelled ? 'Event · cancelled' : past ? 'Event · ended' : 'Event'}</p>
+          <p className={`text-sm font-semibold leading-snug ${card.cancelled ? 'text-slate-400 line-through' : ''}`}>{card.title}</p>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{start.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</p>
+          {card.location && <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-slate-500 dark:text-slate-400"><LuMapPin className="size-3 shrink-0" />{card.location}</p>}
+        </div>
+      </div>
+      {card.description && <p className="-mt-1 px-3 pb-2 text-[13px] text-slate-600 dark:text-slate-300">{card.description}</p>}
+      <div className="border-t border-slate-100 px-3 py-2.5 dark:border-slate-800">
+        <p className="text-xs text-slate-500 dark:text-slate-400"><span className="font-medium text-slate-700 dark:text-slate-200">{going} going</span>{card.counts?.maybe ? ` · ${card.counts.maybe} maybe` : ''}{going ? ` · ${who}` : ''}</p>
+        {!card.cancelled && !past && (
+          <div className="mt-2 grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
+            {RSVP.map(([id, label]) => (
+              <button key={id} disabled={busy} onClick={() => run(() => axios.put(`/api/events/${card.eventId}/rsvp`, { status: mine === id ? null : id }, api))} aria-pressed={mine === id}
+                className={`h-7 rounded-md text-xs font-medium transition disabled:opacity-60 ${mine === id ? 'bg-white text-indigo-700 shadow-sm dark:bg-slate-950 dark:text-indigo-300' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {!card.cancelled && (
+          <div className="mt-2 flex items-center gap-1">
+            <button onClick={() => downloadIcs(card)} className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"><LuCalendarPlus className="size-3.5" /> Add to calendar</button>
+            {canCancel && <button disabled={busy} onClick={() => window.confirm(`Cancel "${card.title}"? Everyone in the group will see it's cancelled.`) && run(() => axios.delete(`/api/events/${card.eventId}`, api))} className="ml-auto h-7 rounded-md px-1.5 text-xs font-medium text-slate-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10">Cancel event</button>}
+          </div>
+        )}
+        {error && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
+      </div>
+    </div>
+  )
+}
+
 // `mine`: I sent this message (for business cards, that means I'm the business side)
 const ChatCard = ({ message, mine }) => {
   const card = message.card
@@ -213,6 +289,7 @@ const ChatCard = ({ message, mine }) => {
   if (card.kind === 'payment') return <PaymentCard message={message} card={card} mine={mine} />
   if (card.kind === 'booking') return <BookingCard card={card} mine={mine} />
   if (card.kind === 'task') return <TaskCard card={card} />
+  if (card.kind === 'event') return <EventCard card={card} />
   return null
 }
 

@@ -1,4 +1,5 @@
-import mongoose from "mongoose";
+import mongoose from "mongoose"
+import { currentViewer } from "../utils/viewer.js";
 
 const userSchema = mongoose.Schema({
     fullName:{
@@ -40,6 +41,16 @@ const userSchema = mongoose.Schema({
     nexaDisappearAfter:{ type:Number, default:86400 },
     // Chats pinned to the top of my list (user or group ids, in pin order)
     pinnedChats:{ type:[String], default:[] },
+    // Chat wallpapers: { global: spec | null, chats: { [chatId]: spec } }
+    // spec = { kind: "preset", id, dim } or { kind: "image", url, publicId, dim }
+    wallpapers:{ type:mongoose.Schema.Types.Mixed, default:() => ({ global:null, chats:{} }) },
+    // Locked chats: hidden from the list until the secret code is entered
+    lockedChats:{ type:[String], default:[] },
+    lockCode:{ type:String, default:null },
+    // Hidden chats: left out of the list until the secret word is typed in search.
+    // Only a SHA-256 of "userId:word" is kept (the browser compares what you type).
+    hiddenChats:{ type:[String], default:[] },
+    hiddenWordHash:{ type:String, default:null },
     // Messages I starred (saved), newest last
     starred:[{ type:mongoose.Schema.Types.ObjectId, ref:"Message" }],
     // People I blocked: we can't be contacts or message each other
@@ -66,6 +77,19 @@ const userSchema = mongoose.Schema({
         },
         default:null
     },
+    // When they last closed Kova (shown as "Active 5 min ago" if both allow it)
+    lastSeen:{ type:Date, default:null },
+    // Short line about me, shown on my profile
+    about:{ type:String, default:"", maxlength:140 },
+    // Privacy. activity / seen work both ways; photo / about: who can see them;
+    // groups: who can add me to a group without asking (approve = I get an invite)
+    privacy:{
+        activity:{ type:Boolean, default:true },
+        seen:{ type:Boolean, default:true },
+        photo:{ type:String, enum:["everyone","contacts","nobody"], default:"everyone" },
+        about:{ type:String, enum:["everyone","contacts","nobody"], default:"everyone" },
+        groups:{ type:String, enum:["contacts","approve"], default:"contacts" },
+    },
     // Profile photo stored on Cloudinary (null = show initials)
     avatar:{
         type:{ url:String, publicId:String },
@@ -73,6 +97,44 @@ const userSchema = mongoose.Schema({
     }
 },{timestamps:true}) 
 
+
+// ── Photo / about privacy ─────────────────────────────────────
+// When a query asks for avatar or about, also load the owner's privacy settings
+// (and whether it's a business) so they can be applied below.
+userSchema.pre(/^find/, function () {
+    const proj = this.projection()
+    if (!proj) return
+    const keys = Object.keys(proj)
+    const inclusive = keys.some((k) => proj[k] === 1 || proj[k] === true)
+    if (!inclusive || !(("avatar" in proj) || ("about" in proj))) return
+    const add = {}
+    if (!keys.some((k) => k === "privacy" || k.startsWith("privacy."))) add.privacy = 1
+    if (!keys.some((k) => k === "business" || k.startsWith("business."))) add["business.enabled"] = 1
+    if (Object.keys(add).length) this.select(add)
+})
+
+// Hide the photo / about from people who aren't allowed to see them.
+// Business logos are always public. Privacy settings are only shown to their owner.
+const canSee = (setting, ownerId, viewer) =>
+    setting === "nobody" ? false : setting === "contacts" ? !!viewer?.contacts?.has(ownerId) : true
+userSchema.set("toJSON", {
+    transform(doc, ret) {
+        delete ret.lockCode
+        const viewer = currentViewer()
+        const id = String(ret._id)
+        if (viewer?.id === id) return ret
+        const p = ret.privacy || {}
+        if (!ret.business?.enabled && !canSee(p.photo || "everyone", id, viewer)) ret.avatar = null
+        if (ret.about !== undefined && !canSee(p.about || "everyone", id, viewer)) ret.about = ""
+        delete ret.privacy
+        delete ret.lastSeen
+        delete ret.lockedChats
+        delete ret.hiddenChats
+        delete ret.hiddenWordHash
+        delete ret.wallpapers
+        return ret
+    },
+})
 
 const User = mongoose.model("User",userSchema)
 

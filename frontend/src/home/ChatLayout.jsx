@@ -14,6 +14,10 @@ import { readGoogleResult } from '../utils/google'
 import ReminderToasts from './ReminderToasts'
 import { loadStatusFeed } from '../utils/status'
 import useBusinessSocket from '../business/useBusinessSocket'
+import LockDialogHost from './leftpart/LockDialogHost'
+import WallpaperPickerHost from './WallpaperPickerHost'
+import MiniPlayer from './MiniPlayer'
+import { HideChatsHost } from './leftpart/HiddenChats'
 
 // Includes the 64px section rail
 const MIN_WIDTH = 360
@@ -35,7 +39,7 @@ const readSavedWidth = () => {
 
 const ChatLayout = () => {
   useThemeClass()
-  const { selectedConversation, unreadCounts, clearUnread } = useConversation()
+  const { selectedConversation, unreadCounts, clearUnread, lockedChats, hiddenChats } = useConversation()
 
   // Listen for socket events for the whole chat screen, so unread badges
   // update even when no conversation is open.
@@ -51,7 +55,7 @@ const ChatLayout = () => {
     loadStatusFeed()
     // Pinned chats + starred messages
     axios.get('/api/message/prefs', { withCredentials: true })
-      .then((res) => { useConversation.getState().setPinnedChats(res.data.pinnedChats); useConversation.getState().setStarredIds(res.data.starred) })
+      .then((res) => { const s = useConversation.getState(); s.setPinnedChats(res.data.pinnedChats); s.setStarredIds(res.data.starred); s.setLockedPrefs(res.data); s.setHiddenPrefs(res.data); if (res.data.wallpapers) s.setWallpapers(res.data.wallpapers) })
       .catch(() => {})
     // Back from connecting Google: open Nexa (it shows the result)
     if (readGoogleResult()) useConversation.getState().setSelectedConversation(AI_CHAT)
@@ -71,7 +75,7 @@ const ChatLayout = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openId, openIsGroup, clearUnread])
 
-  const totalUnread = Object.values(unreadCounts).reduce((sum, n) => sum + n, 0)
+  const totalUnread = Object.entries(unreadCounts).filter(([id]) => !lockedChats.includes(id) && !hiddenChats.includes(id)).reduce((sum, [, n]) => sum + n, 0)
   const title = selectedConversation?.fullName || 'Chats'
   usePageTitle(totalUnread ? `(${totalUnread}) ${title}` : title)
 
@@ -100,7 +104,12 @@ const ChatLayout = () => {
   return (
     <div>
       <ReminderToasts />
-      <div className="flex h-dvh overflow-hidden bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <LockDialogHost />
+      <HideChatsHost />
+      <WallpaperPickerHost />
+      <div className="flex h-dvh flex-col overflow-hidden bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <MiniPlayer />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <aside
           className={`${selectedConversation ? 'hidden md:flex' : 'flex'} w-full shrink-0 md:w-(--sidebar-w)`}
           style={{ '--sidebar-w': `${width}px` }}
@@ -124,6 +133,7 @@ const ChatLayout = () => {
         <main className={`${selectedConversation ? 'flex' : 'hidden md:flex'} min-w-0 flex-1`}>
           <Right />
         </main>
+      </div>
       </div>
     </div>
   )

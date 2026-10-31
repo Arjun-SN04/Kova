@@ -7,8 +7,8 @@ export const useTheme = () => useContext(ThemeContext)
 // Colour themes. Each one swaps the app's accent colour (buttons, links,
 // selected chats, your message bubbles); the palettes live in index.css.
 export const ACCENTS = [
-  { id: 'iris', name: 'Iris', swatch: '#6d28d9' },
   { id: 'ocean', name: 'Ocean', swatch: '#2563eb' },
+  { id: 'iris', name: 'Iris', swatch: '#6d28d9' },
   { id: 'lagoon', name: 'Lagoon', swatch: '#0d9488' },
   { id: 'forest', name: 'Forest', swatch: '#059669' },
   { id: 'rose', name: 'Rose', swatch: '#e11d48' },
@@ -32,7 +32,7 @@ const systemDark = () => { try { return window.matchMedia('(prefers-color-scheme
 const ThemeProvider = ({ children }) => {
   // Dark by default; light only if the visitor chose it
   const [mode, setModeState] = useState(() => read('chatTheme', 'dark', MODES.map((m) => m.id)))
-  const [accent, setAccentState] = useState(() => read('chatAccent', 'iris', ACCENTS.map((a) => a.id)))
+  const [accent, setAccentState] = useState(() => read('chatAccent', 'ocean', ACCENTS.map((a) => a.id)))
   const [osDark, setOsDark] = useState(systemDark)
 
   // Follow the device setting while "System" is picked
@@ -44,9 +44,18 @@ const ThemeProvider = ({ children }) => {
     return () => mq.removeEventListener('change', onChange)
   }, [mode])
 
-  // The accent applies to every page, including ones that stay light
+  // The accent applies to every page, including ones that stay light.
+  // The browser tab icon and the mobile address-bar colour follow it too.
   useEffect(() => {
-    document.documentElement.dataset.accent = accent
+    const root = document.documentElement
+    root.dataset.accent = accent
+    const css = getComputedStyle(root)
+    const light = css.getPropertyValue('--color-indigo-500').trim() || '#8b5cf6'
+    const deep = css.getPropertyValue('--color-indigo-600').trim() || '#6d28d9'
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="g" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="${light}"/><stop offset="1" stop-color="${deep}"/></linearGradient></defs><rect width="32" height="32" rx="9" fill="url(#g)"/><path d="M10.5 8.5h11a3.5 3.5 0 0 1 3.5 3.5v6a3.5 3.5 0 0 1-3.5 3.5H16l-4.5 3.5v-3.5h-1A3.5 3.5 0 0 1 7 18v-6a3.5 3.5 0 0 1 3.5-3.5z" fill="#fff"/><circle cx="12.5" cy="15" r="1.4" fill="${deep}"/><circle cx="16" cy="15" r="1.4" fill="${deep}"/><circle cx="19.5" cy="15" r="1.4" fill="${deep}"/></svg>`
+    const icon = document.querySelector('link[rel="icon"]')
+    if (icon) icon.href = `data:image/svg+xml,${encodeURIComponent(svg)}`
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', deep)
   }, [accent])
 
   const dark = mode === 'system' ? osDark : mode === 'dark'

@@ -1,13 +1,16 @@
 import { Conversation } from "../models/conversation.model.js"
 import { Message } from "../models/message.model.js"
 import { getReceiverSocketId, io } from "../socket/socket.js"
-import { uploadToCloudinary, deleteFromCloudinary } from "../config/cloudinary.js"
+import { uploadToCloudinary, deleteFromCloudinary, fileDownloadUrl } from "../config/cloudinary.js"
+import { canSeeMessage } from "../utils/chatAccess.js"
 import User from "../models/user.model.js"
 import { Group } from "../models/group.model.js"
 import { emitToUsers } from "../utils/notify.js"
 import { answerDirectMention } from "../utils/nexaGroup.js"
 import { previewOf, sendPush } from "../utils/push.js"
 import { clearWaitingFor, onDirectMessage } from "../utils/business.js"
+import { getNexaBot } from "../utils/nexaBot.js"
+import { maskSeen, seenShared } from "../utils/privacy.js"
 
 const zoneHeader = (req) => { try { const tz = req.headers["x-time-zone"]; new Intl.DateTimeFormat("en-US", { timeZone: tz }); return tz || "UTC" } catch { return "UTC" } }
 
@@ -25,6 +28,10 @@ export const releaseAttachments = async (attachments = []) => {
 
 const MAX_BULK = 50
 
+// Messages someone deleted "for me" stay out of their view
+export const visibleTo = (messages, userId) =>
+  messages.filter((m) => !m.hiddenFor?.some((id) => String(id) === String(userId)))
+
 // Tell everyone who can see this message about a change (except `except`):
 // the group's members, or the other person in a direct chat.
 export const notifyAudience = async (message, event, data, except) => {
@@ -39,6 +46,23 @@ export const notifyAudience = async (message, event, data, except) => {
 }
 
 const isSelf = (a, b) => String(a) === String(b)
+
+// Who can delete a message: whoever sent it. Nexa's answers can also be deleted by the people
+// in that chat (one-to-one), or in a group by the person who asked or a group admin.
+const canDelete = async (userId, message) => {
+  if (isSelf(message.senderId, userId)) return true
+  const bot = await getNexaBot()
+  if (!isSelf(message.senderId, bot._id)) return false
+  if (message.botChat?.some((id) => isSelf(id, userId))) return true
+  if (message.groupId) {
+    const group = await Group.findById(message.groupId).select("admins members")
+    if (!group?.members.some((m) => isSelf(m, userId))) return false
+    if (group.admins.some((a) => isSelf(a, userId))) return true
+    const asked = message.replyTo ? await Message.findById(message.replyTo).select("senderId") : null
+    return !!asked && isSelf(asked.senderId, userId)
+  }
+  return false
+}
 
 // You can message yourself and your contacts, nobody else
 const canMessage = (me, otherId) =>
@@ -104,7 +128,7 @@ export const sendMessage = async (req, res) => {
     }
 
     res.status(201).json(newMessage)
-    if (!self) sendPush([receiverId], { title: req.user.fullName, body: previewOf(newMessage), tag: `chat-${senderId}` }).catch(() => {})
+    if (!self) sendPush([receiverId], { title: req.user.fullName, body: previewOf(newMessage), tag: `chat-${senderId}` }, { chatId: senderId }).catch(() => {})
 
     // Business chats: greeting / away messages, Nexa auto-reply, team inboxes
     if (!self) onDirectMessage(newMessage).catch((err) => console.log("business hook error:", err.message))
@@ -124,7 +148,10 @@ export const getMessage = async (req, res) => {
     const senderId = req.user._id
     const conversation = await findConversation(senderId, chatUser).populate("messages")
     if (!conversation) return res.status(200).json([])
-    res.status(200).json(conversation.messages)
+    // Seen indicators off on either side: my messages never show as seen
+    const shared = await seenShared(senderId, chatUser)
+    const visible = visibleTo(conversation.messages, senderId)
+    res.status(200).json(shared ? visible : maskSeen(visible, senderId))
   } catch (error) {
     console.log("getMessage error:", error)
     res.status(500).json({ error: "Internal server error" })
@@ -137,7 +164,7 @@ export const deleteMessage = async (req, res) => {
     const userId = req.user._id
     const message = await Message.findById(messageId)
     if (!message) return res.status(404).json({ error: "Message not found" })
-    if (message.senderId.toString() !== userId.toString())
+    if (!(await canDelete(userId, message)))
       return res.status(403).json({ error: "Not authorized to delete this message" })
 
     // Remove from conversation
@@ -192,6 +219,20 @@ export const deleteConversation = async (req, res) => {
     const conversation = await findConversation(userId, otherUserId)
     if (!conversation) return res.status(404).json({ error: "Conversation not found" })
 
+    // "Clear for me": hide every message from my view only. Messages the other person
+    // already cleared for themselves are removed for good (and their files freed).
+    if (req.query.for === "me" && !isSelf(userId, otherUserId)) {
+      await Message.updateMany({ _id: { $in: conversation.messages } }, { $addToSet: { hiddenFor: userId } })
+      const gone = await Message.find({ _id: { $in: conversation.messages }, hiddenFor: { $all: [userId, otherUserId] } }).select("attachment")
+      if (gone.length) {
+        const goneIds = gone.map((m) => m._id)
+        await Conversation.updateOne({ _id: conversation._id }, { $pull: { messages: { $in: goneIds } } })
+        await Message.deleteMany({ _id: { $in: goneIds } })
+        await releaseAttachments(gone.map((m) => m.attachment))
+      }
+      return res.status(200).json({ message: "Chat cleared for you" })
+    }
+
     const withFiles = await Message.find({ _id: { $in: conversation.messages }, attachment: { $ne: null } }).select("attachment")
     await Message.deleteMany({ _id: { $in: conversation.messages } })
     await releaseAttachments(withFiles.map((m) => m.attachment))
@@ -221,7 +262,7 @@ export const markSeen = async (req, res) => {
       { $set: { seen: true } }
     )
 
-    if (result.modifiedCount > 0) {
+    if (result.modifiedCount > 0 && await seenShared(userId, otherUserId)) {
       const senderSocketId = getReceiverSocketId(otherUserId)
       if (senderSocketId) io.to(senderSocketId).emit("messagesSeen", { by: userId.toString() })
     }
@@ -239,14 +280,15 @@ export const getConversations = async (req, res) => {
     const userId = req.user._id
 
     const conversations = await Conversation.find({ members: userId }).select("members messages")
-    const lastIds = conversations.map((c) => c.messages[c.messages.length - 1]).filter(Boolean)
-    const lastMessages = await Message.find({ _id: { $in: lastIds } })
+    // The newest message I haven't deleted for myself (look back over the last few)
+    const tailIds = conversations.flatMap((c) => c.messages.slice(-25))
+    const tail = await Message.find({ _id: { $in: tailIds }, hiddenFor: { $ne: userId } })
       .select("message senderId receiverId createdAt attachment.kind attachment.name call")
-    const lastById = new Map(lastMessages.map((m) => [m._id.toString(), m]))
+    const lastById = new Map(tail.map((m) => [m._id.toString(), m]))
 
     // Only messages explicitly marked unseen count (older messages have no flag)
     const unread = await Message.aggregate([
-      { $match: { receiverId: userId, senderId: { $ne: userId }, seen: false } },
+      { $match: { receiverId: userId, senderId: { $ne: userId }, seen: false, hiddenFor: { $ne: userId } } },
       { $group: { _id: "$senderId", count: { $sum: 1 } } },
     ])
     const unreadBySender = new Map(unread.map((u) => [u._id.toString(), u.count]))
@@ -254,7 +296,7 @@ export const getConversations = async (req, res) => {
     const summary = conversations.map((c) => {
       // A self chat has no "other" member: it belongs to me
       const otherId = (c.members.find((m) => m.toString() !== userId.toString()) || c.members[0])?.toString()
-      const lastId = c.messages[c.messages.length - 1]?.toString()
+      const lastId = [...c.messages].reverse().slice(0, 25).map(String).find((id) => lastById.has(id))
       return {
         userId: otherId,
         lastMessage: lastId ? lastById.get(lastId) || null : null,
@@ -276,8 +318,10 @@ export const deleteMessages = async (req, res) => {
     const ids = Array.isArray(req.body.ids) ? req.body.ids.slice(0, MAX_BULK) : []
     if (!ids.length) return res.status(400).json({ error: "No messages selected" })
 
-    // Only messages I sent can be deleted
-    const mine = await Message.find({ _id: { $in: ids }, senderId: userId })
+    // Messages I sent, plus Nexa answers I'm allowed to remove
+    const found = await Message.find({ _id: { $in: ids } })
+    const mine = []
+    for (const m of found) if (await canDelete(userId, m)) mine.push(m)
     if (!mine.length) return res.status(403).json({ error: "You can only delete your own messages" })
     const mineIds = mine.map((m) => m._id)
 
@@ -291,6 +335,41 @@ export const deleteMessages = async (req, res) => {
     res.status(200).json({ deleted: mineIds.map(String) })
   } catch (error) {
     console.log("deleteMessages error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// "Delete for me": hide messages from my own view only. Once everyone in the chat
+// has deleted a message for themselves, it's removed for good (and its file freed).
+export const deleteForMe = async (req, res) => {
+  try {
+    const userId = req.user._id
+    const ids = Array.isArray(req.body.ids) ? req.body.ids.slice(0, MAX_BULK) : []
+    if (!ids.length) return res.status(400).json({ error: "No messages selected" })
+    const found = await Message.find({ _id: { $in: ids } })
+    const visible = []
+    for (const m of found) if (await canSeeMessage(userId, m)) visible.push(m)
+    if (!visible.length) return res.status(404).json({ error: "Messages not found" })
+
+    await Message.updateMany({ _id: { $in: visible.map((m) => m._id) } }, { $addToSet: { hiddenFor: userId } })
+
+    // Who still sees each message: both people in a direct chat, every member in a group
+    const groupIds = [...new Set(visible.filter((m) => m.groupId).map((m) => String(m.groupId)))]
+    const groups = new Map((await Group.find({ _id: { $in: groupIds } }).select("members")).map((g) => [String(g._id), g.members.map(String)]))
+    const gone = visible.filter((m) => {
+      const hidden = new Set([...(m.hiddenFor || []).map(String), String(userId)])
+      const audience = m.groupId ? groups.get(String(m.groupId)) || [] : [m.senderId, m.receiverId].filter(Boolean).map(String)
+      return audience.length > 0 && audience.every((id) => hidden.has(id))
+    })
+    if (gone.length) {
+      const goneIds = gone.map((m) => m._id)
+      await Conversation.updateMany({ messages: { $in: goneIds } }, { $pull: { messages: { $in: goneIds } } })
+      await Message.deleteMany({ _id: { $in: goneIds } })
+      await releaseAttachments(gone.map((m) => m.attachment))
+    }
+    res.status(200).json({ hidden: visible.map((m) => String(m._id)), removed: gone.map((m) => String(m._id)) })
+  } catch (error) {
+    console.log("deleteForMe error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 }
@@ -318,7 +397,7 @@ export const forwardMessages = async (req, res) => {
     const receivers = await User.find({ _id: { $in: allowed } }).select("_id")
     // Groups I'm in (announcement groups only if I'm an admin there)
     const groups = (await Group.find({ _id: { $in: groupIds }, members: userId }))
-      .filter((g) => !g.announcement || g.admins.some((a) => a.equals(userId)))
+      .filter((g) => !(g.announcement || g.adminsOnly) || g.admins.some((a) => a.equals(userId)))
     if (!receivers.length && !groups.length) return res.status(403).json({ error: "You can only forward to your contacts and groups" })
     const created = []
 
@@ -402,6 +481,21 @@ export const reactToMessage = async (req, res) => {
     res.status(200).json({ messageId, reactions: message.reactions })
   } catch (error) {
     console.log("reactToMessage error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// Open a file from a chat (PDF, document…): checks I can see the message, then sends me
+// to a signed, short-lived download link
+export const openFile = async (req, res) => {
+  try {
+    const message = await Message.findById(req.params.messageId).select("attachment senderId receiverId groupId botChat")
+    if (!message?.attachment || !(await canSeeMessage(req.user._id, message))) return res.status(404).json({ error: "File not found" })
+    const url = fileDownloadUrl(message.attachment, 10)
+    if (!url) return res.status(404).json({ error: "File not found" })
+    res.redirect(302, url)
+  } catch (error) {
+    console.log("openFile error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 }

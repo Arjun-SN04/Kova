@@ -168,7 +168,7 @@ const Chat = ({ ws, customer, onBack, showDetails, onToggleDetails }) => {
       <div ref={scrollRef} className="chat-bg min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-4 sm:px-6">
         {messages === null ? <div className="flex h-full items-center justify-center"><LuLoaderCircle className="size-5 animate-spin text-slate-400" /></div>
           : messages.length === 0 ? <p className="py-10 text-center text-sm text-slate-500">No messages yet. Say hello!</p>
-          : messages.map((m) => <Bubble key={m._id} m={m} fromBusiness={String(m.senderId) === String(ws.biz)} staffName={staffName(m)} />)}
+            : messages.map((m) => <Bubble key={m._id} m={m} fromBusiness={String(m.senderId) === String(ws.biz)} staffName={staffName(m)} />)}
       </div>
 
       <div className="relative shrink-0 border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950">
@@ -243,7 +243,7 @@ const Inbox = ({ ws, customerId }) => {
         <div className="min-h-0 flex-1 overflow-y-auto">
           {list === null ? <div className="flex justify-center py-10"><LuLoaderCircle className="size-5 animate-spin text-slate-400" /></div>
             : shown.length === 0 ? <Empty icon={LuInbox} title={list.length ? 'No chats match' : 'No customers yet'} description={list.length ? 'Try another filter.' : 'Share your business link so customers can message you. Their chats appear here for your whole team.'} />
-            : shown.map((c) => <Row key={c.user._id} c={c} active={c === active} labels={labelsOf(c)} team={ws.team} bizId={ws.biz} onOpen={() => ws.go({ customer: c.user._id })} />)}
+              : shown.map((c) => <Row key={c.user._id} c={c} active={c === active} labels={labelsOf(c)} team={ws.team} bizId={ws.biz} onOpen={() => ws.go({ customer: c.user._id })} />)}
         </div>
       </div>
 

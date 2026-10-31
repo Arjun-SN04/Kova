@@ -5,7 +5,7 @@ import { LuTrash2 } from 'react-icons/lu'
 
 // Reusable "are you sure?" dialog. `onConfirm` may be async; the button shows
 // a busy state until it finishes. Enter confirms, Esc cancels.
-const ConfirmDialog = ({ open, onClose, onConfirm, title, description, confirmLabel = 'Delete', busyLabel = 'Deleting…', icon: Icon = LuTrash2 }) => {
+const ConfirmDialog = ({ open, onClose, onConfirm, title, description, confirmLabel = 'Delete', busyLabel = 'Deleting…', icon: Icon = LuTrash2, layer = 'z-50' }) => {
   const [busy, setBusy] = useState(false)
 
   const confirm = async () => {
@@ -27,7 +27,7 @@ const ConfirmDialog = ({ open, onClose, onConfirm, title, description, confirmLa
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm"
+          className={`fixed inset-0 ${layer} flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
