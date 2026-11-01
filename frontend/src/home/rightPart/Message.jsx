@@ -28,7 +28,10 @@ const botMd = {
   ol: (props) => <ol className="my-1 list-decimal space-y-0.5 pl-4 first:mt-0 last:mb-0" {...props} />,
   strong: (props) => <strong className="font-semibold" {...props} />,
   blockquote: (props) => <blockquote className="my-1 border-l-2 border-violet-300 pl-2 dark:border-violet-500/50" {...props} />,
-  a: (props) => <a className="underline underline-offset-2" target="_blank" rel="noreferrer" {...props} />,
+  a: (props) => <a className="break-all underline underline-offset-2" target="_blank" rel="noreferrer" {...props} />,
+  // Wide code and tables scroll inside the bubble instead of widening the chat
+  pre: (props) => <pre className="my-1 max-w-full overflow-x-auto rounded-lg bg-black/20 p-2 text-[12.5px]" {...props} />,
+  table: (props) => <div className="my-1 max-w-full overflow-x-auto"><table className="text-[13px]" {...props} /></div>,
 }
 import { loadConversations } from '../../utils/conversations'
 import { useAuth } from '../../context/AuthProvider'
@@ -182,11 +185,13 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
 
   const onBubbleClick = () => {
     if (selectionMode) toggleSelected(id)
-    else if (!canHover()) setShowActions((v) => !v)
+    else if (!canHover()) { if (rowRef.current) placeFrom(rowRef.current); setShowActions((v) => !v) }
   }
 
   // Photos, videos and GIFs get a tighter frame around them; stickers have no bubble
   const media = ['image', 'video', 'gif'].includes(message.attachment?.kind) || !!message.location
+  // Photos and videos set the bubble width; a caption wraps under them instead of stretching it
+  const framed = ['image', 'video'].includes(message.attachment?.kind)
   const sticker = message.attachment?.kind === 'sticker'
   const savable = ['sticker', 'gif'].includes(message.attachment?.kind) && !String(id).startsWith('temp-')
 
@@ -211,7 +216,10 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
   // Hover bar: React, Reply and a More menu for everything else
   const actions = !selectionMode && (
     <div
-      className={`relative mb-5 flex shrink-0 items-center rounded-lg bg-white p-0.5 shadow-sm ring-1 ring-slate-200 transition-opacity dark:bg-slate-800 dark:ring-slate-700 ${
+      className={`relative flex shrink-0 items-center rounded-lg bg-white p-0.5 shadow-sm ring-1 ring-slate-200 transition-opacity sm:mb-5 dark:bg-slate-800 dark:ring-slate-700 ${
+        // Phones: float over the chat instead of taking width from the bubble
+        `max-sm:absolute max-sm:z-20 ${itsMe ? 'max-sm:right-2' : 'max-sm:left-9'} ${pickerPlacement === 'top' ? 'max-sm:bottom-full max-sm:-mb-1' : 'max-sm:top-full max-sm:-mt-1'}`
+      } ${
         showActions || pickerOpen || remindOpen || moreOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
       } group-hover:pointer-events-auto group-hover:opacity-100`}
     >
@@ -314,7 +322,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
       onTouchStart={onTouchStart}
       onTouchEnd={cancelPress}
       onTouchMove={cancelPress}
-      className={`group -mx-2 flex scroll-my-24 items-end gap-2 rounded-xl px-2 transition-colors ${itsMe ? 'justify-end' : ''} ${
+      className={`group relative -mx-2 flex scroll-my-24 items-end gap-2 rounded-xl px-2 transition-colors ${itsMe ? 'justify-end' : ''} ${
         last ? 'mb-3 pb-1' : 'mb-0.5'
       } ${selectionMode ? 'cursor-pointer select-none' : ''} ${isSelected ? 'bg-indigo-500/10' : ''}`}
     >
@@ -335,7 +343,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
       {!itsMe && (last ? (isBot ? <AiAvatar size="xs" /> : <Avatar name={contactName} src={contactAvatar} size="xs" />) : <div className="w-7 shrink-0" />)}
       {itsMe && actions}
 
-      <div className={`flex max-w-[85%] flex-col sm:max-w-[75%] lg:max-w-[min(65%,640px)] ${itsMe ? 'items-end' : 'items-start'}`}>
+      <div className={`flex min-w-0 max-w-[85%] flex-col sm:max-w-[75%] lg:max-w-[min(65%,640px)] ${itsMe ? 'items-end' : 'items-start'}`}>
         {senderLabel && <p className="mb-0.5 ml-1 text-xs font-medium text-indigo-600 dark:text-indigo-400">{senderLabel}</p>}
         <div
           onClick={selectionMode ? undefined : onBubbleClick}
@@ -344,7 +352,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           className={message.card || sticker
             // Business cards and stickers bring their own frame: no bubble around them
             ? `rounded-xl text-[14px] leading-relaxed break-words max-w-full transition ${ring} ${deleting ? 'opacity-40' : ''} ${selectionMode ? 'pointer-events-none' : ''}`
-            : `rounded-2xl text-[14px] leading-relaxed break-words max-w-full transition ${media ? 'p-1.5' : 'px-3.5 py-2'} ${corners} ${ring} ${deleting ? 'opacity-40' : ''} ${
+            : `rounded-2xl text-[14px] leading-relaxed break-words max-w-full transition ${media ? 'p-1.5' : 'px-3.5 py-2'} ${framed ? 'w-80' : ''} ${corners} ${ring} ${deleting ? 'opacity-40' : ''} ${
             itsMe
               ? 'bg-indigo-600 text-white'
               : 'bg-[#ffffff] text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-slate-900/[0.05] dark:bg-slate-800 dark:text-slate-100 dark:ring-0'

@@ -157,11 +157,11 @@ const Attachment = ({ attachment, itsMe, messageId = null, label = '' }) => {
 
   if (kind === 'image') {
     return (
-      <div className="group/img relative">
+      <div className="group/img relative w-full">
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); setOpen(true) }}
-          className="block overflow-hidden rounded-xl bg-slate-200/60 dark:bg-slate-700/60"
+          className="block max-h-96 w-full overflow-hidden rounded-xl bg-slate-200/60 dark:bg-slate-700/60"
           style={{ aspectRatio: ratio }}
           aria-label="View photo"
         >
@@ -171,13 +171,13 @@ const Attachment = ({ attachment, itsMe, messageId = null, label = '' }) => {
             loading="lazy"
             width={width || undefined}
             height={height || undefined}
-            className="max-h-80 w-full max-w-xs object-cover"
+            className="size-full object-cover"
           />
         </button>
-        {/* Download: shows on hover (always on touch screens) */}
+        {/* Download on mouse hover only. Touch screens use the full-screen view or the ⋯ menu */}
         <SaveButton
           attachment={attachment}
-          className="absolute right-2 top-2 flex size-8 items-center justify-center rounded-full bg-slate-950/55 text-white opacity-0 shadow-sm backdrop-blur-sm transition hover:bg-slate-950/75 focus-visible:opacity-100 group-hover/img:opacity-100 [@media(hover:none)]:opacity-100"
+          className="absolute right-2 top-2 flex size-8 items-center justify-center rounded-full bg-slate-950/55 text-white opacity-0 shadow-sm backdrop-blur-sm transition hover:bg-slate-950/75 focus-visible:opacity-100 group-hover/img:opacity-100 [@media(hover:none)]:hidden"
         />
         <AnimatePresence>{open && <Lightbox attachment={attachment} onClose={() => setOpen(false)} />}</AnimatePresence>
       </div>
@@ -209,7 +209,7 @@ const Attachment = ({ attachment, itsMe, messageId = null, label = '' }) => {
         controls
         preload="none"
         onClick={(e) => e.stopPropagation()}
-        className="max-h-80 w-full max-w-xs rounded-xl bg-black"
+        className="max-h-80 w-full rounded-xl bg-black"
         style={{ aspectRatio: ratio || '16 / 9' }}
       />
     )

@@ -348,7 +348,7 @@ const Messages = () => {
 
   return (
     <div className="chat-bg relative flex min-h-0 flex-1 flex-col" style={wallpaper || undefined}>
-      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div ref={contentRef} className="h-full px-4 sm:px-6 lg:px-8">
           {loading ? (
             <LoadingSkeleton />
