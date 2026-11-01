@@ -24,6 +24,13 @@ export const SecureDialog = ({ onClose, title, subtitle, icon: Icon = LuLock, to
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+  // Freeze the page behind the dialog
+  useEffect(() => {
+    const html = document.documentElement
+    const before = html.style.overflow
+    html.style.overflow = 'hidden'
+    return () => { html.style.overflow = before }
+  }, [])
 
   const submit = (e) => { e?.preventDefault(); if (ready && !busy) onSubmit() }
   const danger = tone === 'red'

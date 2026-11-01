@@ -293,6 +293,8 @@ const TypeSent = () => {
   }
 
   const onKeyDown = (e) => {
+    // "@ne" + Tab (or Enter once a letter is typed) → "@Nexa "
+    if (offerNexa && !e.shiftKey && (e.key === 'Tab' || (e.key === 'Enter' && mentionMatch[2]))) { e.preventDefault(); mentionNexa(); return }
     if (quick.onKeyDown(e)) return
     if (!editingMessage && history.onKeyDown(e)) return
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() }
@@ -383,6 +385,7 @@ const TypeSent = () => {
           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-white"><LuSparkles className="size-3" /></span>
           <span className="shrink-0 font-medium">@Nexa</span>
           <span className="min-w-0 truncate text-slate-500 dark:text-slate-400">{selectedConversation?.isGroup ? 'ask the AI, answers for everyone' : selectedConversation?.isSelf ? 'ask the AI here' : 'ask the AI, both of you see it'}</span>
+          <kbd className="ml-1 hidden shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 font-sans text-[10px] font-medium text-slate-500 sm:inline dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">Tab</kbd>
         </button>
       )}
 

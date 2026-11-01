@@ -118,7 +118,18 @@ const PhotoEditor = ({ source, title = 'Edit photo', round = true, onSave, onClo
   const onPointerDown = (e) => { e.currentTarget.setPointerCapture(e.pointerId); drag.current = { x: e.clientX, y: e.clientY, sx: st.x, sy: st.y } }
   const onPointerMove = (e) => { if (drag.current) update({ x: drag.current.sx + e.clientX - drag.current.x, y: drag.current.sy + e.clientY - drag.current.y }) }
   const onPointerUp = () => { drag.current = null }
-  const onWheel = (e) => update((s) => ({ zoom: Math.min(4, Math.max(1, +(s.zoom - e.deltaY * 0.0015).toFixed(3))) }))
+  // Scroll to zoom. A native listener (not React's onWheel, which is passive) so the
+  // page behind the dialog doesn't scroll too.
+  useEffect(() => {
+    const el = canvas.current
+    if (!el) return
+    const onWheel = (e) => {
+      e.preventDefault()
+      update((s) => ({ zoom: Math.min(4, Math.max(1, +(s.zoom - e.deltaY * 0.0015).toFixed(3))) }))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [update])
 
   const save = async () => {
     if (!img) return
@@ -162,7 +173,6 @@ const PhotoEditor = ({ source, title = 'Edit photo', round = true, onSave, onClo
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
-            onWheel={onWheel}
             aria-label="Photo preview. Drag to move, scroll to zoom."
           />
           {/* Shows what's visible in round avatars */}
