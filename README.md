@@ -7,7 +7,7 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 | Service | URL |
 |---|---|
 | Frontend (Vercel) | https://nex-chat-six.vercel.app |
-| Backend API (Render) | https://nexchat-4zi1.onrender.com |
+| Backend API (Oracle Cloud) | https://kova.137-23-46-155.sslip.io |
 | Repository | https://github.com/Arjun-SN04/NexChat |
 
 ---
@@ -245,7 +245,7 @@ Any account can turn on **Business** (Profile → Business tools, or the briefca
 | Service | Role |
 |---|---|
 | Vercel | Frontend (static build + `/api` proxy) |
-| Render | Backend (supports long-lived WebSocket connections) |
+| Oracle Cloud (Always Free VM) | Backend in Docker behind nginx + Let's Encrypt (long-lived WebSocket connections) |
 | MongoDB Atlas | Database |
 | Cloudinary (free plan) | Photos, videos, voice notes, files, profile photos |
 | Groq (free tier) | AI model behind Nexa |
@@ -295,7 +295,7 @@ flowchart LR
 
 - **HTTP (REST)** does every change: send, edit, delete, react, forward, mark as seen, upload. The server validates the request and writes to MongoDB.
 - **WebSockets** only push the result of those changes to the *other* person (and presence/typing signals). The sender updates its own screen from the HTTP response.
-- In production the browser calls `/api/...` on the Vercel domain and Vercel rewrites it to Render. That keeps the auth cookie **same-site**, so `SameSite=Strict` works. In development, Vite's proxy does the same thing (`/api` → `localhost:3000`).
+- In production the browser calls `/api/...` on the Vercel domain and Vercel rewrites it to the backend on Oracle Cloud. That keeps the auth cookie **same-site**, so `SameSite=Strict` works. In development, Vite's proxy does the same thing (`/api` → `localhost:3000`).
 - The socket connects directly to the backend (`VITE_SOCKET_URL`), identifying itself with the user's id.
 - **Nexa** runs on the server only: the browser asks the API, the API calls Groq (keys never reach the browser), and actions such as sending or scheduling go through the same permission checks as the app. Scheduled messages and @Nexa answers are produced in the background and delivered over the socket like any other message.
 - **Calls are the exception to "HTTP does every change"**: ringing and connection setup (WebRTC offer/answer/ICE) go over the socket, and the audio/video itself flows directly between the two browsers. The server never sees call media.
@@ -889,7 +889,7 @@ NexChat/
 └── frontend/
     ├── index.html                 # Fonts, favicon, meta
     ├── public/                    # favicon.svg, site.webmanifest, images/ (Unsplash photos + CREDITS.md)
-    ├── vercel.json                # SPA routing + /api proxy to Render
+    ├── vercel.json                # SPA routing + /api proxy to the backend
     ├── vite.config.js             # Dev proxy /api → localhost:3000
     └── src/
         ├── App.jsx                # Routes + page transitions
@@ -1045,20 +1045,39 @@ It is safe to run again.
 
 ## Deployment
 
-### Backend → Render
+### Backend → Oracle Cloud (current)
+The backend runs on the Always Free VM (`137.23.46.155`, Ubuntu, 1 GB RAM) next to AniFlix:
+- **Docker:** `backend/Dockerfile` and `backend/docker-compose.yml`. The `kova-backend` container listens on `127.0.0.1:3000` only, with a 400 MB memory cap and rotated logs.
+- **nginx:** the site template is `backend/deploy/nginx.conf`, installed as `/etc/nginx/sites-available/kova`. It handles the WebSocket upgrade for Socket.IO, allows 12 MB uploads and uses 300 s timeouts.
+- **Domain:** `kova.137-23-46-155.sslip.io`. sslip.io resolves to the IP inside the name, so no DNS setup is needed. The HTTPS certificate is from Let's Encrypt (certbot), which renews it automatically.
+- **Swap:** a 2 GB swap file, because the two apps share 1 GB of RAM.
+
+Deploy from your machine with `./deploy.sh` (it needs the SSH key in `~/Downloads/ssh-key-2026-08-09.key`; override with `KOVA_KEY`):
+
+| Command | What it does |
+|---|---|
+| `./deploy.sh` | Copies `backend/` with rsync (no `node_modules`, no `.env`), rebuilds and restarts the container, then checks the URL |
+| `./deploy.sh --env` | Also uploads `backend/.env`. Do this after changing any key. It sends only `KEY=value` lines and strips quotes, because Docker rejects `//` comments. |
+| `./deploy.sh --setup` | First time only: swap, nginx site and certificate |
+
+- **Logs:** `ssh -i <key> ubuntu@137.23.46.155 'docker logs -f kova-backend'`
+- **Your own domain:** set `KOVA_DOMAIN`, point its DNS at the IP, and run `--setup` again.
+- **Run one backend at a time.** Only one backend should run against the database at a time, or scheduled messages, briefs and reminders get sent twice. Keep Render suspended.
+
+### Backend → Render (old)
 1. Create a Web Service (or use `render.yaml`). Root directory `backend`, build `npm install`, start `node index.js`.
 2. Set environment variables: `MONGODB_URI`, `token`, `PORT`, `FRONTEND_URL` (your Vercel URL), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER`, `GROQ_API_KEYS`, `GROQ_MODEL`, `NEXA_IMAGES_PER_DAY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `ADMIN_EMAILS` (optional: `PUTER_AUTH_TOKEN`).
 3. If the production database predates contacts, run `node scripts/migrate-contacts.js` once against it.
 
-### Backend on your own VM (alternative)
+### Backend on another VM
 - Any Linux VM with Node 20+ works (WebSockets need a long-running process, so not a serverless function). Run `node index.js` behind a process manager (e.g. pm2 or systemd) and a reverse proxy with HTTPS (e.g. Caddy or Nginx).
 - Calls don't use the server's bandwidth (they are peer to peer). If you add a TURN server (e.g. coturn) for strict networks, only those relayed calls pass through the VM: roughly 40–50 MB per hour for voice and 1.5–2 GB per hour for 720p video.
 - If the frontend calls the VM's own domain instead of going through Vercel's `/api` proxy, set `FRONTEND_URL` to the site's URL and change the cookie's `sameSite` in `jwt/token.js` to `"none"` with `secure: true`.
 
 ### Frontend → Vercel
 1. Import the repo with root directory `frontend`.
-2. Set `VITE_SOCKET_URL` to the Render backend URL (and optionally `VITE_TURN_*` for calls).
-3. Make sure `vercel.json` rewrites `/api/:path*` to your Render URL.
+2. Set `VITE_SOCKET_URL` to the backend URL (`https://kova.137-23-46-155.sslip.io`) (and optionally `VITE_TURN_*` for calls).
+3. Make sure `vercel.json` rewrites `/api/:path*` to the same backend URL.
 
 ---
 

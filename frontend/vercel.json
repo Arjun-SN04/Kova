@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://nexchat-4zi1.onrender.com/:path*"
+      "destination": "https://kova.137-23-46-155.sslip.io/:path*"
     },
     {
       "source": "/(.*)",

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import axios from 'axios'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuBellRing, LuCircleAlert, LuCircleCheck, LuGlobe, LuMail, LuSend, LuSun, LuX } from 'react-icons/lu'
+import { LuBellRing, LuCheck, LuCircleAlert, LuCircleCheck, LuCopy, LuExternalLink, LuGlobe, LuMail, LuSend, LuSun, LuX } from 'react-icons/lu'
 import { timeZone } from '../../utils/google'
 import Select from '../../components/ui/Select'
 
@@ -53,6 +53,60 @@ const CalendarIcon = () => (
     <div className="flex flex-1 items-center justify-center text-[15px] font-bold leading-none text-[#4285F4]">{new Date().getDate()}</div>
   </div>
 )
+
+// A copyable bit of setup text
+const CopyCode = ({ text }) => {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { /* ignore */ }
+  }
+  return (
+    <button type="button" onClick={copy} title="Copy" className="inline-flex max-w-full items-center gap-1 rounded bg-white px-1.5 py-0.5 text-left font-mono text-[11px] break-all ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-slate-900 dark:ring-slate-700 dark:hover:bg-slate-800">
+      {text} {copied ? <LuCheck className="size-3 shrink-0 text-emerald-500" /> : <LuCopy className="size-3 shrink-0 opacity-60" />}
+    </button>
+  )
+}
+
+// Shown when the server has no Google OAuth keys. In development it lists the setup steps;
+// on a live site it just says the owner needs to turn it on.
+const NotConfigured = () => {
+  const callback = `${window.location.origin}/api/google/callback`
+
+  if (!import.meta.env.DEV) {
+    return (
+      <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:text-slate-300 dark:ring-slate-700">
+        <p className="font-medium text-slate-800 dark:text-slate-100">Google sign-in isn't turned on for this Kova server yet.</p>
+        <p className="mt-1 text-[13px]">The site owner needs to add Google keys before you can connect your calendar. Everything else in Nexa still works.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl bg-slate-50 px-4 py-3 text-[13px] text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:text-slate-300 dark:ring-slate-700">
+      <p className="text-sm font-medium text-slate-800 dark:text-slate-100">This server has no Google keys yet</p>
+      <p className="mt-0.5">The Connect button appears once you add them. One-time setup (about 5 minutes):</p>
+      <ol className="mt-2 list-decimal space-y-1.5 pl-4">
+        <li>
+          Open{' '}
+          <a href="https://console.cloud.google.com/apis/library" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 font-medium text-blue-600 hover:underline dark:text-blue-400">
+            Google Cloud console <LuExternalLink className="size-3" />
+          </a>{' '}
+          and enable <b>Google Calendar API</b> and <b>Google Tasks API</b> (and <b>Gmail API</b> if you want mail).
+        </li>
+        <li>Under <b>OAuth consent screen</b>, pick External and add your Google account as a test user.</li>
+        <li>Under <b>Credentials → Create credentials → OAuth client ID</b>, choose <b>Web application</b> and add this redirect URI: <CopyCode text={callback} /></li>
+        <li>Add these to <span className="font-mono">backend/.env</span>, then restart the backend:
+          <div className="mt-1 flex flex-col items-start gap-1">
+            <CopyCode text="GOOGLE_CLIENT_ID=" />
+            <CopyCode text="GOOGLE_CLIENT_SECRET=" />
+            <CopyCode text={`GOOGLE_REDIRECT_URI=${callback}`} />
+          </div>
+        </li>
+      </ol>
+      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">For the live site, add the same keys on your server host with its own redirect URI.</p>
+    </div>
+  )
+}
 
 const Toggle = ({ checked, onChange, label, disabled }) => (
   <button
@@ -212,7 +266,7 @@ const GoogleCalendarDialog = ({ open, onClose, result, onStatus, onTry }) => {
                   <div className="h-32 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
                 </div>
               ) : !status.configured ? (
-                <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:text-slate-300 dark:ring-slate-700">Google isn't set up on this server yet.</p>
+                <NotConfigured />
               ) : !status.connected ? (
                 /* Not connected */
                 <div>
@@ -310,7 +364,7 @@ const GoogleCalendarDialog = ({ open, onClose, result, onStatus, onTry }) => {
             </div>
 
             {/* Footer */}
-            {status?.connected && !a?.broken && (
+            {status?.configured && status?.connected && !a?.broken && (
               <div className="flex items-center gap-3 border-t border-slate-200 bg-slate-50/80 px-5 py-3 dark:border-slate-800 dark:bg-slate-900/80">
                 <p className="min-w-0 flex-1 text-xs text-emerald-600 dark:text-emerald-400">{note}</p>
                 <button onClick={briefNow} disabled={!!busy} className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 text-sm font-medium text-white shadow-xs transition hover:bg-violet-500 disabled:opacity-60">

@@ -189,13 +189,13 @@ const MediaManager = ({ open, onClose, title, subtitle, items, onDelete, onJump,
             </div>
 
             {/* Tabs */}
-            <div className="shrink-0 border-b border-slate-200 px-5 dark:border-slate-800">
-              <div className="flex gap-1 overflow-x-auto" role="tablist">
+            <div className="shrink-0 border-b border-slate-200 px-5 overflow-hidden dark:border-slate-800">
+              <div className="flex gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
                 {TABS.map(({ id, label, Icon }) => (
                   <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`relative flex h-10 shrink-0 items-center gap-1.5 px-3 text-sm font-medium transition ${tab === id ? 'text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}>
                     <Icon className="size-4" /> {label}
                     <span className={`rounded-full px-1.5 text-[11px] tabular-nums ${tab === id ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>{counts[id]}</span>
-                    {tab === id && <motion.span layoutId="media-tab" className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-indigo-600 dark:bg-indigo-400" transition={{ duration: 0.25, ease: EASE }} />}
+                    {tab === id && <motion.span layoutId="media-tab" className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-indigo-600 dark:bg-indigo-400" transition={{ duration: 0.25, ease: EASE }} />}
                   </button>
                 ))}
               </div>
