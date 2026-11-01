@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import PollDialog from './PollDialog'
+import LocationDialog from '../location/LocationDialog'
 import axios from 'axios'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuCalendarDays, LuCamera, LuChartColumn, LuIndianRupee, LuPackage, LuZap, LuCheck, LuSmile, LuSparkles, LuUndo2, LuFileText, LuLoaderCircle, LuMic, LuPaperclip, LuPencil, LuPlus, LuReply, LuSendHorizontal, LuTrash2, LuX } from 'react-icons/lu'
+import { LuCalendarDays, LuCamera, LuChartColumn, LuIndianRupee, LuPackage, LuZap, LuCheck, LuSmile, LuSparkles, LuUndo2, LuFileText, LuLoaderCircle, LuMapPin, LuMic, LuPaperclip, LuPencil, LuPlus, LuReply, LuSendHorizontal, LuTrash2, LuX } from 'react-icons/lu'
 import useSendMessage from '../../context/useSendMessage'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
@@ -44,6 +45,7 @@ const TypeSent = () => {
   const fileInputRef = useRef(null)
   const [cameraOpen, setCameraOpen] = useState(false)
   const [pollOpen, setPollOpen] = useState(false)
+  const [locationOpen, setLocationOpen] = useState(false)
   const closePoll = useCallback(() => setPollOpen(false), [])
   const [bizDialog, setBizDialog] = useState(null)
   const [eventOpen, setEventOpen] = useState(false)
@@ -358,7 +360,7 @@ const TypeSent = () => {
   }
 
   return (
-    <div className="relative shrink-0 border-t border-slate-200 bg-white px-4 py-3 sm:px-6 lg:px-8 dark:border-slate-800 dark:bg-slate-950">
+    <div className="relative shrink-0 border-t border-slate-200 bg-white px-3 py-2.5 sm:px-6 lg:px-8 pb-[max(0.625rem,env(safe-area-inset-bottom))] dark:border-slate-800 dark:bg-slate-950">
       <AnimatePresence>
         {emojiOpen && <EmojiPopover onPick={insertEmoji} onClose={() => setEmojiOpen(false)} toggleRef={emojiBtnRef} />}
       </AnimatePresence>
@@ -377,10 +379,10 @@ const TypeSent = () => {
       )}
 
       {offerNexa && (
-        <button onClick={mentionNexa} className="mb-2 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[13px] shadow-sm ring-1 ring-violet-200 transition hover:bg-violet-50 dark:bg-slate-800 dark:ring-violet-500/30 dark:hover:bg-violet-500/10">
-          <span className="flex size-5 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-white"><LuSparkles className="size-3" /></span>
-          <span className="font-medium">@Nexa</span>
-          <span className="text-slate-500 dark:text-slate-400">{selectedConversation?.isGroup ? 'ask the AI, answers for everyone' : selectedConversation?.isSelf ? 'ask the AI here' : 'ask the AI, both of you see it'}</span>
+        <button onClick={mentionNexa} className="mb-2 inline-flex max-w-full items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[13px] shadow-sm ring-1 ring-violet-200 transition hover:bg-violet-50 dark:bg-slate-800 dark:ring-violet-500/30 dark:hover:bg-violet-500/10">
+          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-white"><LuSparkles className="size-3" /></span>
+          <span className="shrink-0 font-medium">@Nexa</span>
+          <span className="min-w-0 truncate text-slate-500 dark:text-slate-400">{selectedConversation?.isGroup ? 'ask the AI, answers for everyone' : selectedConversation?.isSelf ? 'ask the AI here' : 'ask the AI, both of you see it'}</span>
         </button>
       )}
 
@@ -536,6 +538,7 @@ const TypeSent = () => {
                 { id: 'file', label: 'Photo or file', Icon: LuPaperclip, onSelect: () => fileInputRef.current?.click() },
                 ...(navigator.mediaDevices?.getUserMedia ? [{ id: 'camera', label: 'Camera', Icon: LuCamera, onSelect: () => setCameraOpen(true) }] : []),
                 { id: 'poll', label: 'Poll', Icon: LuChartColumn, onSelect: () => setPollOpen(true) },
+                ...(navigator.geolocation && !selectedConversation?.isSelf ? [{ id: 'location', label: 'Location', Icon: LuMapPin, onSelect: () => setLocationOpen(true) }] : []),
                 ...(selectedConversation?.isGroup ? [{ id: 'event', label: 'Event', Icon: LuCalendarDays, onSelect: () => setEventOpen(true) }] : []),
                 ...(bizMode ? [
                   { id: 'product', section: 'Business', label: 'Send a product', Icon: LuPackage, onSelect: () => setBizDialog('product') },
@@ -614,6 +617,7 @@ const TypeSent = () => {
         {cameraOpen && <CameraDialog onClose={() => setCameraOpen(false)} onCapture={pickFile} />}
       </AnimatePresence>
       <PollDialog open={pollOpen} onClose={closePoll} />
+      {locationOpen && <LocationDialog chat={selectedConversation} onClose={() => setLocationOpen(false)} />}
       {eventOpen && <EventDialog groupId={selectedConversation._id} onClose={() => setEventOpen(false)} />}
       {bizDialog === 'product' && <ProductPicker biz="me" customerId={selectedConversation._id} onClose={() => setBizDialog(null)} onSent={addSent} />}
       {bizDialog === 'payment' && <PaymentDialog biz="me" customerId={selectedConversation._id} onClose={() => setBizDialog(null)} onSent={addSent} hasUpi={!!AuthUser?.business?.upiId} />}

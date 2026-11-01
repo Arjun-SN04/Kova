@@ -2,6 +2,8 @@ import express from "express"
 import { allUser, usernameAvailable, login, logout, signup, updateProfile, getMe, updateAvatar, removeAvatar, updatePrivacy, getPresence, uploadWallpaper, setWallpaper } from "../controller/user.controller.js"
 import { uploadAvatarSingle } from "../config/cloudinary.js"
 import secureRoute from "../middleware/secureRoute.js"
+import { accountStatus, deleteAccount, downloadExport, requestExport, sendDeleteCode, setEmailDigest } from "../controller/account.controller.js"
+import { forgotPassword, resetPassword, setSecurityQuestion, verifyRecovery } from "../controller/security.controller.js"
 
 const router = express.Router()
 router.post("/signup", signup)
@@ -17,4 +19,15 @@ router.post("/wallpaper/image", secureRoute, uploadAvatarSingle("image"), upload
 router.put("/wallpaper", secureRoute, setWallpaper)
 router.put("/avatar", secureRoute, uploadAvatarSingle("avatar"), updateAvatar)
 router.delete("/avatar", secureRoute, removeAvatar)
+router.post("/forgot-password", forgotPassword)
+router.get("/account", secureRoute, accountStatus)
+router.post("/export", secureRoute, requestExport)
+router.get("/export/download/:token", secureRoute, downloadExport)
+router.get("/export/latest", secureRoute, downloadExport)
+router.post("/delete-account/code", secureRoute, sendDeleteCode)
+router.post("/delete-account", secureRoute, deleteAccount)
+router.put("/email-digest", secureRoute, setEmailDigest)
+router.post("/reset-password", resetPassword)
+router.put("/security/question", secureRoute, setSecurityQuestion)
+router.post("/security/verify", secureRoute, verifyRecovery)
 export default router

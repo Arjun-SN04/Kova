@@ -20,6 +20,11 @@ const secureRoute = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({ error: "user not found" })
     }
+    // Scheduled for deletion: signed out everywhere until they sign in again (which cancels it)
+    if (user.deletion?.scheduledFor) {
+      res.clearCookie("jwt")
+      return res.status(401).json({ error: "This account is scheduled for deletion. Sign in to keep it.", code: "deleting" })
+    }
     if (Date.now() / 1000 - decoded.iat > RENEW_AFTER_SECONDS) {
       Createtoken(user._id, res)
     }

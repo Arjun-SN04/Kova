@@ -97,10 +97,10 @@ const CallsPanel = () => {
         </button>
       </PanelHeader>
 
-      <div className="px-4">
+      <div className="px-3 sm:px-4">
         <div className="relative">
           <LuSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name or @username" className="h-10 w-full rounded-xl border border-transparent bg-slate-100 pl-9 pr-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white dark:bg-slate-900 dark:focus:border-indigo-500/50 dark:focus:bg-slate-950" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name or @username" className="h-9 sm:h-10 w-full rounded-xl border border-transparent bg-slate-100 pl-9 pr-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white dark:bg-slate-900 dark:focus:border-indigo-500/50 dark:focus:bg-slate-950" />
         </div>
       </div>
 

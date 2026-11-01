@@ -131,9 +131,14 @@ const useConversation = create((set) => ({
   lockedChats: [],
   hasLockCode: false,
   lockedOpen: false,
-  setLockedPrefs: ({ lockedChats, hasLockCode }) => set((s) => ({
+  lockCodeKind: 'numeric',
+  // My security question (text only), for resetting a forgotten code / word / PIN
+  securityQuestion: null,
+  setLockedPrefs: ({ lockedChats, hasLockCode, lockCodeKind, securityQuestion }) => set((s) => ({
+    securityQuestion: securityQuestion === undefined ? s.securityQuestion : securityQuestion,
     lockedChats: lockedChats ?? s.lockedChats,
     hasLockCode: hasLockCode ?? s.hasLockCode,
+    lockCodeKind: lockCodeKind ?? s.lockCodeKind,
   })),
   setLockedOpen: (lockedOpen) => set({ lockedOpen }),
   // After the code is entered, locked chats open freely until this time (memory only:
@@ -158,6 +163,9 @@ const useConversation = create((set) => ({
   setChatTimer: (chatId, seconds) => set((state) => ({ chatTimers: { ...state.chatTimers, [String(chatId)]: seconds } })),
 
   // Which list the sidebar shows: 'chats' | 'calls' | 'communities' | 'starred'
+  // Channels I follow or run: [{ _id, name, handle, unread, lastPost, amAdmin, following, … }]
+  channels: [],
+  setChannels: (channels) => set({ channels }),
   activePanel: 'chats',
   setActivePanel: (activePanel) =>
     set(() => {

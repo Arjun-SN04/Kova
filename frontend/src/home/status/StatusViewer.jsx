@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import axios from 'axios'
 import { LuChevronLeft, LuChevronRight, LuEye, LuPause, LuPlay, LuTrash2, LuX } from 'react-icons/lu'
 import Avatar from '../Avatar'
-import { loadStatusFeed, markStatusSeen, timeAgo } from '../../utils/status'
+import { loadStatusFeed, markStatusSeen, statusBackground, statusTextSize, timeAgo } from '../../utils/status'
 
 const IMAGE_MS = 5000
 const TEXT_MS = 6000
@@ -106,8 +106,8 @@ const StatusViewer = ({ queue, start = 0, mine = false, onClose }) => {
         {/* Content */}
         <div className="relative flex flex-1 items-center justify-center overflow-hidden" onPointerDown={() => setPaused(true)} onPointerUp={() => setPaused(false)} onPointerLeave={() => setPaused(false)}>
           {status.kind === 'text' && (
-            <div className="flex h-full w-full items-center justify-center p-10 text-center" style={{ background: status.background }}>
-              <p className="whitespace-pre-wrap break-words text-2xl font-semibold leading-snug text-white sm:text-3xl">{status.text}</p>
+            <div className="flex h-full w-full items-center justify-center p-10 text-center" style={{ background: statusBackground(status.background) }}>
+              <p className={`whitespace-pre-wrap break-words font-semibold leading-snug tracking-tight text-white drop-shadow-sm ${statusTextSize(status.text)}`}>{status.text}</p>
             </div>
           )}
           {status.kind === 'image' && <img src={status.media.url} alt="" className="max-h-full max-w-full object-contain" />}

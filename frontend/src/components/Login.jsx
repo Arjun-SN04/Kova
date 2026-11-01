@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import axios from "axios";
 import { LuArrowRight, LuCheckCheck, LuLock, LuMail } from "react-icons/lu";
@@ -56,6 +56,11 @@ const Quote = () => (
 const Login = () => {
   usePageTitle("Sign in");
   const [, setAuthUser] = useAuth();
+  const location = useLocation();
+  const [notice, setNotice] = useState(
+    location.state?.notice ||
+    (new URLSearchParams(location.search).get("deleting") ? "Your account will be deleted in 30 days. Changed your mind? Just sign in to keep it." : "")
+  );
   const [serverError, setServerError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { register, handleSubmit, formState: { errors } } = useForm();
@@ -65,8 +70,10 @@ const Login = () => {
     try {
       const res = await axios.post("/api/user/login", { email: data.email, password: data.password }, { withCredentials: true });
       localStorage.setItem("chatUser", JSON.stringify(res.data.user));
+      if (res.data.restored) sessionStorage.setItem("kovaRestored", "1");
       setAuthUser(res.data.user);
     } catch (err) {
+      setNotice("");
       setServerError(err.response?.data?.error || "Login failed. Try again.");
     } finally { setIsLoading(false); }
   };
@@ -86,6 +93,7 @@ const Login = () => {
         </>
       }
     >
+      <Alert type="success" message={!serverError ? notice : ""} className="mb-6" />
       <Alert type="error" message={serverError} className="mb-6" />
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
         <Input
@@ -106,6 +114,9 @@ const Login = () => {
           error={errors.password?.message}
           {...register("password", { required: "Password is required" })}
         />
+        <div className="-mt-2 text-right">
+          <Link to="/forgot-password" className="text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">Forgot password?</Link>
+        </div>
         <div className="pt-2">
           <Button type="submit" size="lg" fullWidth loading={isLoading} rightIcon={LuArrowRight} className="rounded-full">
             {isLoading ? "Signing in..." : "Sign in"}

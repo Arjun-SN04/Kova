@@ -85,7 +85,12 @@ const APP_FACTS = `Kova facts (only describe these; if something isn't listed, s
 - Left rail: Chats, Status, Calls, Communities, Starred. Profile (gear): name, @username, photo, password. Light/dark toggle in the left rail.`
 
 // How Nexa shapes an answer: poems as verse, stories as paragraphs, lists as bullets
-const FORMAT_RULES = `Pick the format that fits the request: a poem, song or shayari as an original piece with a **title** line and short lines in stanzas (never bullets); a story, letter, wish or message as short paragraphs; steps, options or several facts as "- " bullets (numbered for steps); a quick question as one or two sentences. Make it as long as the request needs and no longer. Never reproduce existing song lyrics, poems or book text.`
+const FORMAT_RULES = `Pick the format that fits the request:
+- A poem, song or shayari as an original, deeply moving piece with a **title** line, followed by rich, evocative couplets or stanzas (7 to 10 shers for shayari, 4 to 6 stanzas for poems, separated by a blank line). Capture genuine soul, poetic depth, and musical flow. Never bullets.
+- A story, letter, wish or message as rich, immersive paragraphs.
+- Steps, options, comparisons or structured facts as clean "- " bullets (numbered for steps).
+- Explanations, technical breakdowns, advice or discussions: thorough, articulate, and satisfying.
+Provide generous, thoughtful, and complete answers without artificial brevity. Never reproduce existing copyrighted song lyrics, poems or book text; always write original pieces.`
 
 export const systemPrompt = (user, ctx, intents) => [
   `You are Nexa, the friendly AI assistant in Kova (a messenger), chatting with ${user.fullName} (@${user.username}).
@@ -103,7 +108,7 @@ Reminders ("remind me to call mom at 6", "every day at 9") go on the calendar as
     : intents.mailAsked ? `Gmail isn't connected: if asked about email, tell them to open the calendar button at the top of the Nexa chat and tap Connect Gmail.` : "",
   intents.people ? describeContext(ctx) : `(Contacts and groups aren't listed for this question. If the user wants to message someone, ask who.)`,
   `Rules: only send or schedule when clearly asked; if the person, group or time is unclear, ask one short question. Send the user's own words unless they ask for rewording. After acting, confirm in one short sentence. Never claim something worked unless the tool said ok.
-Style: friendly and brief. ${FORMAT_RULES} Text to send goes in a quote ("> ..."). No headings, intro lines or sign-offs. At most one emoji. Never use em or en dashes.`,
+Style: warm, thoughtful, and expressive. ${FORMAT_RULES} Text to send goes in a quote ("> ..."). No headings, intro lines or sign-offs. At most one emoji. Never use em or en dashes.`,
   intents.visual ? `When it helps, use a Markdown table (2 to 5 columns) or a Mermaid diagram in a \`\`\`mermaid block ("flowchart TD", node ids A, B, C with labels in double quotes, under 12 nodes, no styling), then at most 2 bullets. Never use HTML tags like <br>; in a table cell separate items with "; ".` : "",
   intents.code ? `Code: complete and working. Each file in its own fenced block with language and file name, e.g. \`\`\`js server.js. Keep the explanation to a few bullets.` : "",
 ].filter(Boolean).join("\n\n")
@@ -300,7 +305,7 @@ export const sendAiMessage = async (req, res) => {
       for (let round = 0; round < MAX_TOOL_ROUNDS && !reply; round++) {
         // An image request: the first turn must call generate_image (the model sometimes refuses otherwise)
         const forceImage = round === 0 && !media && wantsImage(text)
-        const options = { tools: toolsFor(ctx, intents, forceImage), maxTokens: 1500, ...(forceImage ? { toolChoice: FORCE_IMAGE } : {}) }
+        const options = { tools: toolsFor(ctx, intents, forceImage), maxTokens: 2500, ...(forceImage ? { toolChoice: FORCE_IMAGE } : {}) }
         let msg
         try {
           msg = await groqChat(convo, options)
@@ -308,7 +313,7 @@ export const sendAiMessage = async (req, res) => {
           if (err.code !== "too_large") throw err
           // Still too big: drop the earlier chat and leave less room for the reply
           if (!trimmed) { convo.splice(1, earlier.length); trimmed = true }
-          msg = await groqChat(convo, { ...options, maxTokens: 1000 })
+          msg = await groqChat(convo, { ...options, maxTokens: 1800 })
         }
         sources.push(...sourcesOf(msg.executed_tools))
         searched.push(...searchedUrls(msg.executed_tools))
@@ -797,7 +802,7 @@ export const remindAboutMessage = async (req, res) => {
   }
 }
 
-// ── Listen: expressive voice for a message (Groq Orpheus, see utils/tts.js) ──
+// ── Listen: voice for a message (Groq Orpheus for English, Indian neural voice for Hindi; utils/tts.js) ──
 const speakUse = new Map() // userId -> timestamps in the last hour
 export const speakMessage = async (req, res) => {
   const text = String(req.body?.text || "")
@@ -808,9 +813,9 @@ export const speakMessage = async (req, res) => {
   if (recentUse.length >= 40) return res.status(429).json({ error: "You've listened a lot this hour. Try again a bit later.", code: "limit" })
   speakUse.set(id, [...recentUse, now])
   try {
-    const wav = await speakText(text)
-    res.set({ "Content-Type": "audio/wav", "Cache-Control": "private, max-age=3600" })
-    res.send(wav)
+    const { audio, type } = await speakText(text)
+    res.set({ "Content-Type": type, "Cache-Control": "private, max-age=3600" })
+    res.send(audio)
   } catch (err) {
     console.log("speak error:", err.code || "", err.message)
     res.status(err.code === "empty" ? 400 : 503).json({ error: err.message, code: err.code || "failed" })

@@ -14,6 +14,9 @@ import AppearanceSettings from './AppearanceSettings'
 import UsernameShare from './UsernameShare'
 import PrivacySettings from './PrivacySettings'
 import HiddenChatsSettings from './HiddenChatsSettings'
+import ChatLockSettings from './ChatLockSettings'
+import AccountDataSettings from './AccountDataSettings'
+import EmailDigestSetting from './EmailDigestSetting'
 import AppLockSettings from './AppLockSettings'
 import { BlockedAccounts, BusinessCard } from '../business/AccountExtras'
 import { checkUsernameFree, normalizeUsername, USERNAME_RULES } from '../utils/contacts'
@@ -132,7 +135,7 @@ const Profile = () => {
   return (
     <div className="min-h-dvh bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <nav className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur-lg dark:border-slate-800 dark:bg-slate-950/80">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-8">
           <Logo to="/" />
           <div className="flex items-center gap-1">
             <Button to="/" variant="ghost" size="sm" leftIcon={LuArrowLeft}>Back to chats</Button>
@@ -141,12 +144,12 @@ const Profile = () => {
         </div>
       </nav>
 
-      <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-12">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Account settings</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage your profile and security.</p>
 
         {/* Identity */}
-        <Card className="mt-8 flex flex-col gap-5 p-6 sm:flex-row sm:items-center">
+        <Card className="mt-6 sm:mt-8 flex flex-col gap-5 p-4 sm:p-6 sm:flex-row sm:items-center">
           <div className="relative w-fit shrink-0">
             {AuthUser?.avatar?.url ? (
               <ViewablePhoto src={AuthUser.avatar.url} name={AuthUser.fullName} subtitle="Your profile photo" className="rounded-2xl!">
@@ -178,17 +181,17 @@ const Profile = () => {
               Active
             </span>
           </div>
-          <div className="flex gap-2 sm:flex-col">
-            <Button variant="secondary" size="sm" leftIcon={LuCamera} disabled={photoBusy} onClick={() => photoInput.current?.click()}>
+          <div className="flex flex-wrap gap-2 sm:flex-col sm:shrink-0">
+            <Button variant="secondary" size="sm" leftIcon={LuCamera} disabled={photoBusy} onClick={() => photoInput.current?.click()} className="flex-1 sm:flex-initial justify-center min-w-[120px] sm:min-w-0">
               {AuthUser?.avatar?.url ? 'Change photo' : 'Upload photo'}
             </Button>
             {AuthUser?.avatar?.url && (
-              <Button variant="secondary" size="sm" leftIcon={LuSlidersHorizontal} disabled={photoBusy} onClick={() => setEditSource(AuthUser.avatar.url)}>
+              <Button variant="secondary" size="sm" leftIcon={LuSlidersHorizontal} disabled={photoBusy} onClick={() => setEditSource(AuthUser.avatar.url)} className="flex-1 sm:flex-initial justify-center min-w-[110px] sm:min-w-0">
                 Edit photo
               </Button>
             )}
             {AuthUser?.avatar?.url && (
-              <Button variant="ghost" size="sm" leftIcon={LuTrash2} disabled={photoBusy} onClick={removePhoto} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10">
+              <Button variant="ghost" size="sm" leftIcon={LuTrash2} disabled={photoBusy} onClick={removePhoto} className="flex-1 sm:flex-initial justify-center text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10">
                 Remove
               </Button>
             )}
@@ -311,6 +314,9 @@ const Profile = () => {
             <Card className="overflow-hidden">
               <HiddenChatsSettings />
             </Card>
+            <Card className="overflow-hidden">
+              <ChatLockSettings />
+            </Card>
           </div>
           <div className="flex flex-col gap-6">
             {/* Appearance */}
@@ -321,12 +327,16 @@ const Profile = () => {
             {/* Notifications */}
             <Card className="overflow-hidden">
               <NotificationSettings />
+              <EmailDigestSetting />
             </Card>
             <Card className="overflow-hidden">
               <AppLockSettings />
             </Card>
             <Card className="overflow-hidden">
               <BlockedAccounts />
+            </Card>
+            <Card className="overflow-hidden">
+              <AccountDataSettings />
             </Card>
 
             <Card className="overflow-hidden">

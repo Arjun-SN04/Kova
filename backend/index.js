@@ -17,12 +17,14 @@ import statusRoutes from "./routes/status.route.js"
 import gifRoutes from "./routes/gif.route.js"
 import businessRoutes from "./routes/business.route.js"
 import taskRoutes from "./routes/task.route.js"
+import channelRoutes from "./routes/channel.route.js"
 import { startBusiness } from "./utils/business.js"
 import { startEvents } from "./controller/event.controller.js"
 import eventRoutes from "./routes/event.route.js"
 import { startScheduler } from "./utils/scheduler.js"
 import { startAgenda } from "./utils/agenda.js"
 import { startDisappearing } from "./utils/disappear.js"
+import { startAccountJobs } from "./utils/accountData.js"
 import { app, server } from "./socket/socket.js"
 
 dotenv.config()
@@ -33,7 +35,7 @@ const port = process.env.PORT || 3000
 const mongo_uri = process.env.MONGODB_URI
 
 mongoose.connect(mongo_uri)
-  .then(() => { console.log("Connected to MongoDB"); startScheduler(); startAgenda(); startDisappearing(); startBusiness(); startEvents() })
+  .then(() => { console.log("Connected to MongoDB"); startScheduler(); startAgenda(); startDisappearing(); startBusiness(); startEvents(); startAccountJobs() })
   .catch((err) => console.log("MongoDB connection error:", err))
 
 app.use(express.json())
@@ -70,6 +72,7 @@ app.use("/gifs", gifRoutes)
 app.use("/business", businessRoutes)
 app.use("/tasks", taskRoutes)
 app.use("/events", eventRoutes)
+app.use("/channels", channelRoutes)
 
 app.get("/", (req, res) => {
   res.send("Kova API is running")

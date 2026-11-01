@@ -4,6 +4,7 @@ import { LuLayers, LuMoon, LuSquarePen, LuSun, LuUserPlus, LuUsers, LuContact } 
 import Users from './Users'
 import CallsPanel from './CallsPanel'
 import CommunitiesPanel from './CommunitiesPanel'
+import ChannelsPanel from '../channels/ChannelsPanel'
 import StarredPanel from './StarredPanel'
 import NotifyBanner from './NotifyBanner'
 import StatusPanel from '../status/StatusPanel'
@@ -15,7 +16,7 @@ import { LogoMark } from '../../components/ui'
 import { useTheme } from '../../context/ThemeProvider'
 
 const iconBtn =
-  'flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white'
+  'flex size-8 sm:size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white'
 
 // The Chats panel: chat list with search, tabs and the New / Add contact buttons
 const ChatsPanel = () => {
@@ -39,15 +40,15 @@ const ChatsPanel = () => {
   return (
     <>
       {/* Header */}
-      <header className="flex items-center justify-between px-4 pb-4 pt-5">
-        <Link to="/home" className="group flex items-center gap-2.5" title="Kova home">
-          <LogoMark className="size-8 md:hidden" />
-          <span className="text-xl font-semibold tracking-tight">Chats</span>
+      <header className="flex items-center justify-between px-3 sm:px-4 pb-2.5 sm:pb-3.5 pt-3.5 sm:pt-4">
+        <Link to="/home" className="group flex min-w-0 items-center gap-2 sm:gap-2.5" title="Kova home">
+          <LogoMark className="size-7 sm:size-8 shrink-0 md:hidden" />
+          <span className="truncate text-lg sm:text-xl font-semibold tracking-tight">Chats</span>
         </Link>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
           <div ref={menuRef} className="relative">
             <button onClick={() => setMenuOpen((o) => !o)} className={iconBtn} title="New group or community" aria-label="New group or community" aria-expanded={menuOpen}>
-              <LuSquarePen className="size-4.5" />
+              <LuSquarePen className="size-4 sm:size-4.5" />
             </button>
             {menuOpen && (
               <div role="menu" className="absolute right-0 top-full z-30 mt-1.5 w-52 rounded-xl bg-white p-1 shadow-xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
@@ -60,7 +61,7 @@ const ChatsPanel = () => {
             )}
           </div>
           <button onClick={() => setContactsDialog('all')} className={iconBtn} title="Contacts" aria-label="Contacts">
-            <LuContact className="size-4.5" />
+            <LuContact className="size-4 sm:size-4.5" />
           </button>
           <button
             onClick={() => setContactsDialog(incoming ? 'requests' : 'add')}
@@ -68,16 +69,16 @@ const ChatsPanel = () => {
             title={incoming ? `${incoming} contact request${incoming > 1 ? 's' : ''}` : 'Add contact'}
             aria-label="Add contact"
           >
-            <LuUserPlus className="size-4.5" />
+            <LuUserPlus className="size-4 sm:size-4.5" />
             {incoming > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-semibold text-white ring-2 ring-white dark:ring-slate-950">
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 sm:h-4.5 sm:min-w-4.5 items-center justify-center rounded-full bg-indigo-600 px-1 text-[9px] sm:text-[10px] font-semibold text-white ring-2 ring-white dark:ring-slate-950">
                 {incoming}
               </span>
             )}
           </button>
-          <BusinessLink className={`${iconBtn} md:hidden`} iconClass="size-4.5" />
+          <BusinessLink className={`${iconBtn} md:hidden`} iconClass="size-4 sm:size-4.5" />
           <button onClick={toggle} className={`${iconBtn} md:hidden`} title={dark ? 'Light mode' : 'Dark mode'} aria-label="Toggle theme">
-            {dark ? <LuSun className="size-4.5" /> : <LuMoon className="size-4.5" />}
+            {dark ? <LuSun className="size-4 sm:size-4.5" /> : <LuMoon className="size-4 sm:size-4.5" />}
           </button>
         </div>
       </header>
@@ -95,7 +96,7 @@ const Left = () => {
     <div className="flex h-full w-full bg-white dark:bg-slate-950">
       <NavRail />
       <div className="flex min-w-0 flex-1 flex-col">
-        {activePanel === 'calls' ? <CallsPanel /> : activePanel === 'communities' ? <CommunitiesPanel /> : activePanel === 'starred' ? <StarredPanel /> : activePanel === 'status' ? <StatusPanel /> : <ChatsPanel />}
+        {activePanel === 'calls' ? <CallsPanel /> : activePanel === 'communities' ? <CommunitiesPanel /> : activePanel === 'channels' ? <ChannelsPanel /> : activePanel === 'starred' ? <StarredPanel /> : activePanel === 'status' ? <StatusPanel /> : <ChatsPanel />}
         <MobileTabs />
       </div>
       <ContactsDialog />

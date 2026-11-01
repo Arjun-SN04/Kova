@@ -142,16 +142,16 @@ const PhotoEditor = ({ source, title = 'Edit photo', round = true, onSave, onClo
   return (
     <Sheet open onClose={onClose} title={title} footer={
       <div className="flex items-center justify-between gap-2">
-        <button onClick={() => setSt(START)} disabled={!changed || busy} className="inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"><LuUndo2 className="size-4" /> Reset</button>
-        <div className="flex gap-2">
-          <button onClick={onClose} className="h-10 rounded-xl px-4 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button>
-          <button onClick={save} disabled={!img || busy} className="inline-flex h-10 items-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-40">{busy && <LuLoaderCircle className="size-4 animate-spin" />}{busy ? 'Saving…' : 'Save photo'}</button>
+        <button onClick={() => setSt(START)} disabled={!changed || busy} className="inline-flex h-10 items-center gap-1.5 rounded-xl px-2.5 sm:px-3 text-xs sm:text-sm font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"><LuUndo2 className="size-4 shrink-0" /> Reset</button>
+        <div className="flex gap-1.5 sm:gap-2">
+          <button onClick={onClose} className="h-10 rounded-xl px-3 sm:px-4 text-xs sm:text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button>
+          <button onClick={save} disabled={!img || busy} className="inline-flex h-10 items-center gap-1.5 sm:gap-2 rounded-xl bg-indigo-600 px-3 sm:px-4 text-xs sm:text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-40">{busy && <LuLoaderCircle className="size-4 animate-spin shrink-0" />}{busy ? 'Saving…' : 'Save photo'}</button>
         </div>
       </div>
     }>
       {/* Preview: drag to move, scroll to zoom */}
       <div className="flex justify-center pt-1">
-        <div className="relative overflow-hidden rounded-2xl bg-slate-900" style={{ width: VIEW, height: VIEW }}>
+        <div className="relative overflow-hidden rounded-2xl bg-slate-900 w-[min(300px,calc(100vw-3.5rem))] h-[min(300px,calc(100vw-3.5rem))] aspect-square">
           {!img && !error && <LuLoaderCircle className="absolute left-1/2 top-1/2 size-6 -translate-x-1/2 -translate-y-1/2 animate-spin text-slate-400" />}
           <canvas
             ref={canvas}
@@ -174,7 +174,7 @@ const PhotoEditor = ({ source, title = 'Edit photo', round = true, onSave, onClo
       {/* Tabs */}
       <div className="mt-4 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
         {[['crop', 'Crop & rotate'], ['filters', 'Filters'], ['adjust', 'Adjust']].map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} className={`h-8 rounded-lg text-[13px] font-medium transition ${tab === id ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>{label}</button>
+          <button key={id} onClick={() => setTab(id)} className={`h-8 rounded-lg truncate px-1 text-xs sm:text-[13px] font-medium transition ${tab === id ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>{label}</button>
         ))}
       </div>
 
@@ -187,10 +187,10 @@ const PhotoEditor = ({ source, title = 'Edit photo', round = true, onSave, onClo
               <button onClick={() => update((s) => ({ zoom: Math.min(4, +(s.zoom + 0.1).toFixed(2)) }))} className={tool} aria-label="Zoom in"><LuZoomIn className="size-4" /></button>
             </div>
             <Slider label="Straighten" value={st.tilt} min={-45} max={45} onChange={(v) => update({ tilt: v })} suffix="°" />
-            <div className="flex justify-center gap-2">
-              <button onClick={() => update((s) => ({ turn: (s.turn + 270) % 360, x: 0, y: 0 }))} className={`${tool} w-auto gap-1.5 px-3 text-xs font-medium`}><LuRotateCcw className="size-4" /> Rotate left</button>
-              <button onClick={() => update((s) => ({ turn: (s.turn + 90) % 360, x: 0, y: 0 }))} className={`${tool} w-auto gap-1.5 px-3 text-xs font-medium`}><LuRotateCw className="size-4" /> Rotate right</button>
-              <button onClick={() => update((s) => ({ flip: !s.flip }))} aria-pressed={st.flip} className={`${tool} w-auto gap-1.5 px-3 text-xs font-medium ${st.flip ? 'bg-slate-100 dark:bg-slate-800' : ''}`}><LuFlipHorizontal2 className="size-4" /> Flip</button>
+            <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2">
+              <button onClick={() => update((s) => ({ turn: (s.turn + 270) % 360, x: 0, y: 0 }))} className={`${tool} w-auto gap-1.5 px-2.5 sm:px-3 text-xs font-medium`}><LuRotateCcw className="size-4" /> Rotate left</button>
+              <button onClick={() => update((s) => ({ turn: (s.turn + 90) % 360, x: 0, y: 0 }))} className={`${tool} w-auto gap-1.5 px-2.5 sm:px-3 text-xs font-medium`}><LuRotateCw className="size-4" /> Rotate right</button>
+              <button onClick={() => update((s) => ({ flip: !s.flip }))} aria-pressed={st.flip} className={`${tool} w-auto gap-1.5 px-2.5 sm:px-3 text-xs font-medium ${st.flip ? 'bg-slate-100 dark:bg-slate-800' : ''}`}><LuFlipHorizontal2 className="size-4" /> Flip</button>
             </div>
           </div>
         )}

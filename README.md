@@ -44,6 +44,9 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Multi-select** mode (⋯ More → Select, or long-press on touch) to copy, forward or delete several messages.
 - **Copy** message text from the ⋯ More menu.
 - **Message grouping**: consecutive messages from the same person within 5 minutes are grouped, with date dividers ("Today", "Yesterday", or the date).
+- **Link previews**: the first link in a message gets a card with the page's title, description, image and site name (Open Graph tags), fetched by the server after sending. Only public web pages are fetched; links to private or local addresses are skipped. Links in messages are clickable. Code: `backend/utils/linkPreview.js`, `rightPart/LinkPreview.jsx`.
+- **Search all chats**: typing in the chat-list search also shows a **Messages** section with matches from every chat (text, voice-note transcripts, file names); tapping one opens the chat at that message. Locked and hidden chats are left out. `GET /message/search?q=`.
+- **Location**: + → Location sends where you are now, or **live location** for 15 minutes, 1 hour or 8 hours. The map (OpenStreetMap via Leaflet) moves as the sender's position updates every ~10 s; the sender can stop any time, and live shares carry on after a page refresh. Code: `home/location/`, `utils/liveLocation.js`, `backend/controller/location.controller.js`.
 
 ### Media
 - **Photos, videos and documents** (PDF, Word, Excel, PowerPoint, text, CSV, zip) up to 10 MB. Attach with the paperclip, paste from the clipboard, or drag and drop onto the chat.
@@ -92,6 +95,7 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Events**: **+** → Event in a group posts an event card (date, time, place, details). Members answer **Going / Maybe / Can't go**, the card shows who's going, anyone can **add it to their calendar** (.ics), and the group gets a reminder an hour before. The organiser or an admin can cancel it.
 - **Group invites for people who approve adds**: someone whose privacy says "Only with my approval" gets an invite with Join / Decline instead of being added directly; group info shows how many invites are waiting.
 - Groups and communities appear in the chat list and in a **Groups** tab (each community with its groups underneath). Unread counts, previews and changes (new groups, renames, members joining or leaving) update live.
+- **Channels** (new Channels tab): one-way updates. Anyone can create a channel with a name, @handle and description; admins post text, photos and videos (with link previews); followers read and react. Find channels by name or handle, follow / unfollow, unread counts, "Copy channel link" (`/?channel=handle`), edit picture/name/description, delete posts or the whole channel. Code: `home/channels/`, `backend/controller/channel.controller.js`, models `Channel` and `ChannelPost`.
 
 ### Calls
 - **One-to-one voice and video calls** with any contact, started from the chat header.
@@ -119,9 +123,12 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Who can see my photo / about**: Everyone, My contacts, or Nobody (Profile → Privacy). Applied wherever your profile goes out (contacts, search, groups, invites). Business logos stay public.
 - **About**: a short line on your profile (up to 140 characters), shown in contact info.
 - **Who can add me to groups**: My contacts, or Only with my approval (you get an invite to accept).
-- **Locked chats**: lock chats behind a secret code (4 to 10 digits, set the first time). They look like any other chat in the list; opening one asks for the code and nothing loads until it's entered. After the code is entered, locked chats open freely for 5 minutes (each opening restarts the 5 minutes); a page refresh always asks again. Their notifications just say "New message". Code fields have an eye button to show what you type. Forgot the code? Reset it with your account password; nothing is deleted. 5 wrong tries pause for 5 minutes.
-- **Hidden chats**: hide any chat (⋯ → Hide chat, or select chats → Hide). Hidden chats leave the chat list, search, Contacts and unread badges, and their notifications say "New message". Typing your secret word in the chat search box shows them (capitals don't matter); clearing the search hides them again. Set, change or turn off the word in Profile → Hidden chats. The server keeps only a SHA-256 of the word, never the word itself.
-- **App lock**: a PIN (4–6 digits) to open Kova on this device, locking immediately or after 1 / 15 / 60 minutes away, with optional **fingerprint / face / device unlock** (WebAuthn). "Forgot PIN? Log out" removes it.
+- **Locked chats**: lock chats behind a secret code (4 to 10 digits, or 4 to 16 letters and numbers; set the first time). They look like any other chat in the list; opening one asks for the code and nothing loads until it's entered. After the code is entered, locked chats open freely for 5 minutes (each opening restarts the 5 minutes); a page refresh always asks again. Their notifications just say "New message". Code fields have an eye button to show what you type. Change it in Profile → Locked chats (asks for the current code). Forgot the code? Answer your **security question** (or, if you never set one, enter your account password) and choose a new code. Nothing is deleted. The code dialogs show the photo of the chat being opened or locked. 5 wrong tries pause for 5 minutes.
+- **Hidden chats**: hide any chat (⋯ → Hide chat, or select chats → Hide). Hidden chats leave the chat list, search, Contacts and unread badges, and their notifications say "New message". Typing your secret word in the chat search box shows them (capitals don't matter); clearing the search hides them again. Set, change or turn off the word in Profile → Hidden chats; changing or turning it off asks for the current word, or your security question answer if you forgot it. The server keeps only a SHA-256 of the word, never the word itself.
+- **App lock**: a PIN (4–10 digits, or 4–16 letters and numbers) to open Kova on this device, locking immediately or after 1 / 15 / 60 minutes away, with optional **fingerprint / face / device unlock** (WebAuthn). "Forgot PIN?" resets it with your security question answer (or log out, which removes the lock). When setting the app PIN or the chat lock code, a **"use this for both"** checkbox sets the other one to the same code.
+- **Security question**: chosen from a list or written yourself, set when you create your first chat lock code or in Profile → Locked chats (changing it asks for your account password). Only a bcrypt hash of the answer is stored; capitals and extra spaces don't matter. 5 wrong answers pause resets for 15 minutes (`backend/utils/recovery.js`).
+- **Security dialogs** (lock code, secret word, app PIN, security question) share one design: a photo with a lock badge, a 123 / Abc 123 switch for the code type. Code: `components/security/`.
+- **Forgot password** (login page): emails a 6-digit code (expires in 10 minutes, 5 tries, one resend per minute), then you choose a new password. The form never says whether an email has an account. Code: `components/ForgotPassword.jsx`, `backend/utils/securityCode.js`, `backend/utils/mailer.js`.
 - **Chat list = real chats**: people show in the list once you have a chat with them (or it's pinned, unread or open). Deleting a chat removes them from the list. **Contacts** (the address-book icon at the top) lists everyone you're connected to, with search, **Message** (they come back to the list) and **Remove** (disconnects you both; history isn't deleted). Searching the chat list also finds contacts without a chat.
 - **Voice notes keep playing**: one app-wide player. While a voice note plays, a bar at the top shows who it's from, a seekable progress bar, 1× / 1.5× / 2× speed and ×; it keeps playing when you switch chats, and clicking the title jumps back to the message.
 - **Switch back to a personal account**: Profile → Business tools, or Business → Settings → Profile & hours. Turns the business page, badge, ordering and bookings off; the catalog, orders and settings are kept for later.
@@ -186,6 +193,10 @@ Any account can turn on **Business** (Profile → Business tools, or the briefca
 - **Light mode**: soft off-white surfaces (not pure white) on clean cool greys, and the chat background is a soft wash of the theme colour so message bubbles stand out.
 - **Graphite dark palette**: dark mode uses neutral greys instead of navy. `index.css` remaps every `slate-*` and `zinc-*` colour under `.dark`, so all screens follow one palette.
 - **One dropdown style everywhere**: every dropdown uses the shared `Select` component (`components/ui/Select.jsx`) instead of the browser's own. Its menu opens above dialogs and scrolling panels, flips up when there's no room below, gets a search box for long lists (like time zones), and works with the keyboard (arrows, Enter, Escape, type to jump).
+- **Download your data** (Profile → Your data & account): builds a ZIP in the background with your profile, contacts, every chat as text and JSON, the photos/videos/voice notes/files (up to 500 MB), Nexa history, statuses, channels and calls, then emails a download link that works for 24 hours (only while signed in). Code: `backend/utils/accountData.js`.
+- **Delete account**: confirmed with your password or an emailed code. The account is signed out everywhere and deleted after 30 days; signing in before then cancels it ("Welcome back" banner). Deletion removes your chats, files, statuses, channels you own, business data and your place in groups/communities.
+- **Email digest** (Profile → Notifications, off by default): at most once a day, when you have unread messages and haven't opened Kova for 12 hours, an email lists the chats with unread messages. Locked and hidden chats are never included.
+- **Emails** share one dark design (`backend/utils/emailTemplates.js`): password reset code, account deletion code, export ready, deletion scheduled and the digest. An hourly job sends digests, removes expired exports and deletes accounts whose 30 days are up.
 
 ### Website
 - Landing page in dark (default) and light, with a theme toggle: a centered hero with a wide photo, a feature showcase that cycles through the app's features over a photo, use-case photos, "how it works" steps, smooth scrolling (Lenis), parallax and scroll-in animations.
@@ -597,7 +608,7 @@ erDiagram
 | Order | `business, customer, number` (#1001…), `items [{ product, name, price, qty, image }], subtotal, discount, coupon, total, note, status, paid, paidAt, history [{ status, at }], review { rating, text, at }` |
 | BusinessSettings.coupons | `[{ code, kind (percent/flat), value, minTotal, maxUses, uses, expiresAt, active }]` |
 | Event | `group, title, description, location, startsAt, createdBy, rsvps [{ user, status }], cancelled, remindedAt` |
-| User (privacy) | `wallpapers { global, chats }, about, lastSeen, privacy { activity, seen, photo, about, groups }, lockedChats [chatId], lockCode` (bcrypt hash, never sent out) |
+| User (privacy) | `wallpapers { global, chats }, about, lastSeen, privacy { activity, seen, photo, about, groups }, lockedChats [chatId], lockCode` (bcrypt hash, never sent out), `lockCodeKind` (numeric / alnum), `securityQuestion`, `securityAnswer` (bcrypt hash, never sent out), `securityCode { purpose, hash, expires, tries, sentAt }` (emailed password-reset code, bcrypt hash, never sent out) |
 | Group (extras) | `adminsOnly, inviteCode, approveJoins, joinRequests [{ user, at }], invites [{ user, by, at }]` |
 | Booking | `business, customer, service { id, name, minutes, price }, start, end, note, status (booked/cancelled/done), eventId, meetLink, remindedAt` |
 | Task | `group, text, assignee, due, done, doneAt, doneBy, message, createdBy` |
@@ -621,6 +632,16 @@ All routes except sign up, sign in and sign out require the `jwt` cookie. The fr
 | GET | `/me` | – | My profile |
 | PUT | `/update` | `{ fullName?, username?, about? }` or `{ currentPassword, newPassword }` | Update name, username, about or password |
 | PUT | `/avatar` | multipart `avatar` (JPG/PNG/WebP, ≤ 2 MB) | Upload or replace my profile photo |
+| POST | `/forgot-password` | `{ email }` | Email a 6-digit code to reset the login password (no login needed) |
+| POST | `/reset-password` | `{ email, otp, password }` | Set a new login password with the emailed code |
+| PUT | `/security/question` | `{ question, answer, password? }` | Set or change my security question (password needed once a question or lock code exists) |
+| POST | `/security/verify` | `{ answer }` or `{ password }` | Check before resetting the app lock PIN (stored on the device) |
+| GET | `/account` | – | My data export status and email digest setting |
+| POST | `/export` | – | Start building my data ZIP (emailed when ready; once an hour) |
+| GET | `/export/download/:token`, `/export/latest` | – | Download the ZIP (signed in, within 24 hours) |
+| POST | `/delete-account/code` | – | Email a 6-digit code to confirm deleting the account |
+| POST | `/delete-account` | `{ password }` or `{ otp }` | Schedule deletion in 30 days and sign out |
+| PUT | `/email-digest` | `{ enabled }` | Turn the daily unread email on or off |
 | DELETE | `/avatar` | – | Remove my profile photo |
 | PUT | `/privacy` | `{ activity?, seen?, photo?, about?, groups? }` | Privacy settings (`photo` / `about`: everyone \| contacts \| nobody; `groups`: contacts \| approve) |
 | GET | `/presence/:id` | – | A contact's `{ online, lastSeen }` (empty when either side hides activity) |
@@ -959,6 +980,14 @@ GIPHY_API_KEY=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=http://localhost:5173/api/google/callback   # production: https://<your-vercel-app>/api/google/callback
+
+# Email for "Forgot password?" on the login page (any SMTP server; for Gmail use an App Password).
+# Without these, the codes are printed in the server console.
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=you@gmail.com
+SMTP_PASS=
+MAIL_FROM=Kova <you@gmail.com>
 ```
 
 ### Google Calendar (optional)

@@ -70,7 +70,7 @@ const tidyMessage = (m) => ({ ...m, content: typeof m.content === "string" ? m.c
 
 // Same contract as groqChat: returns { content, tool_calls?, executed_tools? }.
 // "browser_search" in tools becomes our web_search, which runs here (not in the caller).
-export const geminiChat = async (messages, { tools = null, toolChoice = null, maxTokens = 700, temperature = 0.6, reasoning = "low" } = {}) => {
+export const geminiChat = async (messages, { tools = null, toolChoice = null, maxTokens = 2500, temperature = 0.6, reasoning = "low" } = {}) => {
   if (!geminiConfigured()) throw new GeminiError("Gemini isn't set up", 0)
   const wantsSearch = !!tools?.some((t) => t.type === "browser_search")
   const fnTools = [...(tools || []).filter((t) => t.type === "function"), ...(wantsSearch ? [WEB_SEARCH_TOOL] : [])]

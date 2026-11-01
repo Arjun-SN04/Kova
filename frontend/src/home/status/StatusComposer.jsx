@@ -1,11 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { motion } from 'motion/react'
 import axios from 'axios'
-import { LuImage, LuSendHorizontal, LuType, LuX } from 'react-icons/lu'
-import { STATUS_COLORS, loadStatusFeed } from '../../utils/status'
+import { LuCheck, LuImagePlus, LuLoaderCircle, LuRefreshCw, LuSendHorizontal, LuType, LuUsers, LuX } from 'react-icons/lu'
+import { STATUS_COLORS, loadStatusFeed, statusBackground, statusTextSize } from '../../utils/status'
 import { compressImage } from '../../utils/attachments'
 
-// Post a status: text on a colour, or a photo/video with a caption
+const MAX = 700
+const glass = 'bg-white/12 ring-1 ring-white/15 backdrop-blur-md'
+
+// Post a status: text on a colour, or a photo/video with a caption.
+// Phones: full screen. Larger screens: a story-shaped card over a dimmed background.
 const StatusComposer = ({ mode = 'text', onClose }) => {
   const [kind, setKind] = useState(mode)
   const [text, setText] = useState('')
@@ -15,6 +20,7 @@ const StatusComposer = ({ mode = 'text', onClose }) => {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef(null)
+  const textRef = useRef(null)
 
   useEffect(() => { if (mode === 'media') setTimeout(() => fileRef.current?.click(), 50) }, [mode])
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
@@ -32,10 +38,9 @@ const StatusComposer = ({ mode = 'text', onClose }) => {
     setFile(ready); setPreview(URL.createObjectURL(ready)); setKind('media'); setError('')
   }
 
+  const canPost = kind === 'text' ? !!text.trim() : !!file
   const post = async () => {
-    if (busy) return
-    if (kind === 'text' && !text.trim()) return
-    if (kind === 'media' && !file) return
+    if (busy || !canPost) return
     setBusy(true); setError('')
     try {
       if (kind === 'text') await axios.post('/api/status', { text, background: color }, { withCredentials: true })
@@ -54,55 +59,108 @@ const StatusComposer = ({ mode = 'text', onClose }) => {
     }
   }
 
+  const tab = (on) => `flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition ${on ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'}`
+
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black" role="dialog" aria-modal="true" aria-label="New status">
-      <div className="relative flex h-full w-full max-w-md flex-col" style={kind === 'text' ? { background: color } : undefined}>
-        <div className="flex items-center gap-2 p-3">
-          <button onClick={onClose} className="flex size-10 items-center justify-center rounded-full text-white hover:bg-white/10" aria-label="Close"><LuX className="size-5" /></button>
+    <motion.div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/85 backdrop-blur-xl sm:p-6"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      onClick={onClose}
+      role="dialog" aria-modal="true" aria-label="New status"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, scale: 0.97, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ type: 'spring', stiffness: 360, damping: 32 }}
+        className="relative flex h-dvh w-full flex-col overflow-hidden text-white sm:h-[min(860px,92dvh)] sm:max-w-[440px] sm:rounded-[28px] sm:shadow-2xl sm:ring-1 sm:ring-white/10"
+        style={{ background: kind === 'text' ? statusBackground(color) : '#0b0d14', transition: 'background 300ms ease' }}
+      >
+        {/* Top bar: close · Text / Photo switch */}
+        <div className="relative z-10 flex items-center gap-2 p-4">
+          <button onClick={onClose} className={`flex size-10 items-center justify-center rounded-full ${glass} transition hover:bg-white/20`} aria-label="Close"><LuX className="size-5" /></button>
           <div className="flex-1" />
-          <button onClick={() => setKind('text')} className={`flex size-10 items-center justify-center rounded-full text-white hover:bg-white/10 ${kind === 'text' ? 'bg-white/20' : ''}`} aria-label="Text status" title="Text"><LuType className="size-5" /></button>
-          <button onClick={() => fileRef.current?.click()} className={`flex size-10 items-center justify-center rounded-full text-white hover:bg-white/10 ${kind === 'media' ? 'bg-white/20' : ''}`} aria-label="Photo or video" title="Photo or video"><LuImage className="size-5" /></button>
+          <div className={`flex items-center gap-0.5 rounded-full p-1 ${glass}`} role="tablist" aria-label="Status type">
+            <button role="tab" aria-selected={kind === 'text'} onClick={() => setKind('text')} className={tab(kind === 'text')}><LuType className="size-4" /> Text</button>
+            <button role="tab" aria-selected={kind === 'media'} onClick={() => (file ? setKind('media') : fileRef.current?.click())} className={tab(kind === 'media')}><LuImagePlus className="size-4" /> Photo</button>
+          </div>
           <input ref={fileRef} type="file" accept="image/*,video/mp4,video/webm,video/quicktime" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }} />
         </div>
 
-        <div className="flex flex-1 items-center justify-center overflow-hidden px-6">
+        {/* Canvas */}
+        <div className="relative flex min-h-0 flex-1 items-center justify-center px-7" onClick={() => kind === 'text' && textRef.current?.focus()}>
           {kind === 'text' ? (
             <textarea
+              ref={textRef}
               autoFocus
               value={text}
-              onChange={(e) => setText(e.target.value)}
-              maxLength={700}
-              placeholder="Type a status"
-              className="w-full resize-none bg-transparent text-center text-2xl font-semibold leading-snug text-white outline-none placeholder:text-white/60 sm:text-3xl"
-              rows={5}
+              onChange={(e) => setText(e.target.value.slice(0, MAX))}
+              onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) post() }}
+              placeholder="What’s on your mind?"
+              aria-label="Status text"
+              rows={6}
+              className={`w-full resize-none bg-transparent text-center font-semibold leading-snug tracking-tight text-white caret-white outline-none drop-shadow-sm placeholder:text-white/55 ${statusTextSize(text)}`}
             />
           ) : preview ? (
-            file.type.startsWith('video/')
-              ? <video src={preview} controls className="max-h-full max-w-full rounded-lg" />
-              : <img src={preview} alt="" className="max-h-full max-w-full rounded-lg object-contain" />
-          ) : (
-            <button onClick={() => fileRef.current?.click()} className="rounded-xl border border-dashed border-white/40 px-6 py-10 text-sm text-white/80 hover:bg-white/5">Choose a photo or video (videos up to 60 s)</button>
-          )}
-        </div>
-
-        {error && <p className="px-4 pb-2 text-center text-sm text-red-300">{error}</p>}
-
-        <div className="flex items-center gap-2 p-3">
-          {kind === 'text' ? (
-            <div className="flex flex-1 flex-wrap gap-1.5">
-              {STATUS_COLORS.map((c) => (
-                <button key={c} onClick={() => setColor(c)} className={`size-7 rounded-full ring-2 ${color === c ? 'ring-white' : 'ring-white/20'}`} style={{ background: c }} aria-label={`Background ${c}`} />
-              ))}
+            <div className="relative flex h-full w-full items-center justify-center py-2">
+              {file.type.startsWith('video/')
+                ? <video src={preview} controls className="max-h-full max-w-full rounded-2xl shadow-2xl" />
+                : <img src={preview} alt="" className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl" />}
+              <button onClick={() => fileRef.current?.click()} className={`absolute right-2 top-4 flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium ${glass} transition hover:bg-white/20`}>
+                <LuRefreshCw className="size-3.5" /> Change
+              </button>
             </div>
           ) : (
-            <input value={text} onChange={(e) => setText(e.target.value)} maxLength={700} placeholder="Add a caption" className="h-11 flex-1 rounded-full bg-white/10 px-4 text-sm text-white outline-none placeholder:text-white/50 focus:bg-white/15" />
+            <button onClick={() => fileRef.current?.click()} className="flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border border-dashed border-white/25 px-6 py-12 text-center transition hover:border-white/40 hover:bg-white/5">
+              <span className={`flex size-14 items-center justify-center rounded-2xl ${glass}`}><LuImagePlus className="size-6" /></span>
+              <span className="text-[15px] font-semibold">Choose a photo or video</span>
+              <span className="text-xs text-white/60">JPG, PNG or video up to 60 seconds · 10 MB max</span>
+            </button>
           )}
-          <button onClick={post} disabled={busy || (kind === 'text' ? !text.trim() : !file)} className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white text-slate-900 transition hover:bg-slate-100 disabled:opacity-40" aria-label="Post status">
-            {busy ? <span className="size-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-900" /> : <LuSendHorizontal className="size-5" />}
-          </button>
         </div>
-      </div>
-    </div>,
+
+        {/* Bottom: colours or caption · audience · Post */}
+        <div className="relative z-10 space-y-3 p-4 pt-2">
+          {error && <p role="alert" className="rounded-xl bg-red-500/20 px-3 py-2 text-center text-sm text-red-100 ring-1 ring-red-300/30">{error}</p>}
+
+          {kind === 'text' ? (
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Background colour">
+                {STATUS_COLORS.map((c) => (
+                  <button
+                    key={c} role="radio" aria-checked={color === c} aria-label={`Background ${c}`}
+                    onClick={() => setColor(c)}
+                    className={`flex size-7 items-center justify-center rounded-full ring-2 ring-offset-2 ring-offset-transparent transition hover:scale-110 ${color === c ? 'ring-white' : 'ring-white/0'}`}
+                    style={{ background: statusBackground(c) }}
+                  >
+                    {color === c && <LuCheck className="size-3.5" />}
+                  </button>
+                ))}
+              </div>
+              <span className={`shrink-0 text-xs tabular-nums ${text.length > MAX - 50 ? 'text-amber-200' : 'text-white/55'}`}>{text.length}/{MAX}</span>
+            </div>
+          ) : (
+            <input
+              value={text} onChange={(e) => setText(e.target.value.slice(0, MAX))} placeholder="Add a caption…" aria-label="Caption"
+              onKeyDown={(e) => e.key === 'Enter' && post()}
+              className={`h-12 w-full rounded-2xl px-4 text-sm text-white outline-none placeholder:text-white/50 focus:bg-white/20 ${glass}`}
+            />
+          )}
+
+          <div className="flex items-center gap-3">
+            <p className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-white/70">
+              <LuUsers className="size-3.5 shrink-0" /> <span className="truncate">Your contacts · disappears in 24 hours</span>
+            </p>
+            <button
+              onClick={post} disabled={busy || !canPost} aria-label="Post status"
+              className="flex h-11 shrink-0 items-center gap-2 rounded-full bg-white pl-4 pr-5 text-sm font-semibold text-slate-900 shadow-lg transition hover:bg-slate-100 active:scale-[0.98] disabled:opacity-40"
+            >
+              {busy ? <LuLoaderCircle className="size-4 animate-spin" /> : <LuSendHorizontal className="size-4" />}
+              {busy ? 'Posting…' : 'Post'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>,
     document.body,
   )
 }

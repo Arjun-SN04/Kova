@@ -30,13 +30,13 @@ const NotificationSettings = () => {
   }
 
   return (
-    <div className="flex flex-col gap-3 p-6">
-      <div className="flex items-start gap-4">
+    <div className="flex flex-col gap-3 p-4 sm:p-6">
+      <div className="flex items-start gap-3.5 sm:gap-4">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300">
           {state === 'on' ? <LuBell className="size-5" /> : <LuBellOff className="size-5" />}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold">Notifications on this device</p>
+          <p className="font-semibold text-base sm:text-lg">Notifications on this device</p>
           <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
             {state === 'unsupported'
               ? "This browser can't show notifications. On iPhone, tap Share > Add to Home Screen, then open Kova from there."

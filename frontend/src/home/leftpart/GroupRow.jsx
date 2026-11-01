@@ -1,5 +1,5 @@
 import React from 'react'
-import { LuChevronRight, LuFileText, LuImage, LuLock, LuMic, LuPin, LuVideo } from 'react-icons/lu'
+import { LuChevronRight, LuFileText, LuImage, LuMic, LuPin, LuVideo } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import { GroupAvatar } from '../Avatar'
 import { shortTime } from '../../utils/conversations'
@@ -42,16 +42,16 @@ export const GroupRow = ({ group, unread, preview, typing, myId, compact = false
             {group.name}
           </p>
           {pinned && <LuPin className="ml-auto size-3 shrink-0 -rotate-45 text-slate-400" title="Pinned" aria-label="Pinned" />}
-          {preview && (
-            <span className={`shrink-0 text-[11px] ${unread && !isSelected ? 'font-semibold text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>
+          {preview && !locked && (
+            <span className={`shrink-0 text-[11px] ${unread && !isSelected && !locked ? 'font-semibold text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>
               {shortTime(preview.createdAt)}
             </span>
           )}
         </div>
         <div className="mt-0.5 flex items-center gap-2">
-          <p className={`min-w-0 flex-1 truncate text-[13px] ${unread && !isSelected ? 'font-medium text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'}`}>
+          <p className={`min-w-0 flex-1 truncate text-[13px] ${unread && !isSelected && !locked ? 'font-medium text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'}`}>
             {locked ? (
-              <span className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400"><LuLock className="size-3.5" /> Locked chat</span>
+              <span aria-hidden>&nbsp;</span>
             ) : typing ? (
               <span className="font-medium text-indigo-600 dark:text-indigo-400">{typing === 'Nexa' ? 'Nexa is thinking…' : typeof typing === 'string' ? `${typing.split(' ')[0]} is typing…` : 'typing…'}</span>
             ) : preview ? (

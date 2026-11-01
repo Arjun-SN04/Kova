@@ -7,6 +7,7 @@ import { loadCalls } from '../utils/calls'
 import { useAuth } from './AuthProvider'
 import { AI_CHAT } from '../utils/ai'
 import { loadStatusFeed } from '../utils/status'
+import { CHANNEL_EVENT, loadChannels } from '../utils/channels'
 
 // Typing indicators clear themselves if no "stopTyping" arrives in time
 const TYPING_TIMEOUT_MS = 4000
@@ -62,7 +63,7 @@ const useListenMessages = () => {
     // Pinned chats changed (maybe in another tab)
     const handlePrefs = (prefs) => {
       if (prefs.pinnedChats) store().setPinnedChats(prefs.pinnedChats)
-      if (prefs.lockedChats) store().setLockedPrefs(prefs)
+      if (prefs.lockedChats || prefs.securityQuestion !== undefined) store().setLockedPrefs(prefs)
       if (prefs.wallpapers) store().setWallpapers(prefs.wallpapers)
       if (prefs.hiddenChats) store().setHiddenPrefs(prefs)
     }
@@ -85,6 +86,11 @@ const useListenMessages = () => {
 
     const handleMessageReacted = ({ messageId, reactions }) => {
       store().setMessages((prev) => prev.map((m) => (m._id === messageId ? { ...m, reactions } : m)))
+    }
+
+    // Live location moved (or stopped)
+    const handleLocationUpdated = ({ messageId, location }) => {
+      store().setMessages((prev) => prev.map((m) => (m._id === messageId ? { ...m, location, message: location.stopped ? '📍 Live location (ended)' : m.message } : m)))
     }
 
     const handleMessageEdited = (updated) => {
@@ -128,12 +134,20 @@ const useListenMessages = () => {
     socket.on('callLogged', handleCallLogged)
     socket.on('scheduledUpdated', handleScheduled)
     socket.on('newMessage', handleNewMessage)
+    // Channels: refresh the list and tell the open channel page
+    const channelEvents = ['channelPost', 'channelPostUpdated', 'channelPostDeleted', 'channelUpdated', 'channelDeleted']
+    const channelHandlers = channelEvents.map((type) => [type, (data) => {
+      window.dispatchEvent(new CustomEvent(CHANNEL_EVENT, { detail: { type, ...data } }))
+      if (type !== 'channelPostUpdated') loadChannels()
+    }])
+    channelHandlers.forEach(([type, fn]) => socket.on(type, fn))
     socket.on('nexaMessage', handleNexaMessage)
     socket.on('prefsUpdated', handlePrefs)
     socket.on('chatTimer', handleChatTimer)
     socket.on('statusUpdated', handleStatus)
     socket.on('messageDeleted', handleMessageDeleted)
     socket.on('messageEdited', handleMessageEdited)
+    socket.on('locationUpdated', handleLocationUpdated)
     socket.on('messagesDeleted', handleMessagesDeleted)
     socket.on('messageReacted', handleMessageReacted)
     socket.on('conversationDeleted', handleConversationDeleted)
@@ -156,6 +170,8 @@ const useListenMessages = () => {
       socket.off('newMessage', handleNewMessage)
       socket.off('messageDeleted', handleMessageDeleted)
       socket.off('messageEdited', handleMessageEdited)
+      channelHandlers.forEach(([type, fn]) => socket.off(type, fn))
+      socket.off('locationUpdated', handleLocationUpdated)
       socket.off('messagesDeleted', handleMessagesDeleted)
       socket.off('messageReacted', handleMessageReacted)
       socket.off('conversationDeleted', handleConversationDeleted)

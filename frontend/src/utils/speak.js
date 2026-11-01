@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 
-// Read a message aloud. First choice: the server's expressive voice (Groq Orpheus, with a
-// mood per line). If that isn't available, the device's own voices.
+// Read a message aloud. First choice: the server's voice (Groq Orpheus with a mood per line for
+// English; an Indian neural voice for Hindi / Hinglish). If that isn't available, the device's own voices.
 // One message at a time; the store says which one is loading / speaking for its button.
 export const useSpeech = create(() => ({ speakingId: null, loadingId: null }))
 export const canSpeak = () => typeof window !== 'undefined' && (typeof Audio !== 'undefined' || 'speechSynthesis' in window)
@@ -54,8 +54,7 @@ export const speak = async (id, text) => {
   if (st.speakingId === id || st.loadingId === id) { stopSpeaking(); return }
   stopSpeaking()
   if (urls.has(id)) { playUrl(id, urls.get(id)).catch(() => {}); return }
-  // The expressive voice speaks English (Roman Hindi too); Devanagari goes to a Hindi device voice
-  if (serverVoice && !/[\u0900-\u097F]/.test(text)) {
+  if (serverVoice) {
     useSpeech.setState({ loadingId: id })
     try {
       const res = await fetch('/api/ai/speak', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
@@ -67,7 +66,7 @@ export const speak = async (id, text) => {
         return
       }
       const err = await res.json().catch(() => ({}))
-      if (['terms', 'not_configured'].includes(err.code)) serverVoice = false
+      if (err.code === 'not_configured') serverVoice = false
       console.warn('Expressive voice unavailable:', err.error || res.status)
     } catch (e) {
       console.warn('Expressive voice failed:', e?.message)

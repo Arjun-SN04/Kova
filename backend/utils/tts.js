@@ -1,5 +1,6 @@
 import crypto from "crypto"
 import { askGroq } from "./groq.js"
+import { isHindi, speakHindi } from "./ttsHindi.js"
 
 // Expressive text to speech with Groq's Orpheus model.
 // Orpheus takes up to ~200 characters per request and reads short directions like "[warm]"
@@ -9,12 +10,14 @@ import { askGroq } from "./groq.js"
 const MODEL = process.env.TTS_MODEL || "canopylabs/orpheus-v1-english"
 const URL = "https://api.groq.com/openai/v1/audio/speech"
 const FEMALE = ["hannah", "diana", "autumn"]
-const MALE = ["troy", "daniel", "austin"]
 const MAX_PIECE = 190
 const MAX_TEXT = 2400
 
-const keys = () => (process.env.GROQ_API_KEYS || "").split(",").map((k) => k.trim()).filter(Boolean)
+// Voice uses GROQ_TTS_KEYS (accounts that accepted the Orpheus terms); falls back to GROQ_API_KEYS
+const keys = () => (process.env.GROQ_TTS_KEYS || process.env.GROQ_API_KEYS || "").split(",").map((k) => k.trim()).filter(Boolean)
 let next = 0
+// Keys whose Groq account hasn't accepted the voice model's terms: skipped for voice
+const noTerms = new Set()
 
 // Markdown, links and emoji out: only words get spoken
 export const speakable = (text) => String(text || "")
@@ -53,7 +56,7 @@ const plan = async (pieces) => {
   try {
     const raw = await askGroq([
       { role: "system", content: `You direct a voice actor reading a message aloud.
-Pick the voice: "female" or "male" (a poem written from a boy's or man's point of view, or signed by a man, is male; otherwise female).
+Always use "female".
 For each numbered part give ONE short vocal direction (1-2 words) that fits its emotion, e.g. warm, tender, gentle, romantic, soft, longing, wistful, cheerful, excited, playful, calm, reassuring, serious, sad, whisper, dramatic, hopeful, proud.
 Let the mood move with the text (a poem can start gentle, grow longing, end hopeful). Facts and instructions: calm or friendly.
 Return ONLY JSON: {"voice": "female" | "male", "moods": ["...", ...]} with exactly ${pieces.length} moods.` },
@@ -62,12 +65,20 @@ Return ONLY JSON: {"voice": "female" | "male", "moods": ["...", ...]} with exact
     const parsed = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] || "{}")
     const moods = Array.isArray(parsed.moods) ? parsed.moods.map((m) => String(m).replace(/[^a-z\s-]/gi, "").trim().split(/\s+/).slice(0, 2).join(" ").toLowerCase() || "warm") : []
     while (moods.length < pieces.length) moods.push(moods[moods.length - 1] || "warm")
-    // Rotate through the voices of that kind so it isn't always the same person
-    const pool = parsed.voice === "male" ? MALE : FEMALE
-    return { voice: pool[0], moods: moods.slice(0, pieces.length) }
+    // Always a female voice
+    return { voice: FEMALE[0], moods: moods.slice(0, pieces.length) }
   } catch {
     return fallback
   }
+}
+
+// "12s", "1m3.5s", "600ms" or seconds as a number → milliseconds
+const resetMs = (retryAfter, reset) => {
+  if (retryAfter && !Number.isNaN(Number(retryAfter))) return Number(retryAfter) * 1000
+  if (!reset) return null
+  let ms = 0
+  for (const [, n, unit] of String(reset).matchAll(/([\d.]+)(ms|h|m|s)/g)) ms += Number(n) * { ms: 1, s: 1000, m: 60_000, h: 3_600_000 }[unit]
+  return ms || null
 }
 
 class TtsError extends Error {
@@ -75,9 +86,11 @@ class TtsError extends Error {
 }
 
 const synth = async (input, voice) => {
-  const all = keys()
-  if (!all.length) throw new TtsError("Voice isn't set up on this server.", "not_configured")
+  const all = keys().filter((k) => !noTerms.has(k))
+  if (!keys().length) throw new TtsError("Voice isn't set up on this server.", "not_configured")
+  if (!all.length) throw new TtsError("The voice model needs to be enabled on the Groq account first.", "terms")
   let last
+  let waits = 0
   for (let attempt = 0; attempt < all.length; attempt++) {
     const key = all[next++ % all.length]
     const res = await fetch(URL, {
@@ -87,9 +100,18 @@ const synth = async (input, voice) => {
       signal: AbortSignal.timeout(30_000),
     })
     if (res.ok) return Buffer.from(await res.arrayBuffer())
+    // Per-minute character limit (free plan: 1,200/min): wait for it to reset and try again
+    if (res.status === 429 && waits < 4) {
+      const ms = resetMs(res.headers.get("retry-after"), res.headers.get("x-ratelimit-reset-tokens"))
+      if (ms !== null && ms <= 65_000) { waits++; attempt--; next--; await new Promise((r) => setTimeout(r, ms + 250)); continue }
+    }
     const err = await res.json().catch(() => ({}))
     last = err.error
-    if (err.error?.code === "model_terms_required") throw new TtsError("The voice model needs to be enabled on the Groq account first.", "terms")
+    if (err.error?.code === "model_terms_required" || /terms acceptance/i.test(err.error?.message || "")) {
+      noTerms.add(key)
+      if (noTerms.size >= keys().length) throw new TtsError("The voice model needs to be enabled on the Groq account first.", "terms")
+      continue
+    }
     if ([401, 403, 429].includes(res.status) || res.status >= 500) continue
     throw new TtsError(err.error?.message || "Couldn't make the audio.", "failed")
   }
@@ -137,24 +159,36 @@ export const joinWavs = (buffers, pauses = []) => {
 const cache = new Map()
 const CACHE_MAX = 40
 
-// Text → one WAV buffer with voice and moods chosen for it
+// Text → { audio, type }. Hindi / Hinglish → Indian neural voice (MP3, utils/ttsHindi.js);
+// everything else → Orpheus with a voice and moods chosen for it (WAV).
 export const speakText = async (text) => {
   const clean = speakable(text)
   if (!clean) throw new TtsError("Nothing to read.", "empty")
   const key = crypto.createHash("sha1").update(clean).digest("hex")
   if (cache.has(key)) return cache.get(key)
 
+  if (isHindi(clean)) {
+    try {
+      const out = { audio: await speakHindi(clean), type: "audio/mpeg" }
+      cache.set(key, out)
+      if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value)
+      return out
+    } catch (e) {
+      throw new TtsError(`Hindi voice failed: ${e.message}`, "failed")
+    }
+  }
+
   const pieces = split(clean)
   const { voice, moods } = await plan(pieces)
-  // A few at a time keeps within rate limits
+  // Two at a time keeps within the per-minute limit
   const audio = new Array(pieces.length)
-  for (let i = 0; i < pieces.length; i += 4) {
-    const batch = pieces.slice(i, i + 4)
+  for (let i = 0; i < pieces.length; i += 2) {
+    const batch = pieces.slice(i, i + 2)
     const out = await Promise.all(batch.map((p, j) => synth(`[${moods[i + j]}] ${p.text}`.slice(0, 200), voice)))
     out.forEach((b, j) => { audio[i + j] = b })
   }
-  const wav = joinWavs(audio, pieces.map((p) => p.pauseAfter))
-  cache.set(key, wav)
+  const out = { audio: joinWavs(audio, pieces.map((p) => p.pauseAfter)), type: "audio/wav" }
+  cache.set(key, out)
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value)
-  return wav
+  return out
 }

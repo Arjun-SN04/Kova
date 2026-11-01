@@ -4,6 +4,7 @@ import { AnimatePresence, MotionConfig } from 'motion/react'
 import ChatLayout from './home/ChatLayout'
 import Signup from './components/Signup'
 import Login from './components/Login'
+import ForgotPassword from './components/ForgotPassword'
 import HomePage from './components/HomePage'
 import Profile from './components/Profile'
 import InvitePage from './components/InvitePage'
@@ -44,6 +45,7 @@ const App = () => {
           <Route path='/' element={AuthUser ? page(<ChatLayout />) : <Navigate to="/home" />} />
           <Route path='/signup' element={AuthUser ? <Navigate to="/" /> : page(<Signup />)} />
           <Route path='/login' element={AuthUser ? <Navigate to="/" /> : page(<Login />)} />
+          <Route path='/forgot-password' element={AuthUser ? <Navigate to="/" /> : page(<ForgotPassword />)} />
           <Route path='/invite/:token' element={page(<InvitePage />)} />
           <Route path='/g/:code' element={page(<GroupLinkPage />)} />
           <Route path='/business' element={AuthUser ? page(<BusinessPage />) : <Navigate to="/login" />} />

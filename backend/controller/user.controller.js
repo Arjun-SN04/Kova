@@ -8,7 +8,7 @@ import { RESERVED_USERNAMES, USERNAME_RE, USERNAME_RULES, normalizeUsername, new
 
 // Never send password hashes, contact lists or invite tokens to the browser
 const publicUser = (user) => {
-  const { password, confirmPassword, __v, contacts, inviteToken, pinnedChats, starred, lockCode, hiddenChats, hiddenWordHash, ...rest } = user.toObject ? user.toObject() : user
+  const { password, confirmPassword, __v, contacts, inviteToken, pinnedChats, starred, lockCode, lockCodeKind, hiddenChats, hiddenWordHash, securityCode, securityAnswer, dataExport, deletion, ...rest } = user.toObject ? user.toObject() : user
   return rest
 }
 
@@ -75,8 +75,11 @@ export const login = async (req, res) => {
     if (!user) return res.status(400).json({ error: "User not found" })
     const isMatch = await bcrypt.compare(password, user.password)
     if (!isMatch) return res.status(400).json({ error: "Invalid password" })
+    // Signing in during the 30 days cancels a scheduled account deletion
+    const restored = !!user.deletion?.scheduledFor
+    if (restored) { user.deletion = undefined; await user.save() }
     Createtoken(user._id, res)
-    return res.status(200).json({ message: "Logged in successfully", user: publicUser(user) })
+    return res.status(200).json({ message: "Logged in successfully", user: publicUser(user), restored })
   } catch (error) {
     console.log(error)
     res.status(500).json({ error: "Internal server error" })

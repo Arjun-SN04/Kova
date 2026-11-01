@@ -10,7 +10,7 @@ import { GroupRow } from './GroupRow'
 const CommunitiesPanel = () => {
   const [AuthUser] = useAuth()
   const myId = String(AuthUser?._id)
-  const { communities, groups, previews, unreadCounts, typingUsers, setSelectedConversation, setCreateDialog } = useConversation()
+  const { communities, groups, previews, unreadCounts, typingUsers, setSelectedConversation, setCreateDialog, lockedChats } = useConversation()
 
   return (
     <>
@@ -33,7 +33,7 @@ const CommunitiesPanel = () => {
             <section key={c._id} className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-800/80">
               <button onClick={() => setSelectedConversation(c)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-900">
                 <GroupAvatar name={c.name} community />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-[15px] font-semibold">{c.name}</p>
                   <p className="truncate text-xs text-slate-500 dark:text-slate-400">{c.members.length} members{others ? ` · ${others} group${others > 1 ? 's' : ''}` : ''}</p>
                 </div>
@@ -46,6 +46,7 @@ const CommunitiesPanel = () => {
                   typing={typingUsers[String(announcements._id)]}
                   myId={myId}
                   compact
+                  locked={lockedChats.includes(String(announcements._id))}
                 />
               )}
               <button onClick={() => setSelectedConversation(c)} className="ml-6 mt-0.5 rounded-lg px-3 py-1.5 text-[13px] font-medium text-indigo-600 transition hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-500/10">

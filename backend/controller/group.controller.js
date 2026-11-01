@@ -1,3 +1,4 @@
+import { attachLinkPreview } from "../utils/linkPreview.js"
 import crypto from "node:crypto"
 import { Group } from "../models/group.model.js"
 import { Community } from "../models/community.model.js"
@@ -384,6 +385,7 @@ export const sendGroupMessage = async (req, res) => {
 
     emitToUsers(group.members, "newMessage", newMessage, me)
     res.status(201).json(newMessage)
+    attachLinkPreview(newMessage)
     sendPush(group.members.filter((m) => !sameId(m, me)), { title: group.name, body: `${req.user.fullName.split(" ")[0]}: ${previewOf(newMessage)}`, tag: `group-${group._id}` }, { chatId: group._id }).catch(() => {})
 
     // "@Nexa …": answer in the group (in the background)

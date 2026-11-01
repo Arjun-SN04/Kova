@@ -460,21 +460,21 @@ const HomePage = () => {
             <a href="#features" className="rounded-full px-4 py-2 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white">Features</a>
             <a href="#how-it-works" className="rounded-full px-4 py-2 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white">How it works</a>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
             <button
               onClick={toggle}
               aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
               title={dark ? 'Light mode' : 'Dark mode'}
-              className="flex size-10 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white"
+              className="flex size-9 sm:size-10 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white"
             >
               {dark ? <LuSun className="size-4.5" /> : <LuMoon className="size-4.5" />}
             </button>
             {AuthUser ? (
-              <Button to="/" size="sm" rightIcon={LuArrowUpRight} className="h-10 rounded-full px-4">Open app</Button>
+              <Button to="/" size="sm" rightIcon={LuArrowUpRight} className="h-9 sm:h-10 rounded-full px-3 sm:px-4 text-xs sm:text-sm">Open app</Button>
             ) : (
               <>
-                <Button to="/login" variant="ghost" size="sm" className="h-10 rounded-full px-4">Sign in</Button>
-                <Button to="/signup" variant="dark" size="sm" className="h-10 rounded-full px-4">Get started</Button>
+                <Button to="/login" variant="ghost" size="sm" className="hidden xs:inline-flex h-9 sm:h-10 rounded-full px-2.5 sm:px-4 text-xs sm:text-sm">Sign in</Button>
+                <Button to="/signup" variant="dark" size="sm" className="h-9 sm:h-10 rounded-full px-3 sm:px-4 text-xs sm:text-sm">Get started</Button>
               </>
             )}
           </div>

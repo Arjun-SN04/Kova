@@ -4,7 +4,7 @@ import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuArrowLeft, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImages, LuMessageCircle, LuSendHorizontal, LuSmile, LuLoaderCircle, LuSparkles, LuSquare, LuTrash2, LuVolume2, LuX } from 'react-icons/lu'
+import { LuArrowLeft, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuEllipsisVertical, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImages, LuMessageCircle, LuSendHorizontal, LuSmile, LuLoaderCircle, LuSparkles, LuSquare, LuTrash2, LuVolume2, LuX } from 'react-icons/lu'
 import { canSpeak, speak, useSpeech } from '../../utils/speak'
 import { selfContact } from '../../utils/conversations'
 import useConversation from '../../Zustand/UserConversation'
@@ -20,7 +20,7 @@ import { clearGoogleResult, peekGoogleResult } from '../../utils/google'
 import { AgendaCard, DraftCard, EventCard, ReminderCard, SnoozedCard, TaskCard } from './AgendaCards'
 import { useSocket } from '../../context/SocketProvider'
 import { compressImage, formatBytes } from '../../utils/attachments'
-import { TIMER_OPTIONS, timerLabel } from '../../utils/chatExtras'
+import { TIMER_OPTIONS, timerLabel, timerShort } from '../../utils/chatExtras'
 import MediaPicker from '../media/MediaPicker'
 import { remarkHtmlBreaks, remarkLineBreaks } from '../../utils/markdown'
 import useWallpaper from '../../hooks/useWallpaper'
@@ -168,8 +168,8 @@ const listItem = (onAsk) => {
 }
 
 // Same sizes as normal chat bubbles
-const bubbleWidth = 'max-w-[80%] sm:max-w-[70%] lg:max-w-[min(60%,640px)]'
-const wideBubbleWidth = 'w-full max-w-[90%] sm:max-w-[85%] lg:max-w-[min(80%,820px)]'
+const bubbleWidth = 'max-w-[85%] sm:max-w-[75%] lg:max-w-[min(65%,640px)]'
+const wideBubbleWidth = 'w-full max-w-[95%] sm:max-w-[85%] lg:max-w-[min(80%,820px)]'
 
 const Thinking = () => (
   <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mb-3 flex items-end gap-2">
@@ -379,7 +379,7 @@ const MyBubble = memo(({ message, onKeep, onDelete }) => (
       {message.attachment && !['image', 'gif', 'sticker'].includes(message.attachment.kind) && (
         <a href={message.attachment.url} target="_blank" rel="noreferrer" className="block max-w-full"><FileChip name={message.attachment.name} size={message.attachment.size} /></a>
       )}
-      {message.content && <p className="whitespace-pre-wrap rounded-2xl rounded-br-md bg-indigo-600 px-3.5 py-2 text-sm leading-relaxed text-white">{message.content}</p>}
+      {message.content && <p className="whitespace-pre-wrap break-words max-w-full rounded-2xl rounded-br-md bg-indigo-600 px-3.5 py-2 text-sm leading-relaxed text-white">{message.content}</p>}
       <p className="mt-1 flex items-center gap-2 px-1 text-[11px] text-slate-400">
         <MessageTools message={message} onKeep={onKeep} onDelete={onDelete} align="right" />
         {message.createdAt && formatTime(message.createdAt)}
@@ -429,6 +429,7 @@ const AiChat = () => {
   // Disappearing Nexa chat (24 h by default)
   const [timer, setTimer] = useState(86400)
   const [timerOpen, setTimerOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   useEffect(() => {
     axios.get('/api/ai/settings', api).then((res) => setTimer(res.data.disappearAfter)).catch(() => { })
   }, [])
@@ -653,20 +654,103 @@ const AiChat = () => {
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col">
-      <header className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3 sm:px-5 dark:border-slate-800 dark:bg-slate-950">
-        <button onClick={() => setSelectedConversation(null)} className="flex size-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 md:hidden dark:hover:bg-slate-800" aria-label="Back to chats">
+      <header className="flex h-16 shrink-0 items-center gap-2 sm:gap-3 border-b border-slate-200 bg-white px-3 sm:px-5 dark:border-slate-800 dark:bg-slate-950">
+        <button onClick={() => setSelectedConversation(null)} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 md:hidden dark:hover:bg-slate-800" aria-label="Back to chats">
           <LuArrowLeft className="size-5" />
         </button>
-        <AiAvatar size="sm" />
-        <div className="min-w-0">
-          <p className="text-[15px] font-semibold">Nexa</p>
-          <p className={`text-xs ${thinking ? 'font-medium text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
+        <AiAvatar size="sm" className="shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-semibold">Nexa</p>
+          <p className={`truncate text-xs ${thinking ? 'font-medium text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
             {thinking ? 'thinking…' : timer ? `AI assistant · messages disappear after ${timerLabel(timer)}` : 'AI assistant'}
           </p>
         </div>
-        <button onClick={() => setLibraryOpen(true)} className="ml-auto flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800" title="Media, links and docs" aria-label="Media, links and docs">
-          <LuImages className="size-4.5" />
-        </button>
+
+        <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
+          <button onClick={() => setCalendarOpen(true)} className="relative flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-violet-50 hover:text-violet-600 dark:text-slate-400 dark:hover:bg-violet-500/10 dark:hover:text-violet-300" title="Google Calendar & reminders" aria-label="Google Calendar and reminders">
+            <LuCalendarDays className="size-4.5" />
+            {googleConnected && <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-950" />}
+          </button>
+
+          {/* Desktop direct buttons */}
+          <button onClick={() => setLibraryOpen(true)} className="hidden sm:flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800" title="Media, links and docs" aria-label="Media, links and docs">
+            <LuImages className="size-4.5" />
+          </button>
+
+          <div className="relative hidden sm:block">
+            <button onClick={() => setTimerOpen((o) => !o)} className={`flex size-9 items-center justify-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 ${timer ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} title={`Disappearing messages: ${timerLabel(timer)}`} aria-label="Disappearing messages" aria-expanded={timerOpen}>
+              <LuTimer className="size-4.5" />
+            </button>
+            {timerOpen && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setTimerOpen(false)} />
+                <div role="menu" className="absolute right-0 top-full z-30 mt-1.5 w-64 rounded-xl bg-white p-1 shadow-xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+                  <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Disappearing messages</p>
+                  <p className="px-3 pb-2 text-xs text-slate-500 dark:text-slate-400">Old messages and their files are deleted. Tap Keep on a message to save it.</p>
+                  {TIMER_OPTIONS.map(([secs, label]) => (
+                    <button key={secs} role="menuitemradio" aria-checked={timer === secs} onClick={() => changeTimer(secs)} className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
+                      {label}{timer === secs && <LuCheck className="size-4 text-indigo-600 dark:text-indigo-400" />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {messages.length > 0 && (
+            <button onClick={() => setConfirmClear(true)} className="hidden sm:flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400" title="Clear chat" aria-label="Clear chat">
+              <LuTrash2 className="size-4.5" />
+            </button>
+          )}
+
+          {/* Mobile menu (⋯) for compact view */}
+          <div className="relative sm:hidden">
+            <button
+              onClick={() => setMobileMenuOpen((o) => !o)}
+              className="flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+              title="More options"
+              aria-label="More options"
+              aria-haspopup="menu"
+              aria-expanded={mobileMenuOpen}
+            >
+              <LuEllipsisVertical className="size-4.5" />
+            </button>
+            {mobileMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setMobileMenuOpen(false)} />
+                <div role="menu" className="absolute right-0 top-full z-30 mt-1.5 w-56 rounded-xl bg-white py-1 shadow-xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+                  <button
+                    role="menuitem"
+                    onClick={() => { setMobileMenuOpen(false); setTimerOpen(true) }}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <LuTimer className="size-4 text-slate-400" />
+                    <span>Disappearing ({timer ? timerShort(timer) || timerLabel(timer) : 'Off'})</span>
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => { setMobileMenuOpen(false); setLibraryOpen(true) }}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <LuImages className="size-4 text-slate-400" />
+                    <span>Media, links & docs</span>
+                  </button>
+                  {messages.length > 0 && (
+                    <button
+                      role="menuitem"
+                      onClick={() => { setMobileMenuOpen(false); setConfirmClear(true) }}
+                      className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                    >
+                      <LuTrash2 className="size-4" />
+                      <span>Clear chat</span>
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
         <MediaManager
           open={libraryOpen}
           onClose={() => setLibraryOpen(false)}
@@ -678,38 +762,25 @@ const AiChat = () => {
             ? 'The Nexa messages with these links are deleted. This can’t be undone.'
             : 'The files are removed from the chat and from storage. The message text stays. This can’t be undone.')}
         />
-        <div className="relative">
-          <button onClick={() => setTimerOpen((o) => !o)} className={`flex size-9 items-center justify-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 ${timer ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} title={`Disappearing messages: ${timerLabel(timer)}`} aria-label="Disappearing messages" aria-expanded={timerOpen}>
-            <LuTimer className="size-4.5" />
-          </button>
-          {timerOpen && (
-            <>
-              <div className="fixed inset-0 z-20" onClick={() => setTimerOpen(false)} />
-              <div role="menu" className="absolute right-0 top-full z-30 mt-1.5 w-64 rounded-xl bg-white p-1 shadow-xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-                <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Disappearing messages</p>
-                <p className="px-3 pb-2 text-xs text-slate-500 dark:text-slate-400">Old messages and their files are deleted. Tap Keep on a message to save it.</p>
-                {TIMER_OPTIONS.map(([secs, label]) => (
-                  <button key={secs} role="menuitemradio" aria-checked={timer === secs} onClick={() => changeTimer(secs)} className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
-                    {label}{timer === secs && <LuCheck className="size-4 text-indigo-600 dark:text-indigo-400" />}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-        <button onClick={() => setCalendarOpen(true)} className="relative flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-violet-50 hover:text-violet-600 dark:text-slate-400 dark:hover:bg-violet-500/10 dark:hover:text-violet-300" title="Google Calendar & reminders" aria-label="Google Calendar and reminders">
-          <LuCalendarDays className="size-4.5" />
-          {googleConnected && <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-950" />}
-        </button>
-        {messages.length > 0 && (
-          <button onClick={() => setConfirmClear(true)} className="flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400" title="Clear chat" aria-label="Clear chat">
-            <LuTrash2 className="size-4.5" />
-          </button>
+        {/* Mobile popup for timer when triggered from mobile menu */}
+        {timerOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 sm:hidden">
+            <div className="fixed inset-0" onClick={() => setTimerOpen(false)} />
+            <div role="menu" className="relative z-10 w-full max-w-xs rounded-2xl bg-white p-3 shadow-xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+              <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Disappearing messages</p>
+              <p className="px-3 pb-2 text-xs text-slate-500 dark:text-slate-400">Old messages and their files are deleted. Tap Keep on a message to save it.</p>
+              {TIMER_OPTIONS.map(([secs, label]) => (
+                <button key={secs} role="menuitemradio" aria-checked={timer === secs} onClick={() => changeTimer(secs)} className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
+                  {label}{timer === secs && <LuCheck className="size-4 text-indigo-600 dark:text-indigo-400" />}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </header>
 
       <div ref={scrollRef} className="chat-bg min-h-0 flex-1 overflow-y-auto" style={wallpaper || undefined}>
-        <div className="h-full px-4 sm:px-6 lg:px-8">
+        <div className="h-full px-3 sm:px-6 lg:px-8">
           {loading ? null : messages.length === 0 && !thinking ? (
             <div className="flex h-full flex-col items-center justify-center py-10 text-center">
               <AiAvatar size="md" />
@@ -729,7 +800,7 @@ const AiChat = () => {
         </div>
       </div>
 
-      <div className="relative shrink-0 border-t border-slate-200 bg-white px-4 py-3 sm:px-6 lg:px-8 dark:border-slate-800 dark:bg-slate-950">
+      <div className="relative shrink-0 border-t border-slate-200 bg-white px-3 py-2.5 sm:px-6 lg:px-8 pb-[max(0.625rem,env(safe-area-inset-bottom))] dark:border-slate-800 dark:bg-slate-950">
         <AnimatePresence>
           {mediaOpen && <MediaPicker onEmoji={insertEmoji} onMedia={sendMedia} onClose={closeMedia} toggleRef={mediaBtnRef} className="left-4 sm:left-6 lg:left-8" />}
         </AnimatePresence>

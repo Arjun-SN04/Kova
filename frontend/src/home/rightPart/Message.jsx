@@ -15,6 +15,8 @@ import { AiAvatar } from '../Avatar'
 import ReactMarkdown from 'react-markdown'
 import { remarkHtmlBreaks, remarkLineBreaks } from '../../utils/markdown'
 import PollCard from './PollCard'
+import LocationCard from '../location/LocationCard'
+import { LinkPreviewCard, LinkifiedText } from './LinkPreview'
 import { setKept, setMessagePinned, toggleStar } from '../../utils/chatExtras'
 import ChatCard from '../../business/ChatCard'
 import { TaskDialog } from '../../business/Tasks'
@@ -183,7 +185,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
   }
 
   // Photos and videos get a tighter frame around them
-  const media = ['image', 'video'].includes(message.attachment?.kind)
+  const media = ['image', 'video'].includes(message.attachment?.kind) || !!message.location
 
   // Bubble shape: flatten the corner that points at the neighbouring bubble
   const corners = itsMe
@@ -328,7 +330,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
       {!itsMe && (last ? (isBot ? <AiAvatar size="xs" /> : <Avatar name={contactName} src={contactAvatar} size="xs" />) : <div className="w-7 shrink-0" />)}
       {itsMe && actions}
 
-      <div className={`flex max-w-[80%] flex-col sm:max-w-[70%] lg:max-w-[min(60%,640px)] ${itsMe ? 'items-end' : 'items-start'}`}>
+      <div className={`flex max-w-[85%] flex-col sm:max-w-[75%] lg:max-w-[min(65%,640px)] ${itsMe ? 'items-end' : 'items-start'}`}>
         {senderLabel && <p className="mb-0.5 ml-1 text-xs font-medium text-indigo-600 dark:text-indigo-400">{senderLabel}</p>}
         <div
           onClick={selectionMode ? undefined : onBubbleClick}
@@ -336,8 +338,8 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           title={new Date(message.createdAt).toLocaleString()}
           className={message.card
             // Business cards bring their own frame: no bubble around them
-            ? `rounded-xl text-[14px] leading-relaxed transition ${ring} ${deleting ? 'opacity-40' : ''} ${selectionMode ? 'pointer-events-none' : ''}`
-            : `rounded-2xl text-[14px] leading-relaxed transition ${media ? 'p-1.5' : 'px-3.5 py-2'} ${corners} ${ring} ${deleting ? 'opacity-40' : ''} ${
+            ? `rounded-xl text-[14px] leading-relaxed break-words max-w-full transition ${ring} ${deleting ? 'opacity-40' : ''} ${selectionMode ? 'pointer-events-none' : ''}`
+            : `rounded-2xl text-[14px] leading-relaxed break-words max-w-full transition ${media ? 'p-1.5' : 'px-3.5 py-2'} ${corners} ${ring} ${deleting ? 'opacity-40' : ''} ${
             itsMe
               ? 'bg-indigo-600 text-white'
               : 'bg-[#ffffff] text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-slate-900/[0.05] dark:bg-slate-800 dark:text-slate-100 dark:ring-0'
@@ -352,15 +354,17 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           {refs}
           {message.attachment && <Attachment attachment={message.attachment} itsMe={itsMe} messageId={message._id} label={itsMe ? 'You' : isBot ? 'Nexa' : senderLabel || contactName || 'Voice message'} />}
           <Transcript message={message} itsMe={itsMe} />
+          {message.location && <LocationCard message={message} itsMe={itsMe} />}
           {message.poll && <PollCard message={message} itsMe={itsMe} myId={myId} nameOf={nameOf} />}
           {message.card && <ChatCard message={message} mine={itsMe} />}
-          {message.message && !message.poll && !message.card && (isBot ? (
+          {message.message && !message.poll && !message.card && !message.location && (isBot ? (
             <div className="wrap-break-word"><ReactMarkdown remarkPlugins={HTML_BREAKS} components={botMd}>{message.message}</ReactMarkdown></div>
           ) : (
             <span className={`block whitespace-pre-wrap wrap-break-word ${media ? 'px-2 pb-1 pt-1.5' : message.attachment ? 'pt-2' : ''}`}>
-              {message.message}
+              <LinkifiedText text={message.message} itsMe={itsMe} />
             </span>
           ))}
+          {message.linkPreview && !message.poll && !message.card && <LinkPreviewCard preview={message.linkPreview} itsMe={itsMe} />}
           <Translation translation={translation} itsMe={itsMe} onHide={hideTranslation} />
           <GoToMessage message={message} itsMe={itsMe} />
         </div>

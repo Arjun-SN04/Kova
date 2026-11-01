@@ -39,9 +39,9 @@ const StarredPanel = () => {
 
   return (
     <>
-      <header className="px-4 pb-3 pt-5">
-        <h2 className="text-xl font-semibold tracking-tight">Starred</h2>
-        <p className="mt-0.5 text-[13px] text-slate-500 dark:text-slate-400">Messages you saved from any chat</p>
+      <header className="px-3 sm:px-4 pb-2.5 sm:pb-3 pt-3.5 sm:pt-4">
+        <h2 className="truncate text-lg sm:text-xl font-semibold tracking-tight">Starred</h2>
+        <p className="mt-0.5 truncate text-xs sm:text-[13px] text-slate-500 dark:text-slate-400">Messages you saved from any chat</p>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
         {items === null ? (

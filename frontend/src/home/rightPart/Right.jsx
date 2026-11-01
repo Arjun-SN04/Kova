@@ -10,6 +10,7 @@ import SelectionBar from './SelectionBar'
 import ForwardDialog from './ForwardDialog'
 import GroupInfo from '../groups/GroupInfo'
 import CommunityPage from '../groups/CommunityPage'
+import ChannelPage from '../channels/ChannelPage'
 import AiChat from '../ai/AiChat'
 import ScheduledBar from './ScheduledBar'
 import SmartReplies from './SmartReplies'
@@ -99,10 +100,11 @@ const Right = () => {
 
   if (!selectedConversation) return <Welcome />
   if (selectedConversation.isAi) return <AiChat />
+  if (selectedConversation.isChannel) return <ChannelPage key={selectedConversation._id} channel={selectedConversation} />
   // Locked chat: nothing loads until the code is entered
   // (unlocked if the code was entered within the last 5 minutes, or while this chat is open)
   if (lockedChats.includes(String(selectedConversation._id)) && unlockedUntil < chatOpenedAt) {
-    return <LockedChat chat={selectedConversation} onBack={() => setSelectedConversation(null)} onUnlock={() => setLockRequest({ action: 'open', ids: [String(selectedConversation._id)] })} />
+    return <LockedChat chat={selectedConversation} onBack={() => setSelectedConversation(null)} onUnlock={() => setLockRequest({ action: 'open', ids: [String(selectedConversation._id)], chats: [selectedConversation] })} />
   }
   if (selectedConversation.isCommunity) return <CommunityPage key={selectedConversation._id} community={selectedConversation} />
 

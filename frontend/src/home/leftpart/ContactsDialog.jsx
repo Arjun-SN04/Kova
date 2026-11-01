@@ -421,36 +421,36 @@ const ContactsDialog = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 16 }}
             transition={{ duration: 0.18 }}
-            className="flex max-h-[90dvh] w-full max-w-md flex-col rounded-t-2xl bg-white text-slate-900 shadow-2xl sm:rounded-2xl dark:bg-slate-900 dark:text-slate-100 dark:ring-1 dark:ring-slate-800"
+            className="flex max-h-[92dvh] w-full max-w-md flex-col rounded-t-2xl bg-white text-slate-900 shadow-2xl sm:rounded-2xl pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:bg-slate-900 dark:text-slate-100 dark:ring-1 dark:ring-slate-800"
           >
-            <div className="flex items-center justify-between px-5 pt-5">
+            <div className="flex items-center justify-between px-4 sm:px-5 pt-4 sm:pt-5">
               <h3 className="text-lg font-semibold">Contacts</h3>
               <button onClick={close} aria-label="Close" className="flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
                 <LuX className="size-4.5" />
               </button>
             </div>
 
-            <div className="mx-5 mt-3 grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+            <div className="mx-3 sm:mx-5 mt-3 grid grid-cols-4 gap-0.5 sm:gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
               {TABS.map(({ id, label, Icon }) => (
                 <button
                   key={id}
                   onClick={() => setContactsDialog(id)}
-                  className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-[13px] font-medium transition ${
+                  className={`flex items-center justify-center gap-1 sm:gap-1.5 rounded-lg py-1.5 px-1 text-xs sm:text-[13px] font-medium transition ${
                     tab === id
                       ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-950 dark:text-white'
                       : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
                   }`}
                 >
-                  <Icon className="size-4" />
-                  {label}
+                  <Icon className="size-3.5 sm:size-4 shrink-0" />
+                  <span className="truncate">{label}</span>
                   {id === 'requests' && incoming > 0 && (
-                    <span className="flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-semibold text-white">{incoming}</span>
+                    <span className="flex h-4 min-w-4 sm:h-4.5 sm:min-w-4.5 items-center justify-center rounded-full bg-indigo-600 px-1 text-[9px] sm:text-[10px] font-semibold text-white">{incoming}</span>
                   )}
                 </button>
               ))}
             </div>
 
-            <div className="min-h-64 overflow-y-auto p-5">
+            <div className="min-h-64 overflow-y-auto p-4 sm:p-5">
               {tab === 'all' && <AllTab openChat={openChat} goTo={setContactsDialog} />}
               {tab === 'add' && <AddTab openChat={openChat} goTo={setContactsDialog} />}
               {tab === 'requests' && <RequestsTab />}

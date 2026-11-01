@@ -49,23 +49,25 @@ const PrivacySettings = () => {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-start gap-4">
+    <div className="p-4 sm:p-6">
+      <div className="flex items-start gap-3.5 sm:gap-4">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300">
           <LuShieldCheck className="size-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold">Privacy</p>
-          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">Choose what others can see. Activity status and seen indicators work both ways.</p>
+          <p className="font-semibold text-base sm:text-lg">Privacy</p>
+          <p className="mt-0.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400">Choose what others can see. Activity status and seen indicators work both ways.</p>
         </div>
       </div>
       <div className="mt-5 divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
         {OPTIONS.map(({ key, Icon, title, on, off }) => (
-          <div key={key} className="flex items-center gap-3 px-4 py-3.5">
-            <Icon className="size-4 shrink-0 text-slate-400" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">{title}</p>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{privacy[key] ? on : off}</p>
+          <div key={key} className="flex items-center justify-between gap-3 px-4 py-3.5">
+            <div className="flex items-start gap-3 min-w-0 flex-1">
+              <Icon className="mt-0.5 size-4 shrink-0 text-slate-400" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium leading-snug">{title}</p>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 leading-normal">{privacy[key] ? on : off}</p>
+              </div>
             </div>
             <button
               type="button"
@@ -81,13 +83,15 @@ const PrivacySettings = () => {
           </div>
         ))}
         {CHOICES.map(({ key, Icon, title, hint, options }) => (
-          <div key={key} className="flex flex-wrap items-center gap-3 px-4 py-3.5">
-            <Icon className="size-4 shrink-0 text-slate-400" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">{title}</p>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{key === 'photo' && AuthUser?.business?.enabled ? 'Your photo is your business logo, so customers always see it.' : hint}</p>
+          <div key={key} className="flex flex-col gap-2.5 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex items-start gap-3 min-w-0 flex-1">
+              <Icon className="mt-0.5 size-4 shrink-0 text-slate-400" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium leading-snug">{title}</p>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{key === 'photo' && AuthUser?.business?.enabled ? 'Your photo is your business logo, so customers always see it.' : hint}</p>
+              </div>
             </div>
-            <div className="w-44 shrink-0">
+            <div className="w-full shrink-0 pl-7 sm:w-44 sm:pl-0">
               <Select size="sm" value={privacy[key]} onChange={(v) => save(key, v)} options={options} disabled={busy === key} aria-label={title} />
             </div>
           </div>

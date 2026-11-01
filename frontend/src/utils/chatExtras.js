@@ -72,10 +72,10 @@ export const setKept = async (message, kept) => {
 
 // ── Locked chats ──
 // Lock (code only needed the first time, to set it) or unlock (code required)
-export const setChatLocked = async (chatId, locked, code) => {
+export const setChatLocked = async (chatId, locked, code, qa = {}) => {
   try {
-    const res = await axios.put(`/api/message/lock-chat/${chatId}`, { locked, code }, api)
-    store().setLockedPrefs(res.data)
+    const res = await axios.put(`/api/message/lock-chat/${chatId}`, { locked, code, ...qa }, api)
+    store().setLockedPrefs({ ...res.data, ...(qa.question && !store().securityQuestion ? { securityQuestion: qa.question } : {}) })
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err.response?.data?.error || "Couldn't change that chat" }
@@ -84,8 +84,13 @@ export const setChatLocked = async (chatId, locked, code) => {
 export const verifyLockCode = async (code) => {
   try { await axios.post('/api/message/locked/verify', { code }, api); return { ok: true } } catch (err) { return { ok: false, error: err.response?.data?.error || 'Try again' } }
 }
-export const resetLockCode = async (password, code) => {
-  try { const res = await axios.post('/api/message/locked/reset', { password, code }, api); store().setLockedPrefs(res.data); return { ok: true } } catch (err) { return { ok: false, error: err.response?.data?.error || 'Try again' } }
+// Forgot the code: set a new one. proof = { answer } (security question) or { password } (account)
+export const resetLockCode = async (proof, code) => {
+  try { const res = await axios.post('/api/message/locked/reset', { ...proof, code }, api); store().setLockedPrefs(res.data); return { ok: true } } catch (err) { return { ok: false, error: err.response?.data?.error || 'Try again' } }
+}
+// Change the code (current needed only if there is one already). qa = { question, answer } to set the security question too
+export const changeLockCode = async (current, code, qa = {}) => {
+  try { const res = await axios.put('/api/message/locked/code', { current, code, ...qa }, api); store().setLockedPrefs({ ...res.data, ...(qa.question && !store().securityQuestion ? { securityQuestion: qa.question } : {}) }); return { ok: true } } catch (err) { return { ok: false, error: err.response?.data?.error || 'Try again' } }
 }
 
 // ── Hidden chats ──
@@ -104,12 +109,23 @@ export const setChatHidden = async (chatId, hidden) => {
     return { ok: false, error: err.response?.data?.error || "Couldn't change that chat" }
   }
 }
-export const saveHiddenWord = async (word) => {
+// word: new word, or null to turn off. To change an existing word pass { current }, or { answer } / { password } if forgotten
+export const saveHiddenWord = async (word, proof = {}) => {
   try {
-    const res = await axios.put('/api/message/hidden-word', { word }, api)
+    const res = await axios.put('/api/message/hidden-word', { word, ...proof }, api)
     store().setHiddenPrefs(res.data)
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err.response?.data?.error || 'Could not save' }
   }
+}
+
+// ── Security question ──
+// For a forgotten app lock PIN: check { answer } or { password } on the server
+export const verifyRecovery = async (proof) => {
+  try { await axios.post('/api/user/security/verify', proof, api); return { ok: true } } catch (err) { return { ok: false, error: err.response?.data?.error || 'Try again' } }
+}
+// Set or change it. Needs { password } once a question or lock code exists.
+export const saveSecurityQuestion = async ({ question, answer, password }) => {
+  try { const res = await axios.put('/api/user/security/question', { question, answer, password }, api); store().setLockedPrefs(res.data); return { ok: true } } catch (err) { return { ok: false, error: err.response?.data?.error || 'Could not save' } }
 }

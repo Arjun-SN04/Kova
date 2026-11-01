@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { LuBriefcase, LuLayers, LuMessageSquareText, LuMoon, LuPhone, LuSettings, LuSun, LuUser, LuStar, LuCircleDashed } from 'react-icons/lu'
+import { AnimatePresence, motion } from 'motion/react'
+import { LuBriefcase, LuLayers, LuRadioTower, LuMessageSquareText, LuMoon, LuPhone, LuSettings, LuSun, LuUser, LuStar, LuCircleDashed, LuEllipsis } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
 import { useTheme } from '../../context/ThemeProvider'
@@ -12,7 +13,7 @@ import useBusiness from '../../business/store'
 // Unread chats, missed calls since I last opened Calls, unread community messages
 export const useNavBadges = () => {
   const [AuthUser] = useAuth()
-  const { unreadCounts, calls, callsSeenAt, groups, statusFeed, lockedChats, hiddenChats } = useConversation()
+  const { unreadCounts, calls, callsSeenAt, groups, statusFeed, lockedChats, hiddenChats, channels } = useConversation()
   const communityGroups = new Set(groups.filter((g) => g.community).map((g) => String(g._id)))
   const total = (filter) => Object.entries(unreadCounts).filter(([id]) => filter(id)).reduce((n, [, c]) => n + c, 0)
   return {
@@ -21,6 +22,7 @@ export const useNavBadges = () => {
     calls: calls.filter((c) =>
       String(c.callee?._id) === String(AuthUser?._id) && c.status === 'missed' && new Date(c.startedAt).getTime() > callsSeenAt).length,
     communities: total((id) => communityGroups.has(id)),
+    channels: channels.filter((c) => c.following || c.amAdmin).reduce((n, c) => n + (c.unread || 0), 0),
     // Contacts with status updates I haven't seen
     status: statusFeed.people.filter((p) => !p.allSeen).length,
   }
@@ -31,6 +33,19 @@ export const NAV_ITEMS = [
   { id: 'status', label: 'Status', Icon: LuCircleDashed },
   { id: 'calls', label: 'Calls', Icon: LuPhone },
   { id: 'communities', label: 'Communities', Icon: LuLayers },
+  { id: 'channels', label: 'Channels', Icon: LuRadioTower },
+  { id: 'starred', label: 'Starred', Icon: LuStar },
+]
+
+export const PRIMARY_MOBILE_ITEMS = [
+  { id: 'chats', label: 'Chats', Icon: LuMessageSquareText },
+  { id: 'status', label: 'Status', Icon: LuCircleDashed },
+  { id: 'calls', label: 'Calls', Icon: LuPhone },
+]
+
+export const MORE_MOBILE_ITEMS = [
+  { id: 'communities', label: 'Communities', Icon: LuLayers },
+  { id: 'channels', label: 'Channels', Icon: LuRadioTower },
   { id: 'starred', label: 'Starred', Icon: LuStar },
 ]
 
@@ -99,28 +114,134 @@ export const NavRail = () => {
   )
 }
 
-// Bottom tab bar on phones
+// Bottom tab bar on phones: Important items (Chats, Status, Calls, You) + Dots (More)
 export const MobileTabs = () => {
   const { activePanel, setActivePanel } = useConversation()
   const badges = useNavBadges()
-  const tab = 'relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium transition'
+  const [moreOpen, setMoreOpen] = useState(false)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!moreOpen) return
+    const onDown = (e) => !menuRef.current?.contains(e.target) && setMoreOpen(false)
+    const onKey = (e) => e.key === 'Escape' && setMoreOpen(false)
+    document.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [moreOpen])
+
+  const isMoreActive = MORE_MOBILE_ITEMS.some((m) => m.id === activePanel)
+  const moreBadgeCount = MORE_MOBILE_ITEMS.reduce((sum, m) => sum + (badges[m.id] || 0), 0)
+  const tab = 'relative flex flex-1 min-w-0 flex-col items-center justify-center gap-0.5 py-1.5 text-[11px] font-medium transition'
+
   return (
-    <nav aria-label="Sections" className="flex border-t border-slate-200 bg-white md:hidden dark:border-slate-800 dark:bg-slate-950">
-      {NAV_ITEMS.map(({ id, label, Icon }) => {
+    <nav aria-label="Sections" className="relative flex border-t border-slate-200 bg-white md:hidden pb-[max(0.5rem,env(safe-area-inset-bottom))] dark:border-slate-800 dark:bg-slate-950">
+      {PRIMARY_MOBILE_ITEMS.map(({ id, label, Icon }) => {
         const on = activePanel === id
         return (
-          <button key={id} onClick={() => setActivePanel(id)} aria-current={on ? 'page' : undefined} className={`${tab} ${on ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
-            <span className="relative">
-              <Icon className="size-5" />
+          <button
+            key={id}
+            onClick={() => {
+              setActivePanel(id)
+              setMoreOpen(false)
+            }}
+            aria-current={on ? 'page' : undefined}
+            className={`${tab} ${on ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}
+          >
+            <span className="relative flex items-center justify-center">
+              <Icon className="size-5 shrink-0" />
               <Badge count={badges[id]} className="-right-3 -top-1.5" />
             </span>
-            {label}
+            <span className="truncate max-w-full px-0.5 leading-tight">{label}</span>
           </button>
         )
       })}
-      <Link to="/profile" className={`${tab} text-slate-500 dark:text-slate-400`}>
-        <LuUser className="size-5" />
-        You
+
+      {/* Dots / More button */}
+      <div ref={menuRef} className="relative flex flex-1 min-w-0">
+        <button
+          type="button"
+          onClick={() => setMoreOpen((v) => !v)}
+          aria-expanded={moreOpen}
+          aria-current={isMoreActive ? 'page' : undefined}
+          aria-label="More sections"
+          className={`w-full ${tab} ${isMoreActive || moreOpen ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}
+        >
+          <span className="relative flex items-center justify-center">
+            <LuEllipsis className="size-5 shrink-0" />
+            <Badge count={moreBadgeCount} className="-right-3 -top-1.5" />
+          </span>
+          <span className="truncate max-w-full px-0.5 leading-tight">More</span>
+        </button>
+
+        <AnimatePresence>
+          {moreOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40 bg-black/25 backdrop-blur-[1px] md:hidden"
+                onClick={() => setMoreOpen(false)}
+              />
+              <motion.div
+                role="dialog"
+                aria-modal="true"
+                aria-label="More sections"
+                initial={{ opacity: 0, y: 12, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 12, scale: 0.95 }}
+                transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                className="fixed bottom-[calc(3.75rem+env(safe-area-inset-bottom))] right-3 z-50 w-56 overflow-hidden rounded-2xl border border-slate-200/90 bg-white/95 p-1.5 shadow-2xl backdrop-blur-xl md:hidden dark:border-slate-800 dark:bg-slate-900/95"
+              >
+                <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  More sections
+                </div>
+                <div className="space-y-0.5">
+                  {MORE_MOBILE_ITEMS.map(({ id, label, Icon }) => {
+                    const on = activePanel === id
+                    const count = badges[id]
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => {
+                          setActivePanel(id)
+                          setMoreOpen(false)
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${
+                          on
+                            ? 'bg-indigo-50 font-semibold text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400'
+                            : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <Icon className={`size-4.5 shrink-0 ${on ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} />
+                          <span className="truncate">{label}</span>
+                        </div>
+                        {count > 0 && (
+                          <span className="ml-2 flex h-4.5 min-w-4.5 shrink-0 items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-semibold text-white">
+                            {count > 99 ? '99+' : count}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <Link
+        to="/profile"
+        onClick={() => setMoreOpen(false)}
+        className={`${tab} text-slate-500 dark:text-slate-400`}
+      >
+        <span className="relative flex items-center justify-center">
+          <LuUser className="size-5 shrink-0" />
+        </span>
+        <span className="truncate max-w-full px-0.5 leading-tight">You</span>
       </Link>
     </nav>
   )

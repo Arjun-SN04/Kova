@@ -1,4 +1,4 @@
-// App lock: a PIN (and optionally fingerprint / device unlock) to open Kova on this device.
+// App lock: a PIN, digits or letters and numbers (and optionally fingerprint / device unlock) to open Kova on this device.
 // Only a salted PBKDF2 hash of the PIN is stored, in this browser, per account.
 
 const KEY = (userId) => `kovaAppLock:${userId}`
@@ -28,10 +28,11 @@ const saveLock = (userId, lock) => {
   window.dispatchEvent(new Event('kova-applock'))
 }
 
-export const setPin = async (userId, pin) => {
+// kind: "numeric" (keypad, unlocks as soon as the last digit is typed) or "alnum" (letters and numbers)
+export const setPin = async (userId, pin, kind = /^\d+$/.test(pin) ? 'numeric' : 'alnum') => {
   const salt = toB64(crypto.getRandomValues(new Uint8Array(16)))
   const old = getLock(userId)
-  saveLock(userId, { salt, hash: await hashPin(pin, salt), len: pin.length, after: old?.after ?? 0, credId: old?.credId || null })
+  saveLock(userId, { salt, hash: await hashPin(pin, salt), len: pin.length, kind, after: old?.after ?? 0, credId: old?.credId || null })
 }
 export const checkPin = async (userId, pin) => {
   const lock = getLock(userId)

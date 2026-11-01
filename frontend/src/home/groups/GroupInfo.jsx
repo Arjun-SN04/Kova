@@ -121,12 +121,12 @@ const GroupInfo = ({ group, onClose }) => {
         transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
         className="fixed inset-y-0 right-0 z-40 flex w-full max-w-sm flex-col border-l border-slate-200 bg-white xl:static xl:z-auto xl:w-80 xl:max-w-none dark:border-slate-800 dark:bg-slate-950"
       >
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 px-5 dark:border-slate-800">
-          <p className="text-[15px] font-semibold">{group.announcement ? 'Announcements' : 'Group info'}</p>
-          <button onClick={onClose} aria-label="Close" className={smallBtn}><LuX className="size-4.5" /></button>
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 px-4 sm:px-5 dark:border-slate-800">
+          <p className="truncate text-[15px] font-semibold">{group.announcement ? 'Announcements' : 'Group info'}</p>
+          <button onClick={onClose} aria-label="Close" className={`${smallBtn} shrink-0`}><LuX className="size-4.5" /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-7">
           <div className="flex flex-col items-center text-center">
             <div className="relative">
               <ViewablePhoto src={group.avatar?.url} name={group.name} subtitle={`Group · ${group.members.length} members`}>

@@ -52,7 +52,7 @@ export const tidy = (text) =>
 // or throws an Error with a friendly message.
 // toolChoice: "auto" (default), or { type: "function", function: { name } } to require that tool
 // only: use just `model` (e.g. the vision model; the others can't see images)
-export const groqChat = async (messages, { tools = null, toolChoice = null, maxTokens = 700, temperature = 0.6, model: preferred = null, only = false, reasoning = "low" } = {}) => {
+export const groqChat = async (messages, { tools = null, toolChoice = null, maxTokens = 2500, temperature = 0.6, model: preferred = null, only = false, reasoning = "low" } = {}) => {
   // Nexa's chat runs on Gemini (GEMINI_MODEL, Flash-Lite by default). Groq is the backup, and
   // still handles calls pinned to one of its models (photos: the vision model).
   if (geminiConfigured() && !(only && preferred)) {

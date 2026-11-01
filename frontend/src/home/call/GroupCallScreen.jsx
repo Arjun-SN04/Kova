@@ -40,7 +40,7 @@ const GroupCallScreen = ({ call, me, group, peers, localStream, muted, cameraOff
 
   return createPortal(
     <div className="fixed inset-0 z-[75] flex flex-col bg-slate-950 text-white" role="dialog" aria-label="Group call">
-      <header className="flex items-center gap-3 px-4 py-3">
+      <header className="flex items-center gap-3 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <GroupAvatar name={call.groupName} src={group?.avatar?.url} size="sm" />
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{call.groupName}</p>
@@ -59,7 +59,7 @@ const GroupCallScreen = ({ call, me, group, peers, localStream, muted, cameraOff
         ))}
       </div>
 
-      <div className="flex items-center justify-center gap-4 pb-6 pt-3">
+      <div className="flex items-center justify-center gap-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3">
         <button onClick={onMute} className={`${btn} ${muted ? 'bg-white text-slate-900' : 'bg-white/10 hover:bg-white/20'}`} aria-label={muted ? 'Unmute' : 'Mute'} title={muted ? 'Unmute' : 'Mute'}>
           {muted ? <LuMicOff className="size-5" /> : <LuMic className="size-5" />}
         </button>

@@ -48,7 +48,7 @@ export const BusinessCard = () => {
   const on = !!AuthUser?.business?.enabled
   return (
     <div>
-    <Link to="/business" className="flex items-start gap-4 p-6 transition hover:bg-slate-50 dark:hover:bg-slate-800/40">
+    <Link to="/business" className="flex items-start gap-4 p-4 sm:p-6 transition hover:bg-slate-50 dark:hover:bg-slate-800/40">
       <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300"><LuBriefcase className="size-5" /></div>
       <div className="min-w-0 flex-1">
         <p className="font-semibold">{on ? 'Business tools' : 'Use Kova for your business'}</p>
@@ -56,7 +56,7 @@ export const BusinessCard = () => {
       </div>
       <LuChevronRight className="mt-2.5 size-4 text-slate-400" />
     </Link>
-    {on && <div className="border-t border-slate-100 px-6 py-3 dark:border-slate-800"><SwitchToPersonal /></div>}
+    {on && <div className="border-t border-slate-100 px-4 sm:px-6 py-3 dark:border-slate-800"><SwitchToPersonal /></div>}
     </div>
   )
 }
@@ -70,7 +70,7 @@ export const BlockedAccounts = () => {
     try { await axios.delete(`/api/contacts/block/${id}`, api); setBlocked((list) => list.filter((u) => u._id !== id)) } catch (err) { setError(errorOf(err)) }
   }
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="flex items-start gap-4">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"><LuBan className="size-5" /></div>
         <div className="min-w-0 flex-1">

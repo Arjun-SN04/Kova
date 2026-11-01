@@ -4,6 +4,7 @@ import { Message } from "../models/message.model.js"
 import { Conversation } from "../models/conversation.model.js"
 import { emitToUsers } from "./notify.js"
 import { previewOf, sendPush } from "./push.js"
+import { attachLinkPreview } from "./linkPreview.js"
 
 const same = (a, b) => String(a) === String(b)
 
@@ -18,20 +19,21 @@ const pushFrom = async (senderId, to, msg, groupName = null) => {
 // Applies the same rules as the app: contacts only, group members only, admins-only announcements.
 // Everyone involved, including the sender, gets a live `newMessage`.
 // Business extras: `auto` (greeting/away/nexa/reminder), `sentBy` (team member), `card` (product/order/payment/booking).
-export const deliverText = async ({ senderId, receiverId = null, groupId = null, text, ref = null, auto = null, sentBy = null, card = null }) => {
+export const deliverText = async ({ senderId, receiverId = null, groupId = null, text, ref = null, auto = null, sentBy = null, card = null, location = null }) => {
   const body = String(text || "").trim()
-  if (!body && !card) throw new Error("The message is empty")
+  if (!body && !card && !location) throw new Error("The message is empty")
 
   if (groupId) {
     const group = await Group.findById(groupId)
     if (!group || !group.members.some((m) => same(m, senderId))) throw new Error("You're not in that group")
     if ((group.announcement || group.adminsOnly) && !group.admins.some((a) => same(a, senderId))) throw new Error("Only admins can send messages there")
-    const msg = await Message.create({ senderId, groupId, message: body, sentBy, card })
+    const msg = await Message.create({ senderId, groupId, message: body, sentBy, card, location })
     group.reads.set(String(senderId), new Date())
     group.updatedAt = new Date()
     await group.save()
     emitToUsers(group.members, "newMessage", msg)
     pushFrom(senderId, group.members.filter((m) => !same(m, senderId)), msg, group.name)
+    attachLinkPreview(msg)
     return msg
   }
 
@@ -45,10 +47,11 @@ export const deliverText = async ({ senderId, receiverId = null, groupId = null,
     : await Conversation.findOne({ members: { $all: [senderId, receiverId] } })
   if (!conversation) conversation = await Conversation.create({ members: [senderId, receiverId] })
 
-  const msg = await Message.create({ senderId, receiverId, message: body, seen: self, ref, auto, sentBy, card })
+  const msg = await Message.create({ senderId, receiverId, message: body, seen: self, ref, auto, sentBy, card, location })
   conversation.messages.push(msg._id)
   await conversation.save()
   emitToUsers(self ? [senderId] : [receiverId, senderId], "newMessage", msg)
+  attachLinkPreview(msg)
   if (!self) {
     pushFrom(senderId, [receiverId], msg)
     // Business chats: auto messages, waiting-for-reply, team inboxes

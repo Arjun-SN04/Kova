@@ -1,3 +1,4 @@
+import { attachLinkPreview } from "../utils/linkPreview.js"
 import { Conversation } from "../models/conversation.model.js"
 import { Message } from "../models/message.model.js"
 import { getReceiverSocketId, io } from "../socket/socket.js"
@@ -128,6 +129,7 @@ export const sendMessage = async (req, res) => {
     }
 
     res.status(201).json(newMessage)
+    attachLinkPreview(newMessage)
     if (!self) sendPush([receiverId], { title: req.user.fullName, body: previewOf(newMessage), tag: `chat-${senderId}` }, { chatId: senderId }).catch(() => {})
 
     // Business chats: greeting / away messages, Nexa auto-reply, team inboxes
@@ -205,6 +207,7 @@ export const editMessage = async (req, res) => {
     await notifyAudience(existing, "messageEdited", existing, userId)
 
     res.status(200).json(existing)
+    attachLinkPreview(existing)
   } catch (error) {
     console.log("editMessage error:", error)
     res.status(500).json({ error: "Internal server error" })

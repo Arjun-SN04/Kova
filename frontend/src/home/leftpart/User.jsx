@@ -3,7 +3,7 @@ import useConversation from '../../Zustand/UserConversation'
 import Avatar from '../Avatar'
 import { shortTime } from '../../utils/conversations'
 import { attachmentLabel } from '../../utils/attachments'
-import { LuFileText, LuImage, LuLock, LuMic, LuPhone, LuPhoneMissed, LuPin, LuVideo } from 'react-icons/lu'
+import { LuFileText, LuImage, LuMic, LuPhone, LuPhoneMissed, LuPin, LuVideo } from 'react-icons/lu'
 import { describeCall } from '../../utils/calls'
 import { BusinessBadge } from '../../business/BusinessInfo'
 import { LabelChip } from '../../business/CustomerPanel'
@@ -52,16 +52,16 @@ const User = ({ user, online, unread, preview, typing, myId, pinned = false, lab
           {labels.length > 2 && <span className="hidden shrink-0 text-[10px] text-slate-400 sm:inline">+{labels.length - 2}</span>}
           </div>
           {pinned && <LuPin className="size-3 shrink-0 -rotate-45 text-slate-400" title="Pinned" aria-label="Pinned" />}
-          {preview && (
-            <span className={`shrink-0 text-[11px] ${unread && !isSelected ? 'font-semibold text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>
+          {preview && !locked && (
+            <span className={`shrink-0 text-[11px] ${unread && !isSelected && !locked ? 'font-semibold text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>
               {shortTime(preview.createdAt)}
             </span>
           )}
         </div>
         <div className="mt-0.5 flex items-center gap-2">
-          <p className={`min-w-0 flex-1 truncate text-[13px] ${unread && !isSelected ? 'font-medium text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'}`}>
+          <p className={`min-w-0 flex-1 truncate text-[13px] ${unread && !isSelected && !locked ? 'font-medium text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'}`}>
             {locked ? (
-              <span className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400"><LuLock className="size-3.5" /> Locked chat</span>
+              <span aria-hidden>&nbsp;</span>
             ) : typing ? (
               <span className="font-medium text-indigo-600 dark:text-indigo-400">{typing === 'Nexa' ? 'Nexa is thinking…' : 'typing…'}</span>
             ) : preview?.call ? (

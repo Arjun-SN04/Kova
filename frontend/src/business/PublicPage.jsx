@@ -200,13 +200,13 @@ const PublicPage = () => {
 
       <main className="relative mx-auto -mt-24 max-w-6xl px-4 pb-32">
         {/* Profile card */}
-        <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xl shadow-slate-900/5 sm:p-7 dark:border-slate-800 dark:bg-slate-900 dark:shadow-none">
+        <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-xl shadow-slate-900/5 sm:p-7 dark:border-slate-800 dark:bg-slate-900 dark:shadow-none">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
-            <div className="-mt-16 shrink-0 self-start rounded-full bg-white p-1.5 shadow-lg sm:-mt-20 dark:bg-slate-900">
+            <div className="-mt-14 shrink-0 self-start rounded-full bg-white p-1.5 shadow-lg sm:-mt-20 dark:bg-slate-900">
               <Avatar name={owner.fullName} src={owner.avatar?.url} size="lg" />
             </div>
             <div className="min-w-0 flex-1">
-              <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight sm:text-3xl">{owner.fullName}<BusinessBadge business={b} className="size-5" /></h1>
+              <h1 className="flex flex-wrap items-center gap-2 break-words text-2xl font-semibold tracking-tight sm:text-3xl">{owner.fullName}<BusinessBadge business={b} className="size-5 shrink-0" /></h1>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px]">
                 {b.category && <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">{b.category}</span>}
                 {data.rating && <a href="#reviews" className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"><LuStar className="size-3.5 fill-current" />{data.rating.average.toFixed(1)} <span className="font-normal opacity-75">({data.rating.count})</span></a>}
@@ -214,7 +214,7 @@ const PublicPage = () => {
                 <span className="text-slate-400">@{owner.username}</span>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 sm:shrink-0">
               {isOwner ? (
                 <Link to="/business" className={`${btn.primary} h-11 px-5`}>Manage business</Link>
               ) : (
@@ -367,7 +367,7 @@ const PublicPage = () => {
 
       {/* Cart bar */}
       {count > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-30 p-4">
+        <div className="fixed inset-x-0 bottom-0 z-30 p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4">
           <button onClick={() => setCartOpen(true)} className="mx-auto flex w-full max-w-md items-center gap-3 rounded-2xl bg-slate-900 px-5 py-3.5 text-white shadow-2xl shadow-slate-900/30 transition hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500">
             <span className="flex size-8 items-center justify-center rounded-full bg-white/15 text-sm font-semibold">{count}</span>
             <span className="flex-1 text-left text-sm font-medium">View order</span>

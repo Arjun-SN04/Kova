@@ -146,15 +146,15 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:px-5 dark:border-slate-800 dark:bg-slate-950">
-      <button onClick={onBack} className={`${iconBtn} md:hidden`} aria-label="Back to chats">
+      <button onClick={onBack} className={`${iconBtn} md:hidden shrink-0`} aria-label="Back to chats">
         <LuArrowLeft className="size-5" />
       </button>
 
-      <button onClick={onToggleInfo} className="flex min-w-0 items-center gap-3 rounded-lg py-1 pr-2 text-left">
+      <button onClick={onToggleInfo} className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 rounded-lg py-1 pr-2 text-left">
         {isGroup
-          ? <GroupAvatar name={selectedConversation.name} src={selectedConversation.avatar?.url} announcement={selectedConversation.announcement} size="sm" />
-          : <Avatar name={selectedConversation.fullName} src={selectedConversation.avatar?.url} size="sm" online={isOnline} />}
-        <div className="min-w-0">
+          ? <GroupAvatar name={selectedConversation.name} src={selectedConversation.avatar?.url} announcement={selectedConversation.announcement} size="sm" className="shrink-0" />
+          : <Avatar name={selectedConversation.fullName} src={selectedConversation.avatar?.url} size="sm" online={isOnline} className="shrink-0" />}
+        <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] font-semibold">
             {selectedConversation.fullName}
             {!isGroup && <BusinessBadge business={selectedConversation.business} className="ml-1 size-3.5 -translate-y-px" />}
@@ -169,30 +169,30 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
           </p>
           {isGroup ? (
             typing
-              ? <p className="text-xs font-medium text-indigo-600 dark:text-indigo-400">{typing === 'Nexa' ? 'Nexa is thinking…' : typeof typing === 'string' ? `${typing.split(' ')[0]} is typing…` : 'typing…'}</p>
+              ? <p className="truncate text-xs font-medium text-indigo-600 dark:text-indigo-400">{typing === 'Nexa' ? 'Nexa is thinking…' : typeof typing === 'string' ? `${typing.split(' ')[0]} is typing…` : 'typing…'}</p>
               : <p className="truncate text-xs text-slate-500 dark:text-slate-400">{selectedConversation.announcement || selectedConversation.adminsOnly ? `Only admins can send messages · ${selectedConversation.members?.length || 0} members` : memberLine()}</p>
           ) : isSelf ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400">Message yourself</p>
+            <p className="truncate text-xs text-slate-500 dark:text-slate-400">Message yourself</p>
           ) : typing ? (
-            <p className="text-xs font-medium text-indigo-600 dark:text-indigo-400">{typing === 'Nexa' ? 'Nexa is thinking…' : typeof typing === 'string' ? `${typing} is typing…` : 'typing…'}</p>
+            <p className="truncate text-xs font-medium text-indigo-600 dark:text-indigo-400">{typing === 'Nexa' ? 'Nexa is thinking…' : typeof typing === 'string' ? `${typing} is typing…` : 'typing…'}</p>
           ) : isBusiness(selectedConversation) ? (
             <p className="truncate text-xs"><OpenStatus business={selectedConversation.business} /></p>
           ) : (
-            <p className={`text-xs ${isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
+            <p className={`truncate text-xs ${isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
               {isOnline ? 'Online' : lastSeen ? `Active ${lastSeenLabel(lastSeen)}` : 'Offline'}
             </p>
           )}
         </div>
       </button>
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
         {catchUp?.chatId === String(selectedConversation._id) && !catchUp.open && (
           <button
             onClick={() => setCatchUp({ ...catchUp, open: true })}
-            className="mr-1 inline-flex h-8 items-center gap-1.5 rounded-full bg-violet-50 px-3 text-xs font-medium text-violet-700 ring-1 ring-violet-200 transition hover:bg-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/30 dark:hover:bg-violet-500/20"
+            className="mr-1 inline-flex h-8 items-center gap-1.5 rounded-full bg-violet-50 px-2 sm:px-3 text-xs font-medium text-violet-700 ring-1 ring-violet-200 transition hover:bg-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/30 dark:hover:bg-violet-500/20"
             title="Summarize what you missed"
           >
-            <LuSparkles className="size-3.5" /> Catch me up · {catchUp.count} new
+            <LuSparkles className="size-3.5 shrink-0" /> <span className="hidden sm:inline">Catch me up · </span>{catchUp.count} new
           </button>
         )}
         {pinCount > 0 && (
@@ -262,7 +262,7 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
           hidden={hiddenChats.includes(String(selectedConversation._id))}
           onHide={selectedConversation.isAi ? null : () => setHideRequest({ ids: [String(selectedConversation._id)], hidden: !hiddenChats.includes(String(selectedConversation._id)) })}
           onWallpaper={() => setWallpaperPicker({ chatId: String(selectedConversation._id), name: selectedConversation.fullName })}
-          onLock={selectedConversation.isAi ? null : () => setLockRequest({ action: lockedChats.includes(String(selectedConversation._id)) ? 'unlock' : 'lock', ids: [String(selectedConversation._id)] })}
+          onLock={selectedConversation.isAi ? null : () => setLockRequest({ action: lockedChats.includes(String(selectedConversation._id)) ? 'unlock' : 'lock', ids: [String(selectedConversation._id)], chats: [selectedConversation] })}
         />
       </div>
     </header>

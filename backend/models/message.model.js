@@ -63,6 +63,13 @@ const messageSchema = new mongoose.Schema({
   sentBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   // Sent automatically (greeting, away message, Nexa auto-reply, booking reminder)
   auto: { type: String, default: null },
+  // A shared location. Live ones are updated by the sender until `until` (or until stopped).
+  location: {
+    type: { lat: Number, lng: Number, accuracy: Number, live: Boolean, until: Date, stopped: Boolean, updatedAt: Date, _id: false },
+    default: null,
+  },
+  // Preview of the first link in the text: { url, title, description, image, site }
+  linkPreview: { type: mongoose.Schema.Types.Mixed, default: null },
   // Image / video / voice note / file stored on Cloudinary
   attachment: {
     type: {

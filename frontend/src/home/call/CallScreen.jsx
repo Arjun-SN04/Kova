@@ -119,16 +119,16 @@ const CallScreen = () => {
 
         {/* Top: name and status */}
         {showRemoteVideo ? (
-          <div className="relative flex items-center gap-3 bg-linear-to-b from-black/60 to-transparent p-5 pb-10">
+          <div className="relative flex items-center gap-3 bg-linear-to-b from-black/60 to-transparent p-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))] sm:p-5 sm:pb-10">
             <div>
               <p className="text-base font-semibold">{peer.fullName}</p>
               <p className="text-sm tabular-nums text-white/70">{statusText}</p>
             </div>
           </div>
         ) : (
-          <div className="relative flex flex-1 flex-col items-center justify-center px-6 text-center">
+          <div className="relative flex flex-1 flex-col items-center justify-center px-4 sm:px-6 text-center">
             <BigAvatar user={peer} ringing={status === 'ringing'} />
-            <p className="mt-6 text-2xl font-semibold">{peer.fullName}</p>
+            <p className="mt-6 text-xl sm:text-2xl font-semibold">{peer.fullName}</p>
             <p className={`mt-1.5 text-sm tabular-nums ${status === 'ended' ? 'text-red-300' : 'text-white/60'}`}>{statusText}</p>
           </div>
         )}
@@ -137,7 +137,7 @@ const CallScreen = () => {
 
         {/* My camera, small in the corner */}
         {isVideo && localStream && status !== 'ended' && (
-          <div className="absolute right-4 top-4 z-10 aspect-[3/4] w-28 overflow-hidden rounded-2xl bg-zinc-800 shadow-2xl ring-1 ring-white/10 sm:w-40">
+          <div className="absolute right-4 top-4 z-10 aspect-[3/4] w-24 overflow-hidden rounded-2xl bg-zinc-800 shadow-2xl ring-1 ring-white/10 sm:w-40">
             <video ref={localVideo} autoPlay playsInline muted className={`size-full -scale-x-100 object-cover ${cameraOff ? 'invisible' : ''}`} />
             {cameraOff && <LuVideoOff className="absolute inset-0 m-auto size-6 text-white/50" />}
           </div>
@@ -145,7 +145,7 @@ const CallScreen = () => {
 
         {/* Controls */}
         {status !== 'ended' && (
-          <div className="relative flex items-center justify-center gap-5 bg-linear-to-t from-black/60 to-transparent px-6 pb-10 pt-12">
+          <div className="relative flex items-center justify-center gap-3 sm:gap-5 bg-linear-to-t from-black/60 to-transparent px-4 sm:px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-8 sm:pt-12">
             {incomingRinging ? (
               <>
                 <div className="flex flex-col items-center gap-2">

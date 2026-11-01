@@ -1,3 +1,4 @@
+import MessageSearchResults from './MessageSearchResults'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { LuArrowLeft, LuCheck, LuCheckCheck, LuEye, LuEyeOff, LuChevronRight, LuClock, LuLock, LuLockOpen, LuInbox, LuLayers, LuListChecks, LuPin, LuPinOff, LuQrCode, LuSearch, LuSearchX, LuTrash2, LuUserPlus, LuUsers, LuX } from 'react-icons/lu'
@@ -70,6 +71,23 @@ const Users = () => {
     return !!r?.labels?.some((l) => String(l) === bizFilter)
   }
   const searchRef = useRef(null)
+  const panelRef = useRef(null)
+  const [panelWidth, setPanelWidth] = useState(0)
+
+  useEffect(() => {
+    if (!panelRef.current) return
+    const el = panelRef.current
+    const obs = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setPanelWidth(Math.round(entry.contentRect.width))
+      }
+    })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  const isCompact = panelWidth > 0 && panelWidth < 330
+  const isNarrow = panelWidth > 0 && panelWidth < 390
 
   // ── Select several chats (right-click, long-press or the Select button) ──
   const [selecting, setSelecting] = useState(false)
@@ -155,6 +173,7 @@ const Users = () => {
         myId={myId}
         compact={compact}
         pinned={pinnedChats.includes(String(chat._id))}
+        locked={lockedChats.includes(String(chat._id))}
       />
     ) : (
       <User
@@ -166,6 +185,7 @@ const Users = () => {
         typing={typingUsers[String(chat._id)]}
         myId={myId}
         pinned={pinnedChats.includes(String(chat._id))}
+        locked={lockedChats.includes(String(chat._id))}
         labels={bizMode ? (recordOf(chat)?.labels || []).map((id) => bizLabels.find((l) => String(l._id) === String(id))).filter(Boolean) : []}
         lead={bizMode && !!recordOf(chat)?.lead}
         waiting={bizMode && !!recordOf(chat)?.waitingSince && !!previews[String(chat._id)]}
@@ -290,24 +310,24 @@ const Users = () => {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div ref={panelRef} className="flex min-h-0 flex-1 flex-col">
       {selecting ? (
-        <div className="px-4">
-          <div className="flex h-10 items-center gap-1 rounded-xl bg-slate-100 pl-1 pr-1 dark:bg-slate-900">
-            <button onClick={stopSel} className="flex size-8 items-center justify-center rounded-lg text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white" aria-label="Cancel selection" title="Cancel (Esc)"><LuX className="size-4" /></button>
-            <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium">{picked.length ? `${picked.length} selected` : 'Select chats'}</span>
-            <button onClick={() => setSelected(new Set(selectableIds()))} className="h-8 rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">Select all</button>
+        <div className="px-3 sm:px-4">
+          <div className="flex h-9 sm:h-10 items-center gap-1 rounded-xl bg-slate-100 pl-1 pr-1 dark:bg-slate-900">
+            <button onClick={stopSel} className="flex size-7 sm:size-8 items-center justify-center rounded-lg text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white" aria-label="Cancel selection" title="Cancel (Esc)"><LuX className="size-4" /></button>
+            <span className="min-w-0 flex-1 truncate px-1 text-xs sm:text-sm font-medium">{picked.length ? `${picked.length} selected` : 'Select chats'}</span>
+            <button onClick={() => setSelected(new Set(selectableIds()))} className="h-7 sm:h-8 rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">Select all</button>
           </div>
           <div className="mt-2 grid grid-cols-5 gap-1">
             {[
               { label: allPinned ? 'Unpin' : 'Pin', Icon: allPinned ? LuPinOff : LuPin, run: pinSelected },
               { label: 'Mark read', Icon: LuCheckCheck, run: readSelected },
-              { label: allLocked ? 'Unlock' : 'Lock', Icon: allLocked ? LuLockOpen : LuLock, run: () => { setLockRequest({ action: allLocked ? 'unlock' : 'lock', ids: picked }); stopSel() } },
+              { label: allLocked ? 'Unlock' : 'Lock', Icon: allLocked ? LuLockOpen : LuLock, run: () => { setLockRequest({ action: allLocked ? 'unlock' : 'lock', ids: picked, chats: picked.map(chatById).filter(Boolean) }); stopSel() } },
               { label: allHidden ? 'Unhide' : 'Hide', Icon: allHidden ? LuEye : LuEyeOff, run: () => { setHideRequest({ ids: picked, hidden: !allHidden }); stopSel() } },
               { label: 'Delete', Icon: LuTrash2, run: () => (pickedDirect.length ? setConfirmDelete(true) : setBulkError('Groups can’t be deleted from here. Open a group’s info to leave it.')), danger: true },
             ].map(({ label, Icon, run, danger }) => (
-              <button key={label} onClick={run} disabled={!picked.length || bulkBusy} className={`flex h-12 flex-col items-center justify-center gap-0.5 rounded-lg border text-[11px] font-medium transition disabled:opacity-40 ${danger ? 'border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10' : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900'}`}>
-                <Icon className="size-4" /> {label}
+              <button key={label} onClick={run} disabled={!picked.length || bulkBusy} className={`flex h-11 sm:h-12 flex-col items-center justify-center gap-0.5 rounded-lg border text-[10px] sm:text-[11px] font-medium transition disabled:opacity-40 px-0.5 ${danger ? 'border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10' : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900'}`}>
+                <Icon className="size-3.5 sm:size-4" /> <span className="truncate max-w-full">{label}</span>
               </button>
             ))}
           </div>
@@ -316,7 +336,7 @@ const Users = () => {
       ) : (
       <>
       {/* Search */}
-      <div className="px-4">
+      <div className="px-3 sm:px-4">
         <div className="relative">
           <LuSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -325,8 +345,8 @@ const Users = () => {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Escape' && (setQuery(''), e.currentTarget.blur())}
-            placeholder="Search people"
-            className="h-10 w-full rounded-xl border border-transparent bg-slate-100 pl-9 pr-9 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-indigo-500/50 dark:focus:bg-slate-950"
+            placeholder={isCompact ? 'Search' : 'Search people'}
+            className="h-9 sm:h-10 w-full rounded-xl border border-transparent bg-slate-100 pl-9 pr-9 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-indigo-500/50 dark:focus:bg-slate-950"
           />
           {query ? (
             <button
@@ -336,32 +356,70 @@ const Users = () => {
             >
               <LuX className="size-3.5" />
             </button>
-          ) : (
+          ) : panelWidth >= 340 || panelWidth === 0 ? (
             <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-md border border-slate-200 bg-white px-1.5 text-[11px] font-medium text-slate-400 md:block dark:border-slate-700 dark:bg-slate-800">
               /
             </kbd>
-          )}
+          ) : null}
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="mt-3 flex gap-1 px-4">
-        {TABS.map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition ${
-              tab === id
-                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white'
-            }`}
-          >
-            {label}
-            <span className={`text-xs ${tab === id ? 'opacity-70' : 'text-slate-400'}`}>{counts[id]}</span>
-          </button>
-        ))}
-        <button onClick={() => startSel()} className="ml-auto flex size-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-900 dark:hover:text-white" aria-label="Select chats" title="Select chats">
-          <LuListChecks className="size-4" />
+      <div className="mt-2.5 sm:mt-3 flex items-center gap-1.5 px-3 sm:px-4">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {TABS.map(({ id, label }) => {
+            const isActive = tab === id
+            const count = counts[id]
+            const showCount =
+              id === 'all'
+                ? count > 0
+                : id === 'unread'
+                  ? count > 0
+                  : isNarrow
+                    ? count > 0
+                    : count > 0 || isActive
+
+            return (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                className={`flex min-w-0 flex-1 items-center justify-center rounded-lg font-medium transition ${
+                  isNarrow
+                    ? 'gap-1 px-1.5 py-1 text-xs'
+                    : 'gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-[13px]'
+                } ${
+                  isActive
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <span className="truncate">{label}</span>
+                {showCount && (
+                  <span
+                    className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold transition ${
+                      isNarrow ? 'text-[10px] px-1 min-w-4 h-4' : 'text-xs px-1.5 min-w-4.5 h-4.5'
+                    } ${
+                      isActive
+                        ? 'bg-white/20 text-white dark:bg-slate-900/15 dark:text-slate-900'
+                        : 'bg-slate-200/80 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+        <button
+          onClick={() => (selecting ? stopSel() : startSel())}
+          className={`flex shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-900 dark:hover:text-white ${
+            isNarrow ? 'size-7' : 'size-8'
+          } ${selecting ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400' : ''}`}
+          aria-label={selecting ? 'Done selecting' : 'Select chats'}
+          title={selecting ? 'Done selecting' : 'Select chats'}
+        >
+          <LuListChecks className={isNarrow ? 'size-3.5' : 'size-4'} />
         </button>
       </div>
       </>
@@ -449,6 +507,7 @@ const Users = () => {
             {list.map((chat) => rowFor(chat))}
           </>
         )}
+        {tab !== 'groups' && !revealHidden && !selecting && <MessageSearchResults query={query} />}
 
         {/* No contacts yet: show how to add people */}
         {!loading && everyone.length === 0 && tab === 'all' && !q && (

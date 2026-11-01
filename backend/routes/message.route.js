@@ -1,7 +1,8 @@
 import express from "express"
 import { openFile, getMessage, sendMessage, deleteMessage, editMessage, deleteConversation, markSeen, getConversations, deleteMessages, deleteForMe, forwardMessages, reactToMessage } from "../controller/message.controller.js"
+import { shareLocation, stopLocation, updateLocation } from "../controller/location.controller.js"
 import secureRoute from "../middleware/secureRoute.js"
-import { closePoll, createPoll, getChatTimer, getPrefs, keepMessage, lockChat, hideChat, setHiddenWord, verifyLockCode, changeLockCode, resetLockedChats, listStarred, pinChat, pinMessage, setChatTimer, starMessage, votePoll } from "../controller/messageExtras.controller.js"
+import { closePoll, createPoll, getChatTimer, getPrefs, keepMessage, lockChat, hideChat, setHiddenWord, verifyLockCode, changeLockCode, resetLockedChats, listStarred, searchMessages, pinChat, pinMessage, setChatTimer, starMessage, votePoll } from "../controller/messageExtras.controller.js"
 import { uploadSingle } from "../config/cloudinary.js"
 
 const router = express.Router()
@@ -20,6 +21,10 @@ router.put("/react/:messageId", secureRoute, reactToMessage)
 router.put("/pin/:messageId", secureRoute, pinMessage)
 router.put("/star/:messageId", secureRoute, starMessage)
 router.get("/starred", secureRoute, listStarred)
+router.get("/search", secureRoute, searchMessages)
+router.post("/location", secureRoute, shareLocation)
+router.put("/location/:messageId", secureRoute, updateLocation)
+router.put("/location/:messageId/stop", secureRoute, stopLocation)
 router.post("/poll", secureRoute, createPoll)
 router.put("/vote/:messageId", secureRoute, votePoll)
 router.put("/poll/:messageId/close", secureRoute, closePoll)

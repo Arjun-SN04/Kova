@@ -407,3 +407,11 @@ input:-webkit-autofill:active {
   outline: none;
 }
 }
+
+/* Live location dot */
+@keyframes kova-ping {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+.leaflet-container { font: inherit; background: #e5e7eb; }
+.dark .leaflet-container { background: #1e293b; }

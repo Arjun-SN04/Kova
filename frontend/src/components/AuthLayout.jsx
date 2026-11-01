@@ -13,24 +13,24 @@ const AuthLayout = ({ title, subtitle, image, imageAlt, quote, floating, footer,
     {/* Form side */}
     <main className="relative flex min-h-dvh flex-col lg:min-h-0">
 
-      <header className="relative flex items-center justify-between px-6 py-6 sm:px-10">
+      <header className="relative flex items-center justify-between px-4 py-4 sm:px-10 sm:py-6">
         <Logo />
-        <Button variant="secondary" size="sm" to="/home" leftIcon={LuArrowLeft} className="rounded-full px-3.5">
+        <Button variant="secondary" size="sm" to="/home" leftIcon={LuArrowLeft} className="rounded-full px-3 sm:px-3.5 text-xs sm:text-sm">
           Home
         </Button>
       </header>
 
-      <div className="relative flex flex-1 items-center justify-center px-6 pb-16 pt-4 sm:px-10">
+      <div className="relative flex flex-1 items-center justify-center px-4 pb-12 pt-2 sm:px-10 sm:pb-16 sm:pt-4">
         <motion.div
           className="w-full max-w-[420px]"
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: EASE }}
         >
-          <h1 className="text-4xl font-semibold tracking-[-0.03em] text-slate-900 dark:text-white">{title}</h1>
-          <p className="mt-3 text-[15px] text-slate-500 dark:text-slate-400">{subtitle}</p>
-          <div className="mt-10">{children}</div>
-          {footer && <p className="mt-10 text-center text-sm text-slate-500 dark:text-slate-400">{footer}</p>}
+          <h1 className="text-3xl sm:text-4xl font-semibold tracking-[-0.03em] text-slate-900 dark:text-white">{title}</h1>
+          <p className="mt-2.5 sm:mt-3 text-sm sm:text-[15px] text-slate-500 dark:text-slate-400">{subtitle}</p>
+          <div className="mt-8 sm:mt-10">{children}</div>
+          {footer && <p className="mt-8 sm:mt-10 text-center text-sm text-slate-500 dark:text-slate-400">{footer}</p>}
         </motion.div>
       </div>
     </main>

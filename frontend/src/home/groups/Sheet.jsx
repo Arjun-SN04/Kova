@@ -31,16 +31,16 @@ const Sheet = ({ open, onClose, title, children, footer, wide = false }) => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 16 }}
             transition={{ duration: 0.18 }}
-            className={`flex max-h-[90dvh] w-full flex-col rounded-t-2xl bg-white text-slate-900 shadow-2xl sm:rounded-2xl dark:bg-slate-900 dark:text-slate-100 dark:ring-1 dark:ring-slate-800 ${wide ? 'max-w-lg' : 'max-w-md'}`}
+            className={`flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-white text-slate-900 shadow-2xl sm:rounded-2xl dark:bg-slate-900 dark:text-slate-100 dark:ring-1 dark:ring-slate-800 ${wide ? 'max-w-lg' : 'max-w-md'}`}
           >
-            <div className="flex items-center justify-between px-5 pb-2 pt-5">
-              <h3 className="text-lg font-semibold">{title}</h3>
-              <button onClick={onClose} aria-label="Close" className="flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
+            <div className="flex items-center justify-between px-4 pb-2 pt-4 sm:px-5 sm:pt-5">
+              <h3 className="truncate text-base sm:text-lg font-semibold">{title}</h3>
+              <button onClick={onClose} aria-label="Close" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
                 <LuX className="size-4.5" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">{children}</div>
-            {footer && <div className="border-t border-slate-100 px-5 py-3.5 dark:border-slate-800">{footer}</div>}
+            <div className={`min-h-0 flex-1 overflow-y-auto px-4 sm:px-5 ${footer ? 'pb-3.5 sm:pb-4' : 'pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-5'}`}>{children}</div>
+            {footer && <div className="border-t border-slate-100 px-4 py-3 sm:px-5 sm:py-3.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-3.5 dark:border-slate-800">{footer}</div>}
           </motion.div>
         </motion.div>
       )}

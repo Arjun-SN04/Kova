@@ -47,10 +47,43 @@ const userSchema = mongoose.Schema({
     // Locked chats: hidden from the list until the secret code is entered
     lockedChats:{ type:[String], default:[] },
     lockCode:{ type:String, default:null },
+    // "numeric" (digits only) or "alnum" (letters and numbers): picks the keyboard
+    lockCodeKind:{ type:String, default:"numeric" },
     // Hidden chats: left out of the list until the secret word is typed in search.
     // Only a SHA-256 of "userId:word" is kept (the browser compares what you type).
     hiddenChats:{ type:[String], default:[] },
     hiddenWordHash:{ type:String, default:null },
+    // My own security question, to reset a forgotten lock code / secret word / app PIN.
+    // Only a bcrypt hash of the answer (lower-cased) is kept.
+    securityQuestion:{ type:String, default:null },
+    securityAnswer:{ type:String, default:null },
+    // Data export (ZIP of my chats and files): building → ready (download link for 24 h) or failed
+    dataExport:{
+        status:{ type:String, default:null },
+        token:String,
+        size:Number,
+        requestedAt:Date,
+        readyAt:Date,
+        expiresAt:Date,
+    },
+    // Account deletion: scheduled 30 days after the request; signing in cancels it
+    deletion:{
+        requestedAt:Date,
+        scheduledFor:Date,
+    },
+    // Daily email of unread messages while I'm away (off by default)
+    emailDigest:{
+        enabled:{ type:Boolean, default:false },
+        lastSentAt:Date,
+    },
+    // Emailed one-time code for resetting a forgotten login password
+    securityCode:{
+        purpose:String,
+        hash:String,
+        expires:Date,
+        tries:{ type:Number, default:0 },
+        sentAt:Date,
+    },
     // Messages I starred (saved), newest last
     starred:[{ type:mongoose.Schema.Types.ObjectId, ref:"Message" }],
     // People I blocked: we can't be contacts or message each other
@@ -120,6 +153,10 @@ const canSee = (setting, ownerId, viewer) =>
 userSchema.set("toJSON", {
     transform(doc, ret) {
         delete ret.lockCode
+        delete ret.securityCode
+        delete ret.securityAnswer
+        delete ret.dataExport
+        delete ret.deletion
         const viewer = currentViewer()
         const id = String(ret._id)
         if (viewer?.id === id) return ret
@@ -129,6 +166,9 @@ userSchema.set("toJSON", {
         delete ret.privacy
         delete ret.lastSeen
         delete ret.lockedChats
+        delete ret.lockCodeKind
+        delete ret.securityQuestion
+        delete ret.emailDigest
         delete ret.hiddenChats
         delete ret.hiddenWordHash
         delete ret.wallpapers

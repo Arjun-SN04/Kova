@@ -73,13 +73,13 @@ const askNexa = async (system, userText, sources, question) => {
       const reply = await askGroq([
         { role: "system", content: `${sys}\n\n${sources.photos.length === 1 ? "The photo they mean is attached." : `The ${sources.photos.length} most recent photos from the chat are attached, oldest first.`} Look at it carefully and answer about what you actually see. If something isn't clear in the image, say so.` },
         { role: "user", content: [{ type: "text", text: userText }, ...sources.photos.map((m) => ({ type: "image_url", image_url: { url: forModel(m.attachment.url) } }))] },
-      ], { model: VISION_MODEL(), only: true, maxTokens: 700, temperature: 0.3 })
+      ], { model: VISION_MODEL(), only: true, maxTokens: 1500, temperature: 0.3 })
       return { reply, refs: [...sources.photos.map(photoRef), ...refs] }
     } catch (err) {
       console.log("nexa photo answer error:", err.message)
     }
   }
-  const reply = await askGroq([{ role: "system", content: sys }, { role: "user", content: userText }], { maxTokens: 700 })
+  const reply = await askGroq([{ role: "system", content: sys }, { role: "user", content: userText }], { maxTokens: 2500 })
   return { reply, refs }
 }
 
@@ -231,11 +231,11 @@ export const answerMention = async ({ groupId, message, sender, timeZone = "UTC"
       else ({ reply, refs } = await askNexa(`You are Nexa, the AI assistant inside the Kova group "${group.name}". ${sender.fullName} mentioned you, and your answer is posted in the group for everyone.
 In the recent messages below, "Me" means ${sender.fullName}. Messages from "Nexa" are your own earlier answers.
 Pick the format that fits what they asked for:
-- Poem, song, shayari or verse: an original piece, a short **title** line, then short lines in stanzas (each line on its own line, a blank line between stanzas). Never bullets.
-- Story, letter, message to send, speech or wish: short paragraphs.
-- Steps, options, comparisons or several facts: "- " bullets (numbered for steps).
-- Quick question or casual chat: one or two sentences.
-Make it as long as the request needs and no longer. Never reproduce existing song lyrics, poems or book text; write your own.
+- Poem, song, shayari or verse: an original, deeply moving piece. A short **title** line, followed by rich, beautifully developed couplets or stanzas (7 to 10 shers for shayari, 4 to 6 stanzas for poems; each couplet or stanza separated by a blank line). Capture genuine emotion, musical rhythm, evocative imagery, and authentic vocabulary. Never write dry, rushed, or shallow couplets. Never use bullets.
+- Story, letter, message to send, speech or wish: well-developed, expressive, evocative paragraphs with heart and substance.
+- Steps, options, comparisons or several facts: clearly structured "- " bullets (numbered for sequential steps).
+- Questions, discussions or explanations: thorough, articulate, helpful, and insightful.
+Provide rich, complete, and satisfying responses. Never cut answers artificially short or withhold depth. Never reproduce existing song lyrics, poems or book text; write your own original words.
 Use people's first names exactly as written (never shorten them). No headings, no em or en dashes. Always do what they ask; never say you can't create images (pictures are made separately when asked). If asked to decide or pick, pick clearly and say why in one line.
 
 Recent messages:
@@ -294,11 +294,11 @@ export const answerDirectMention = async ({ sender, otherId, message, timeZone =
       else ({ reply, refs } = await askNexa(`You are Nexa, the AI assistant inside Kova. ${sender.fullName} mentioned you in ${self ? "their private notes chat" : `their private chat with ${otherName}`}, and your answer is posted in that chat${self ? "" : " for both of them"}.
 In the recent messages below, "Me" means ${sender.fullName}. Messages from "Nexa" are your own earlier answers.
 Pick the format that fits what they asked for:
-- Poem, song, shayari or verse: an original piece, a short **title** line, then short lines in stanzas (each line on its own line, a blank line between stanzas). Never bullets.
-- Story, letter, message to send, speech or wish: short paragraphs.
-- Steps, options, comparisons or several facts: "- " bullets (numbered for steps).
-- Quick question or casual chat: one or two sentences.
-Make it as long as the request needs and no longer. Never reproduce existing song lyrics, poems or book text; write your own.
+- Poem, song, shayari or verse: an original, deeply moving piece. A short **title** line, followed by rich, beautifully developed couplets or stanzas (7 to 10 shers for shayari, 4 to 6 stanzas for poems; each couplet or stanza separated by a blank line). Capture genuine emotion, musical rhythm, evocative imagery, and authentic vocabulary. Never write dry, rushed, or shallow couplets. Never use bullets.
+- Story, letter, message to send, speech or wish: well-developed, expressive, evocative paragraphs with heart and substance.
+- Steps, options, comparisons or several facts: clearly structured "- " bullets (numbered for sequential steps).
+- Questions, discussions or explanations: thorough, articulate, helpful, and insightful.
+Provide rich, complete, and satisfying responses. Never cut answers artificially short or withhold depth. Never reproduce existing song lyrics, poems or book text; write your own original words.
 Use people's first names exactly as written. No headings, no em or en dashes. Always do what they ask; never say you can't create images (pictures are made separately when asked).
 
 Recent messages:
