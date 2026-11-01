@@ -6,7 +6,7 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 
 | Service | URL |
 |---|---|
-| Frontend (Vercel) | https://nex-chat-six.vercel.app |
+| Frontend (Vercel) | https://kova-im.vercel.app |
 | Backend API (Oracle Cloud) | https://kova.137-23-46-155.sslip.io |
 | Repository | https://github.com/Arjun-SN04/NexChat |
 
@@ -987,7 +987,7 @@ GIPHY_API_KEY=
 # Google Calendar + Tasks for Nexa (morning brief, meeting reminders, "schedule a Meet")
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=http://localhost:5173/api/google/callback   # production: https://<your-vercel-app>/api/google/callback
+GOOGLE_REDIRECT_URI=http://localhost:5173/api/google/callback   # production: https://kova-im.vercel.app/api/google/callback
 
 # Email for "Forgot password?" on the login page (any SMTP server; for Gmail use an App Password).
 # Without these, the codes are printed in the server console.
@@ -1066,7 +1066,7 @@ Deploy from your machine with `./deploy.sh` (it needs the SSH key in `~/Download
 
 ### Backend → Render (old)
 1. Create a Web Service (or use `render.yaml`). Root directory `backend`, build `npm install`, start `node index.js`.
-2. Set environment variables: `MONGODB_URI`, `token`, `PORT`, `FRONTEND_URL` (your Vercel URL), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER`, `GROQ_API_KEYS`, `GROQ_MODEL`, `NEXA_IMAGES_PER_DAY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `ADMIN_EMAILS` (optional: `PUTER_AUTH_TOKEN`).
+2. Set environment variables: `MONGODB_URI`, `token`, `PORT`, `FRONTEND_URL` (your Vercel URL; several can be listed comma-separated, and the first is used for links in emails and the Google redirect), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER`, `GROQ_API_KEYS`, `GROQ_MODEL`, `NEXA_IMAGES_PER_DAY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `ADMIN_EMAILS` (optional: `PUTER_AUTH_TOKEN`).
 3. If the production database predates contacts, run `node scripts/migrate-contacts.js` once against it.
 
 ### Backend on another VM

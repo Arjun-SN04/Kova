@@ -28,7 +28,7 @@ const C = {
 
 const year = () => new Date().getFullYear()
 const stamp = () => new Date().toUTCString().replace("GMT", "UTC")
-export const appUrl = (path = "") => `${(process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "")}${path}`
+export const appUrl = (path = "") => `${(process.env.FRONTEND_URL || "http://localhost:5173").split(",")[0].trim().replace(/\/$/, "")}${path}`
 
 // ── Building blocks ──
 const p = (html, extra = "") => `<p style="margin:12px 0 0;font-family:${FONT};font-size:15px;line-height:24px;color:${C.soft};${extra}">${html}</p>`

@@ -43,8 +43,9 @@ app.use(cookieParser())
 
 const allowedOrigins = [
   "http://localhost:5173",
-  process.env.FRONTEND_URL, // set this in Render/Railway/etc env vars
-].filter(Boolean)
+  // FRONTEND_URL can list several sites, comma-separated (e.g. a new and an old Vercel URL)
+  ...String(process.env.FRONTEND_URL || "").split(","),
+].map((u) => u.trim().replace(/\/$/, "")).filter(Boolean)
 
 app.use(
   cors({

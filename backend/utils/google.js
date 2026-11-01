@@ -20,7 +20,7 @@ export const GMAIL_SCOPES = [
 export const hasGmail = (account) => !!account?.scopes?.some((s) => s.includes("gmail.readonly"))
 
 export const googleConfigured = () => !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)
-export const redirectUri = () => process.env.GOOGLE_REDIRECT_URI || `${(process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "")}/api/google/callback`
+export const redirectUri = () => process.env.GOOGLE_REDIRECT_URI || `${(process.env.FRONTEND_URL || "http://localhost:5173").split(",")[0].trim().replace(/\/$/, "")}/api/google/callback`
 
 export class GoogleError extends Error {
   constructor(message, status = 502) { super(message); this.status = status }
