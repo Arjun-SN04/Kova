@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
-import { LuAlarmClock, LuBot, LuClipboardList, LuCheck, LuCheckCheck, LuEllipsis, LuFileText, LuLanguages, LuCopy, LuDownload, LuForward, LuSave, LuPencil, LuBookmark, LuBookmarkX, LuPin, LuPinOff, LuReply, LuSmilePlus, LuSparkles, LuSquareCheck, LuStar, LuStarOff, LuTimer, LuTrash2, LuVolume2, LuSquare } from 'react-icons/lu'
+import { LuAlarmClock, LuBot, LuClipboardList, LuCheck, LuCheckCheck, LuEllipsis, LuFileText, LuLanguages, LuCopy, LuDownload, LuForward, LuSave, LuPencil, LuBookmark, LuBookmarkX, LuPin, LuPinOff, LuReply, LuSmilePlus, LuSquareCheck, LuStar, LuStarOff, LuTimer, LuTrash2, LuVolume2, LuSquare, LuSticker, LuBookmarkPlus, LuMessageCircleQuestion } from 'react-icons/lu'
 import { canSpeak, speak, useSpeech } from '../../utils/speak'
 import useConversation from '../../Zustand/UserConversation'
 import Avatar from '../Avatar'
@@ -32,6 +32,7 @@ const botMd = {
 }
 import { loadConversations } from '../../utils/conversations'
 import { useAuth } from '../../context/AuthProvider'
+import useStickers from '../../Zustand/useStickers'
 
 const HTML_BREAKS = [remarkHtmlBreaks, remarkLineBreaks]
 
@@ -184,8 +185,10 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
     else if (!canHover()) setShowActions((v) => !v)
   }
 
-  // Photos and videos get a tighter frame around them
-  const media = ['image', 'video'].includes(message.attachment?.kind) || !!message.location
+  // Photos, videos and GIFs get a tighter frame around them; stickers have no bubble
+  const media = ['image', 'video', 'gif'].includes(message.attachment?.kind) || !!message.location
+  const sticker = message.attachment?.kind === 'sticker'
+  const savable = ['sticker', 'gif'].includes(message.attachment?.kind) && !String(id).startsWith('temp-')
 
   // Bubble shape: flatten the corner that points at the neighbouring bubble
   const corners = itsMe
@@ -231,7 +234,9 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           <MenuItem icon={LuForward} label="Forward" onClick={close(() => setForwardIds([id]))} />
           {fileUrl && <MenuItem icon={LuDownload} label="Download" onClick={close(() => saveFile(false))} />}
           {fileUrl && canSaveAs() && <MenuItem icon={LuSave} label="Save as…" onClick={close(() => saveFile(true))} />}
-          {(message.attachment?.kind === 'image' || /^(application\/pdf|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|text\/plain|text\/csv)$/.test(message.attachment?.mimeType || '')) && !isBot && <MenuItem icon={LuSparkles} label="Ask Nexa about this" onClick={close(() => { setReplyingTo(message); window.dispatchEvent(new CustomEvent('nexchat:compose', { detail: '@Nexa ' })) })} />}
+          {(message.attachment?.kind === 'image' || /^(application\/pdf|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|text\/plain|text\/csv)$/.test(message.attachment?.mimeType || '')) && !isBot && <MenuItem icon={LuMessageCircleQuestion} label="Ask Nexa about this" onClick={close(() => { setReplyingTo(message); window.dispatchEvent(new CustomEvent('nexchat:compose', { detail: '@Nexa ' })) })} />}
+          {savable && <MenuItem icon={LuBookmarkPlus} label={message.attachment.kind === 'gif' ? 'Save GIF' : 'Save sticker'} onClick={close(() => useStickers.getState().save({ messageId: id, media: { kind: message.attachment.kind } }))} />}
+          {message.attachment?.kind === 'image' && <MenuItem icon={LuSticker} label="Make sticker" onClick={close(() => useStickers.getState().openMaker(message.attachment.url))} />}
           {readable && canSpeak() && <MenuItem icon={speaking ? LuSquare : LuVolume2} label={speaking ? 'Stop reading' : 'Listen'} onClick={close(() => speak(id, readable))} />}
           {canTranslate && <MenuItem icon={LuLanguages} label={translation?.text ? 'Hide translation' : 'Translate'} onClick={close(translate)} />}
           <MenuItem icon={starred ? LuStarOff : LuStar} label={starred ? 'Unstar' : 'Star'} onClick={close(() => toggleStar(id))} />
@@ -336,8 +341,8 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           onClick={selectionMode ? undefined : onBubbleClick}
           onDoubleClick={selectionMode ? undefined : (e) => { e.preventDefault(); window.getSelection()?.removeAllRanges(); react('❤️') }}
           title={new Date(message.createdAt).toLocaleString()}
-          className={message.card
-            // Business cards bring their own frame: no bubble around them
+          className={message.card || sticker
+            // Business cards and stickers bring their own frame: no bubble around them
             ? `rounded-xl text-[14px] leading-relaxed break-words max-w-full transition ${ring} ${deleting ? 'opacity-40' : ''} ${selectionMode ? 'pointer-events-none' : ''}`
             : `rounded-2xl text-[14px] leading-relaxed break-words max-w-full transition ${media ? 'p-1.5' : 'px-3.5 py-2'} ${corners} ${ring} ${deleting ? 'opacity-40' : ''} ${
             itsMe

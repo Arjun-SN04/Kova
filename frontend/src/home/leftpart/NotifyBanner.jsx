@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { LuBell, LuX } from 'react-icons/lu'
 import { enablePush, pushState } from '../../utils/push'
+import PushHelp from '../../components/PushHelp'
 
 const DISMISS_KEY = 'nexchat:notifyBannerDismissed'
 const dismissedBefore = () => { try { return localStorage.getItem(DISMISS_KEY) === '1' } catch { return false } }
@@ -9,7 +10,7 @@ const dismissedBefore = () => { try { return localStorage.getItem(DISMISS_KEY) =
 const NotifyBanner = () => {
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     if (dismissedBefore()) return
@@ -18,8 +19,8 @@ const NotifyBanner = () => {
 
   const dismiss = () => { try { localStorage.setItem(DISMISS_KEY, '1') } catch { /* ignore */ } setShow(false) }
   const turnOn = async () => {
-    setBusy(true); setError('')
-    try { await enablePush(); setShow(false) } catch (err) { setError(err.message) } finally { setBusy(false) }
+    setBusy(true); setError(null)
+    try { await enablePush(); setShow(false) } catch (err) { setError(err) } finally { setBusy(false) }
   }
 
   if (!show) return null
@@ -34,7 +35,7 @@ const NotifyBanner = () => {
             <button onClick={turnOn} disabled={busy} className="h-7 rounded-lg bg-indigo-600 px-3 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-60">{busy ? 'Turning on…' : 'Turn on'}</button>
             <button onClick={dismiss} className="h-7 rounded-lg px-2 text-xs font-medium text-slate-600 hover:bg-white/60 dark:text-slate-300 dark:hover:bg-slate-800">Not now</button>
           </div>
-          {error && <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
+          <PushHelp error={error} compact />
         </div>
         <button onClick={dismiss} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" aria-label="Dismiss"><LuX className="size-4" /></button>
       </div>

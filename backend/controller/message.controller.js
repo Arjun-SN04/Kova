@@ -4,6 +4,7 @@ import { Message } from "../models/message.model.js"
 import { getReceiverSocketId, io } from "../socket/socket.js"
 import { uploadToCloudinary, deleteFromCloudinary, fileDownloadUrl } from "../config/cloudinary.js"
 import { canSeeMessage } from "../utils/chatAccess.js"
+import { mediaAttachment, parseMedia } from "./gif.controller.js"
 import User from "../models/user.model.js"
 import { Group } from "../models/group.model.js"
 import { emitToUsers } from "../utils/notify.js"
@@ -89,7 +90,10 @@ export const sendMessage = async (req, res) => {
       return res.status(403).json({ error: "You can only message your contacts" })
 
     const text = (message || "").trim()
-    if (!text && !req.file) return res.status(400).json({ error: "Message cannot be empty" })
+    // A GIF or sticker picked in the message box
+    const media = req.file ? null : parseMedia(req.body.media)
+    if (req.body.media && !req.file && !media) return res.status(400).json({ error: "That GIF or sticker can't be sent" })
+    if (!text && !req.file && !media) return res.status(400).json({ error: "Message cannot be empty" })
 
     // A reply must point at a message from this same conversation
     if (replyTo) {
@@ -106,7 +110,7 @@ export const sendMessage = async (req, res) => {
     }
 
     // Upload the attachment (if any) only after the request is validated
-    let attachment = null
+    let attachment = mediaAttachment(media)
     if (req.file) {
       try {
         attachment = await uploadToCloudinary(req.file)

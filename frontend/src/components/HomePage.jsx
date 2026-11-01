@@ -356,6 +356,7 @@ const Footer = ({ loggedIn }) => {
         { href: '#features', label: 'Features' },
         { href: '#use-cases', label: 'Use cases' },
         { href: '#how-it-works', label: 'How it works' },
+        { to: '/faq', label: 'FAQ' },
       ],
     },
     {
@@ -436,6 +437,12 @@ const HomePage = () => {
     return () => lenis.destroy()
   }, [])
 
+  // Arrived with #features / #how-it-works (e.g. from the FAQ page): go to that section
+  useEffect(() => {
+    const id = window.location.hash.slice(1)
+    if (id) setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }), 350)
+  }, [])
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10)
     onScroll()
@@ -459,6 +466,7 @@ const HomePage = () => {
           <div className="hidden items-center gap-1 text-sm text-slate-600 dark:text-zinc-300 md:flex">
             <a href="#features" className="rounded-full px-4 py-2 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white">Features</a>
             <a href="#how-it-works" className="rounded-full px-4 py-2 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white">How it works</a>
+            <Link to="/faq" className="rounded-full px-4 py-2 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white">FAQ</Link>
           </div>
           <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
             <button

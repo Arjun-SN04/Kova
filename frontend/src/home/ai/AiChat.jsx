@@ -4,7 +4,7 @@ import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuArrowLeft, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuEllipsisVertical, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImages, LuMessageCircle, LuSendHorizontal, LuSmile, LuLoaderCircle, LuSparkles, LuSquare, LuTrash2, LuVolume2, LuX } from 'react-icons/lu'
+import { LuArrowLeft, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuEllipsisVertical, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImages, LuMessageCircle, LuSendHorizontal, LuSmile, LuLoaderCircle, LuSquare, LuTrash2, LuVolume2, LuX, LuLightbulb } from 'react-icons/lu'
 import { canSpeak, speak, useSpeech } from '../../utils/speak'
 import { selfContact } from '../../utils/conversations'
 import useConversation from '../../Zustand/UserConversation'
@@ -22,6 +22,7 @@ import { useSocket } from '../../context/SocketProvider'
 import { compressImage, formatBytes } from '../../utils/attachments'
 import { TIMER_OPTIONS, timerLabel, timerShort } from '../../utils/chatExtras'
 import MediaPicker from '../media/MediaPicker'
+import { StickerHost } from '../media/StickerMaker'
 import { remarkHtmlBreaks, remarkLineBreaks } from '../../utils/markdown'
 import useWallpaper from '../../hooks/useWallpaper'
 import { AI_CHAT } from '../../utils/ai'
@@ -159,7 +160,7 @@ const listItem = (onAsk) => {
           className="ml-1.5 inline-flex -translate-y-px items-center gap-0.5 rounded-full px-1.5 py-px align-middle text-[11px] font-medium text-violet-600 opacity-0 ring-1 ring-violet-200 transition hover:bg-violet-50 focus:opacity-100 group-hover/li:opacity-100 pointer-coarse:opacity-100 dark:text-violet-300 dark:ring-violet-500/30 dark:hover:bg-violet-500/10"
           title="Ask Nexa about this"
         >
-          <LuSparkles className="size-3" /> Know more
+          <LuLightbulb className="size-3" /> Know more
         </button>
       </li>
     )
@@ -801,6 +802,7 @@ const AiChat = () => {
       </div>
 
       <div className="relative shrink-0 border-t border-slate-200 bg-white px-3 py-2.5 sm:px-6 lg:px-8 pb-[max(0.625rem,env(safe-area-inset-bottom))] dark:border-slate-800 dark:bg-slate-950">
+        <StickerHost onSend={sendMedia} />
         <AnimatePresence>
           {mediaOpen && <MediaPicker onEmoji={insertEmoji} onMedia={sendMedia} onClose={closeMedia} toggleRef={mediaBtnRef} className="left-4 sm:left-6 lg:left-8" />}
         </AnimatePresence>

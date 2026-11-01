@@ -184,6 +184,22 @@ const Attachment = ({ attachment, itsMe, messageId = null, label = '' }) => {
     )
   }
 
+  // Stickers sit on the chat background, with no bubble around them
+  if (kind === 'sticker') {
+    return <img src={url} alt={name || 'Sticker'} loading="lazy" draggable={false} className="block size-36 select-none object-contain drop-shadow-sm sm:size-40" />
+  }
+
+  if (kind === 'gif') {
+    const w = width || 1
+    const h = height || 1
+    return (
+      <div className="relative overflow-hidden rounded-xl bg-slate-200/60 dark:bg-slate-700/60" style={{ aspectRatio: `${w} / ${h}`, width: Math.min(280, Math.round(240 * w / h)) }}>
+        <img src={url} alt={name || 'GIF'} loading="lazy" className="size-full object-cover" />
+        <span className="absolute bottom-1.5 left-1.5 rounded bg-black/55 px-1 text-[10px] font-bold text-white">GIF</span>
+      </div>
+    )
+  }
+
   if (kind === 'audio') return <AudioPlayer attachment={attachment} itsMe={itsMe} messageId={messageId} label={label} />
 
   if (kind === 'video') {

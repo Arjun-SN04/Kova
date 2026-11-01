@@ -51,5 +51,5 @@ export const previewOf = (m) => {
   if (m.poll) return `📊 ${m.poll.question}`
   if (m.message) return m.message.length > 140 ? `${m.message.slice(0, 137)}…` : m.message
   const kind = m.attachment?.kind
-  return kind === "image" ? "📷 Photo" : kind === "video" ? "🎥 Video" : kind === "audio" ? "🎤 Voice note" : kind ? "📎 File" : "New message"
+  return kind === "sticker" ? "✨ Sticker" : kind === "gif" ? "🎞️ GIF" : kind === "image" ? "📷 Photo" : kind === "video" ? "🎥 Video" : kind === "audio" ? "🎤 Voice note" : kind ? "📎 File" : "New message"
 }

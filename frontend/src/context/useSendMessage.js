@@ -3,16 +3,17 @@ import axios from "axios";
 import useConversation from "../Zustand/UserConversation";
 import { sendUrl } from "../utils/groups";
 
-// Sends a text message, optionally with a reply target and/or a file.
+// Sends a text message, optionally with a reply target, a file, or a GIF / sticker.
 // Returns null on success, or an error message.
 const useSendMessage = () => {
   const [loading, setLoading] = useState(false);
   const { selectedConversation, setMessages, upsertPreview } = useConversation();
 
-  const sendMessage = async (messageText, replyTo = null, file = null, onProgress) => {
-    if (!selectedConversation?._id || (!messageText.trim() && !file)) return null;
+  // `media`: a GIF or sticker { kind, url, title, width, height }
+  const sendMessage = async (messageText, replyTo = null, file = null, onProgress, media = null) => {
+    if (!selectedConversation?._id || (!messageText.trim() && !file && !media)) return null;
 
-    let body = { message: messageText, replyTo };
+    let body = { message: messageText, replyTo, ...(media ? { media } : {}) };
     if (file) {
       body = new FormData();
       body.append("message", messageText);

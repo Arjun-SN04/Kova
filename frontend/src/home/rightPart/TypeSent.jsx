@@ -3,7 +3,7 @@ import PollDialog from './PollDialog'
 import LocationDialog from '../location/LocationDialog'
 import axios from 'axios'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuCalendarDays, LuCamera, LuChartColumn, LuIndianRupee, LuPackage, LuZap, LuCheck, LuSmile, LuSparkles, LuUndo2, LuFileText, LuLoaderCircle, LuMapPin, LuMic, LuPaperclip, LuPencil, LuPlus, LuReply, LuSendHorizontal, LuTrash2, LuX } from 'react-icons/lu'
+import { LuCalendarDays, LuCamera, LuChartColumn, LuIndianRupee, LuPackage, LuZap, LuCheck, LuSmile, LuUndo2, LuFileText, LuLoaderCircle, LuMapPin, LuMic, LuPaperclip, LuPencil, LuPlus, LuReply, LuSendHorizontal, LuTrash2, LuX, LuPenLine } from 'react-icons/lu'
 import useSendMessage from '../../context/useSendMessage'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
@@ -11,7 +11,9 @@ import { useSocket } from '../../context/SocketProvider'
 import { jumpToMessage } from '../../utils/messages'
 import { loadConversations } from '../../utils/conversations'
 import { ACCEPT, MAX_FILE_BYTES, attachmentLabel, formatBytes, prepareFile } from '../../utils/attachments'
-import EmojiPopover from './EmojiPopover'
+import MediaPicker from '../media/MediaPicker'
+import RewriteMenu from './RewriteMenu'
+import { StickerHost } from '../media/StickerMaker'
 import { canPost } from '../../utils/groups'
 import useInputHistory from '../../hooks/useInputHistory'
 import useVoiceRecorder, { MAX_VOICE_SECONDS } from '../../hooks/useVoiceRecorder'
@@ -184,14 +186,14 @@ const TypeSent = () => {
   // Focus the box when opening a chat; drop any draft from the previous one
   useEffect(() => { setText(''); setError(''); setEmojiOpen(false); setUndoText(null); inputRef.current?.focus() }, [selectedConversation?._id])
 
-  const rewrite = async (style) => {
+  const rewrite = async (style, instruction) => {
     setNexaOpen(false)
     const original = text
     if (!original.trim()) return
     setRewriting(true)
     setError('')
     try {
-      const res = await axios.post('/api/ai/rewrite', { text: original, style }, { withCredentials: true })
+      const res = await axios.post('/api/ai/rewrite', { text: original, style, instruction }, { withCredentials: true })
       setText(res.data.text)
       setUndoText(original)
       inputRef.current?.focus()
@@ -292,6 +294,16 @@ const TypeSent = () => {
     inputRef.current?.focus()
   }
 
+  // A GIF or sticker from the picker (or the sticker maker) is sent straight away
+  const sendMedia = async (media) => {
+    const replyId = replyingTo?._id || null
+    setReplyingTo(null)
+    setError('')
+    const sendError = await sendMessage('', replyId, null, null, media)
+    if (sendError) setError(sendError)
+  }
+  const closePicker = useCallback(() => setEmojiOpen(false), [])
+
   const onKeyDown = (e) => {
     // "@ne" + Tab (or Enter once a letter is typed) → "@Nexa "
     if (offerNexa && !e.shiftKey && (e.key === 'Tab' || (e.key === 'Enter' && mentionMatch[2]))) { e.preventDefault(); mentionNexa(); return }
@@ -364,25 +376,17 @@ const TypeSent = () => {
   return (
     <div className="relative shrink-0 border-t border-slate-200 bg-white px-3 py-2.5 sm:px-6 lg:px-8 pb-[max(0.625rem,env(safe-area-inset-bottom))] dark:border-slate-800 dark:bg-slate-950">
       <AnimatePresence>
-        {emojiOpen && <EmojiPopover onPick={insertEmoji} onClose={() => setEmojiOpen(false)} toggleRef={emojiBtnRef} />}
+        {emojiOpen && <MediaPicker onEmoji={insertEmoji} onMedia={sendMedia} onClose={closePicker} toggleRef={emojiBtnRef} className="left-4 sm:left-6 lg:left-8" />}
       </AnimatePresence>
 
+      <StickerHost onSend={sendMedia} />
       {quick.menu}
 
-      {nexaOpen && (
-        <div ref={nexaRef} role="menu" className="absolute bottom-full right-4 z-30 mb-2 w-56 rounded-xl bg-white p-1 shadow-xl ring-1 ring-slate-200 sm:right-6 lg:right-8 dark:bg-slate-900 dark:ring-slate-800">
-          <p className="flex items-center gap-1.5 px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400"><LuSparkles className="size-3" /> Rewrite with Nexa</p>
-          {[['shorten', 'Shorten'], ['professional', 'More professional'], ['friendly', 'Friendlier'], ['grammar', 'Fix spelling & grammar'], ['english', 'Translate to English']].map(([style, label]) => (
-            <button key={style} role="menuitem" onClick={() => rewrite(style)} className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
+      {nexaOpen && <RewriteMenu ref={nexaRef} onPick={rewrite} />}
 
       {offerNexa && (
         <button onClick={mentionNexa} className="mb-2 inline-flex max-w-full items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[13px] shadow-sm ring-1 ring-violet-200 transition hover:bg-violet-50 dark:bg-slate-800 dark:ring-violet-500/30 dark:hover:bg-violet-500/10">
-          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-white"><LuSparkles className="size-3" /></span>
+          <img src="/images/nexa-avatar.jpg" alt="" className="size-5 shrink-0 rounded-full object-cover" />
           <span className="shrink-0 font-medium">@Nexa</span>
           <span className="min-w-0 truncate text-slate-500 dark:text-slate-400">{selectedConversation?.isGroup ? 'ask the AI, answers for everyone' : selectedConversation?.isSelf ? 'ask the AI here' : 'ask the AI, both of you see it'}</span>
           <kbd className="ml-1 hidden shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 font-sans text-[10px] font-medium text-slate-500 sm:inline dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">Tab</kbd>
@@ -391,7 +395,7 @@ const TypeSent = () => {
 
       {undoText !== null && !rewriting && (
         <div className="mb-2 flex items-center gap-2 px-1 text-xs text-slate-500 dark:text-slate-400">
-          <LuSparkles className="size-3.5 text-violet-500" /> Rewritten by Nexa
+          <LuPenLine className="size-3.5 text-indigo-500" /> Rewritten by Nexa
           <button onClick={() => { setText(undoText); setUndoText(null) }} className="inline-flex items-center gap-1 font-medium text-indigo-600 hover:underline dark:text-indigo-400">
             <LuUndo2 className="size-3" /> Undo
           </button>
@@ -554,9 +558,9 @@ const TypeSent = () => {
               ref={emojiBtnRef}
               type="button"
               onClick={() => setEmojiOpen((o) => !o)}
-              aria-label="Emoji"
+              aria-label="Emoji, GIFs and stickers"
               aria-expanded={emojiOpen}
-              title="Emoji"
+              title="Emoji, GIFs and stickers"
               className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white ${
                 emojiOpen ? 'bg-slate-100 text-indigo-600 dark:bg-slate-800 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'
               }`}
@@ -585,7 +589,7 @@ const TypeSent = () => {
                 title="Rewrite with Nexa"
                 className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-500/10 dark:hover:text-violet-400 ${nexaOpen || rewriting ? 'text-violet-600 dark:text-violet-400' : 'text-slate-500 dark:text-slate-400'}`}
               >
-                <LuSparkles className={`size-4.5 ${rewriting ? 'animate-pulse' : ''}`} />
+                <LuPenLine className={`size-4.5 ${rewriting ? 'animate-pulse' : ''}`} />
               </button>
             )}
             {/* Mic when there's nothing to send, otherwise Send */}

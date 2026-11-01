@@ -1,5 +1,5 @@
 import express from "express"
-import { allUser, usernameAvailable, login, logout, signup, updateProfile, getMe, updateAvatar, removeAvatar, updatePrivacy, getPresence, uploadWallpaper, setWallpaper } from "../controller/user.controller.js"
+import { allUser, usernameAvailable, usernameSuggestions, login, logout, signup, updateProfile, getMe, updateAvatar, removeAvatar, updatePrivacy, getPresence, uploadWallpaper, setWallpaper } from "../controller/user.controller.js"
 import { uploadAvatarSingle } from "../config/cloudinary.js"
 import secureRoute from "../middleware/secureRoute.js"
 import { accountStatus, deleteAccount, downloadExport, requestExport, sendDeleteCode, setEmailDigest } from "../controller/account.controller.js"
@@ -11,6 +11,7 @@ router.post("/login", login)
 router.post("/logout", logout)
 router.get("/allusers", secureRoute, allUser)
 router.get("/username-available/:username", usernameAvailable)
+router.get("/username-suggestions", usernameSuggestions)
 router.put("/update", secureRoute, updateProfile)
 router.get("/me", secureRoute, getMe)
 router.put("/privacy", secureRoute, updatePrivacy)

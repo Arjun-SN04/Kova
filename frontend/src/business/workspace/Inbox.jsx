@@ -25,7 +25,7 @@ const previewText = (m) => {
   if (!m) return 'No messages yet'
   if (m.card?.kind) return { product: 'Product', order: 'Order', payment: 'Payment request', booking: 'Booking', task: 'Task' }[m.card.kind] || m.message
   if (m.message) return m.message
-  return m.attachment?.kind === 'image' ? 'Photo' : m.attachment?.kind === 'audio' ? 'Voice note' : m.attachment ? 'File' : ''
+  return m.attachment?.kind === 'sticker' ? 'Sticker' : m.attachment?.kind === 'gif' ? 'GIF' : m.attachment?.kind === 'image' ? 'Photo' : m.attachment?.kind === 'audio' ? 'Voice note' : m.attachment ? 'File' : ''
 }
 
 // One customer row in the inbox list

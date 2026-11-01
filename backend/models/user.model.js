@@ -71,6 +71,18 @@ const userSchema = mongoose.Schema({
         requestedAt:Date,
         scheduledFor:Date,
     },
+    // Saved GIFs / stickers and stickers I made (publicId set on my own uploads)
+    stickers:{
+        type:[{
+            kind:{ type:String, enum:["gif","sticker"], default:"sticker" },
+            url:String,
+            publicId:String,
+            title:String,
+            width:Number,
+            height:Number,
+        }],
+        default:[],
+    },
     // Daily email of unread messages while I'm away (off by default)
     emailDigest:{
         enabled:{ type:Boolean, default:false },
@@ -157,6 +169,7 @@ userSchema.set("toJSON", {
         delete ret.securityAnswer
         delete ret.dataExport
         delete ret.deletion
+        delete ret.stickers
         const viewer = currentViewer()
         const id = String(ret._id)
         if (viewer?.id === id) return ret

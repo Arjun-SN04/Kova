@@ -1,23 +1,24 @@
 import React, { useEffect, useState } from 'react'
 import { LuBell, LuBellOff, LuSend } from 'react-icons/lu'
 import { disablePush, enablePush, pushState, testPush } from '../utils/push'
+import PushHelp from './PushHelp'
 
 // Turn push notifications on/off for this device (Profile page)
 const NotificationSettings = () => {
   const [state, setState] = useState(null) // on | off | blocked | unsupported
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(null)
 
   useEffect(() => { pushState().then(setState) }, [])
 
   const toggle = async () => {
-    setBusy(true); setError(''); setNote('')
+    setBusy(true); setError(null); setNote('')
     try {
       if (state === 'on') { await disablePush(); setState('off') }
       else { await enablePush(); setState('on'); setNote('Notifications are on for this device.') }
     } catch (err) {
-      setError(err.message)
+      setError(err)
       setState(await pushState())
     } finally {
       setBusy(false)
@@ -25,8 +26,8 @@ const NotificationSettings = () => {
   }
 
   const sendTest = async () => {
-    setNote(''); setError('')
-    try { await testPush(); setNote('Test sent. It should appear in a moment.') } catch { setError("Couldn't send a test.") }
+    setNote(''); setError(null)
+    try { await testPush(); setNote('Test sent. It should appear in a moment.') } catch { setError(new Error("Couldn't send a test.")) }
   }
 
   return (
@@ -65,7 +66,7 @@ const NotificationSettings = () => {
         </button>
       )}
       {note && <p className="ml-14 text-sm text-emerald-600 dark:text-emerald-400">{note}</p>}
-      {error && <p className="ml-14 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <div className="ml-14"><PushHelp error={error} /></div>}
     </div>
   )
 }

@@ -4,11 +4,11 @@ import bcrypt from "bcryptjs"
 import { io } from "../socket/socket.js"
 import { getReceiverSocketId, presenceOf, setActivityHidden } from "../socket/socket.js"
 import { uploadToCloudinary, deleteFromCloudinary } from "../config/cloudinary.js"
-import { RESERVED_USERNAMES, USERNAME_RE, USERNAME_RULES, normalizeUsername, newInviteToken } from "../utils/username.js"
+import { RESERVED_USERNAMES, USERNAME_RE, USERNAME_RULES, normalizeUsername, newInviteToken, suggestUsernames } from "../utils/username.js"
 
 // Never send password hashes, contact lists or invite tokens to the browser
 const publicUser = (user) => {
-  const { password, confirmPassword, __v, contacts, inviteToken, pinnedChats, starred, lockCode, lockCodeKind, hiddenChats, hiddenWordHash, securityCode, securityAnswer, dataExport, deletion, ...rest } = user.toObject ? user.toObject() : user
+  const { password, confirmPassword, __v, contacts, inviteToken, pinnedChats, starred, lockCode, lockCodeKind, hiddenChats, hiddenWordHash, securityCode, securityAnswer, dataExport, deletion, stickers, ...rest } = user.toObject ? user.toObject() : user
   return rest
 }
 
@@ -32,6 +32,19 @@ const checkUsername = async (username, myId = null) => {
   if (RESERVED_USERNAMES.has(username)) return "That username is taken"
   const taken = await User.exists({ username, ...(myId ? { _id: { $ne: myId } } : {}) })
   return taken ? "That username is taken" : null
+}
+
+// Free usernames based on the name typed at sign-up: { suggestions: [...] }
+export const usernameSuggestions = async (req, res) => {
+  try {
+    const name = String(req.query.name || "").slice(0, 80)
+    const email = String(req.query.email || "").slice(0, 120)
+    if (!name.trim() && !email.trim()) return res.json({ suggestions: [] })
+    res.json({ suggestions: await suggestUsernames(name, email) })
+  } catch (error) {
+    console.log("usernameSuggestions error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
 }
 
 // Live check while typing a username: { available, error }

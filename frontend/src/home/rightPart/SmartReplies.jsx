@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import axios from 'axios'
-import { LuSparkles, LuX } from 'react-icons/lu'
+import { LuX, LuMessageSquareReply } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import useSendMessage from '../../context/useSendMessage'
 import { useAuth } from '../../context/AuthProvider'
@@ -49,7 +49,7 @@ const SmartReplies = () => {
     return (
       <div className="flex shrink-0 px-4 pb-1 pt-2 sm:px-6 lg:px-8">
         <button onClick={() => toggle(true)} className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-violet-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-violet-300" title="Show reply suggestions">
-          <LuSparkles className="size-3.5" /> Suggestions
+          <LuMessageSquareReply className="size-3.5" /> Suggestions
         </button>
       </div>
     )
@@ -64,7 +64,7 @@ const SmartReplies = () => {
 
   return (
     <div className="flex shrink-0 items-center gap-2 px-4 pb-1 pt-2 sm:px-6 lg:px-8">
-      <LuSparkles className="size-3.5 shrink-0 text-violet-500" aria-label="Suggested by Nexa" />
+      <LuMessageSquareReply className="size-3.5 shrink-0 text-indigo-500" aria-label="Suggested by Nexa" />
       <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto [scrollbar-width:none]">
         {state.replies.map((r) => (
           <button

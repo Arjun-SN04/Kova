@@ -356,10 +356,6 @@ const Users = () => {
             >
               <LuX className="size-3.5" />
             </button>
-          ) : panelWidth >= 340 || panelWidth === 0 ? (
-            <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-md border border-slate-200 bg-white px-1.5 text-[11px] font-medium text-slate-400 md:block dark:border-slate-700 dark:bg-slate-800">
-              /
-            </kbd>
           ) : null}
         </div>
       </div>

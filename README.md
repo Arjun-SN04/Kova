@@ -53,6 +53,8 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Camera capture**: take a photo with the device camera (front/back switch on phones), retake or use it.
 - **Voice notes**: record up to 2 minutes from the microphone, with an inline player (play/pause, seek, duration).
 - **In-browser image compression** before upload (typically 90%+ smaller).
+- **GIFs and stickers** in every chat and group (the smiley in the message box opens Emoji · GIFs · Stickers). GIF search goes through the server (`/api/gifs/search`) to **KLIPY** (`KLIPY_API_KEY`, preferred; Tenor's API shut down in June 2026) or **GIPHY** (`GIPHY_API_KEY`). Stickers include Google's animated Noto emoji (no key needed), online stickers when searching (with a key), and your own. A GIF or sticker is sent as a message with `media: { kind, url, title, width, height }`; the server only accepts URLs from the GIF provider, Google's emoji, or our own sticker uploads, and stores them with no `publicId`, so deleting a message never deletes the shared file. Stickers show without a bubble; GIFs get a small GIF label. Code: `backend/controller/gif.controller.js`, `home/media/MediaPicker.jsx`.
+- **Saved and custom stickers**: save a sticker or GIF from a message's ⋯ menu, or with the bookmark in the picker (up to 150, in `User.stickers`). **Create** (Stickers → Yours, or ⋯ → *Make sticker* on any photo) opens a sticker maker: move and zoom the photo, pick Original / Rounded / Circle, a white outline that follows the shape (or a PNG's see-through edges), and a meme-style caption at the top or bottom. It renders a 512×512 WebP in the browser and uploads it to Cloudinary (`stickers/`). Removing a sticker you made deletes its file only once no message uses it. Code: `home/media/StickerMaker.jsx`, `Zustand/useStickers.js`, `GET/POST /api/gifs/stickers`, `POST /api/gifs/stickers/save`, `DELETE /api/gifs/stickers/:id`.
 - **Delete for me / for everyone**: deleting a message, a selection, media from the media manager, or clearing a chat asks which one you want. "For everyone" is offered when every message is yours (or a Nexa answer you may remove) and frees the files on Cloudinary. "For me" hides it from your view only (`hiddenFor` on the message, never sent to other people). Once everyone in the chat has deleted a message for themselves, it's removed for good and its file freed. Code: `POST /api/message/delete-for-me`, `DELETE /api/message/conversation/:id?for=me`, `home/DeleteChoiceDialog.jsx`.
 - **Download / Save as…** in the ⋯ menu of every photo, video, voice note and file. Save as lets you choose the folder and name in Chrome and Edge.
 - **Media, links and docs**: open a chat's Contact or Group info (or the photos button at the top of the Nexa chat) to see every photo, video, document, link and voice note in that chat, grouped by month in tabs. Open photos full screen with previous / next, download, jump to the message, or select several to download or delete. Deleting removes the messages for everyone and frees the files on Cloudinary (you can only delete what you sent). In Nexa, deleting a photo or file removes just that file and keeps the message text. Code: `home/media/MediaManager.jsx`, `MediaSummary.jsx`, `utils/mediaItems.js`, and `DELETE /api/ai/messages/:id/file`.
@@ -82,7 +84,7 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
   - *Transcribe*: voice notes get a Transcribe button (Groq Whisper). The text is saved, so everyone in the chat sees it and summaries include it.
   - *Remind me*: from a message's ⋯ menu: in 1 hour, in 3 hours, tomorrow 9 AM, or a custom time. The reminder arrives in your Message yourself chat with **Go to message**.
   - *@Nexa in any chat*: type `@Nexa` (a suggestion pops up after `@`) and Nexa answers right there as a reply. In a group everyone sees it ("@Nexa pick a restaurant from what we said"); in a one-to-one chat both people see it ("@Nexa what does this word mean?"); in Message yourself it's just for you. As soon as you send it, a **"Nexa is thinking…"** bubble (and header and chat-list status) appears for you and the other person until the answer arrives. Nexa's bullets are formatted in the chat.
-- **✨ Rewrite with Nexa** in every chat's message box: *Shorten*, *More professional*, *Friendlier*, *Fix spelling & grammar*, *Translate to English*, with **Undo**.
+- **Rewrite with Nexa** (pen button in every chat's message box), with **Undo**. Length: *Shorten*, *Elaborate*, *Make it a list*. Tone: *More professional*, *Friendlier*, *Casual*, *More confident*, *More polite*, *Funnier*. Fix: *Spelling & grammar*, *Simpler words*, *Add emoji*. Translate: *English*, *Hindi*, *Hinglish*, *Malayalam*. Or type your own request ("sound excited"), sent as style `custom` and treated only as a rewrite instruction. Code: `home/rightPart/RewriteMenu.jsx`, `STYLES` in `ai.controller.js`.
 - **Scheduled bar**: a chat with scheduled messages shows "2 scheduled messages · next Fri 9:00 AM" above the message box, with the list and Cancel buttons.
 - Powered by **Groq**'s free API (`openai/gpt-oss-120b`, falling back to `openai/gpt-oss-20b`). The API keys stay on the server.
 
@@ -169,6 +171,7 @@ Any account can turn on **Business** (Profile → Business tools, or the briefca
 - **Group tasks**: in any group, ⋯ → **Make task** on a message (or Tasks in group info): assign it, add a due date, tick it off. A task card is posted in the chat and updates when it's done.
 
 ### Account
+- **Username suggestions at sign-up**: as you type your name, free usernames appear under the Username field (e.g. `janecooper`, `jane.cooper`, `jane_cooper`, `jcooper`, `janecooper13`); tap one to use it, ↻ for more ideas. Accents are removed, non-Latin names fall back to the email, reserved names are skipped, and all candidates are checked in one database query. A live check shows ✓ available or ✗ taken for whatever you type. Code: `GET /api/user/username-suggestions?name=&email=`, `suggestUsernames` in `backend/utils/username.js`, `UsernameHelper` in `components/Signup.jsx`.
 - Sign up, sign in, sign out (JWT in an HTTP-only cookie).
 - **Stay signed in**: sessions last 30 days and renew automatically while you use the app. If a session does expire, the app returns to the sign-in page instead of showing empty data.
 - **Profile photo** upload, change and remove (cropped and compressed in the browser).
@@ -189,6 +192,7 @@ Any account can turn on **Business** (Profile → Business tools, or the briefca
 - **Photo editor**: choosing a new profile or group photo opens an editor first, and **Edit photo** in Profile edits the current one. Drag to position, zoom (slider or scroll), straighten, rotate, flip, 7 filters (Vivid, Warm, Cool, Fade, Mono, Noir) and brightness / contrast / saturation, with a circle guide for how it looks as an avatar. Saved as a 512 px square. Clicking a profile or group photo opens it full size.
 - **Copy or share your username** from Profile: **Copy** puts `@username` on the clipboard; **Share** opens the device's share sheet with your username and invite link (or copies that message where sharing isn't supported).
 - **Account settings** use a two-column layout on wide screens: profile details, password and blocked accounts on the left; appearance, notifications and business tools on the right.
+- **Notifications that always arrive**: push (`utils/push.js`) is sent by the server only while you're offline; while Kova is open but you're in another tab, app or chat, `utils/localNotify.js` shows a system notification from the live connection instead (same rules: locked/hidden chats say "New message", one per chat, clicking opens the chat). Turning on push retries once with a clean subscription, replaces subscriptions made with an old server key, and explains fixes: **Brave** blocks web push unless *Use Google services for push messaging* is on in `brave://settings/privacy` (with a copy button and steps, `components/PushHelp.jsx`).
 - **Appearance settings** (Profile → Appearance): **Light, Dark or System** mode (System follows the device), and six colour themes: **Ocean** (blue, the default), **Iris** (violet), **Lagoon**, **Forest**, **Rose** and **Graphite**. The logo, the browser-tab icon and the mobile address bar follow the chosen theme. A theme recolours buttons, links, selected chats, your message bubbles and Nexa. It's saved per browser (`chatTheme`, `chatAccent`) and applied before the app loads, so pages don't flash. The palettes are in `index.css` (`:root[data-accent=…]` swaps Tailwind's `indigo` and `violet`).
 - **Light mode**: soft off-white surfaces (not pure white) on clean cool greys, and the chat background is a soft wash of the theme colour so message bubbles stand out.
 - **Graphite dark palette**: dark mode uses neutral greys instead of navy. `index.css` remaps every `slate-*` and `zinc-*` colour under `.dark`, so all screens follow one palette.
@@ -200,6 +204,7 @@ Any account can turn on **Business** (Profile → Business tools, or the briefca
 
 ### Website
 - Landing page in dark (default) and light, with a theme toggle: a centered hero with a wide photo, a feature showcase that cycles through the app's features over a photo, use-case photos, "how it works" steps, smooth scrolling (Lenis), parallax and scroll-in animations.
+- **FAQ page** (`/faq`, linked from the landing page's top bar and footer): about 60 questions in 10 topics (getting started, messaging, media, Nexa, groups and channels, calls, status, privacy, business, account) explaining every feature and where to find it. Answers are laid out as numbered steps, bullet points and small headings, and every question has a **See an example** button that opens a short real-life walkthrough (e.g. a customer ordering a cake from a bakery, start to finish). Search box with highlighted matches, topic chips (a sticky list on desktop), expandable answers and shareable links to a question (`/faq#topic--question`). Answers live in `frontend/src/data/faq.js`, examples in `frontend/src/data/faqExamples.js` (keyed by question text).
 - Animated page transitions, a page title per screen, and a custom favicon. The logo's three dots do a small typing wave on load and while hovered.
 
 ---
@@ -972,8 +977,11 @@ GROQ_VISION_MODEL=qwen/qwen3.8-27b
 # App admins (comma-separated emails): approve business verification and review reports
 ADMIN_EMAILS=you@example.com
 
-# GIF search in the emoji / GIF / sticker picker (free key: developers.giphy.com > Create an API key)
-# Stickers work without it (Google's animated Noto emoji)
+# GIF and online sticker search in the emoji / GIF / sticker picker. Set one:
+# KLIPY (free, preferred): partner.klipy.com > create an app > copy the API key
+# GIPHY: developers.giphy.com > Create an API key
+# Animated emoji stickers and your own stickers work without either.
+KLIPY_API_KEY=
 GIPHY_API_KEY=
 
 # Google Calendar + Tasks for Nexa (morning brief, meeting reminders, "schedule a Meet")

@@ -8,6 +8,7 @@ import { useAuth } from './AuthProvider'
 import { AI_CHAT } from '../utils/ai'
 import { loadStatusFeed } from '../utils/status'
 import { CHANNEL_EVENT, loadChannels } from '../utils/channels'
+import { notifyLocally } from '../utils/localNotify'
 
 // Typing indicators clear themselves if no "stopTyping" arrives in time
 const TYPING_TIMEOUT_MS = 4000
@@ -43,6 +44,7 @@ const useListenMessages = () => {
       if (!mine) stopTyping(chatId)
       if (store().nexaId && senderId === String(store().nexaId)) store().setNexaThinking(chatId, false)
       store().upsertPreview(chatId, newMessage)
+      notifyLocally(newMessage, { chatId, groupId, myId })
 
       if (chatId === openChatId()) {
         // From the open chat: show it, and mark it read if I'm looking at the page

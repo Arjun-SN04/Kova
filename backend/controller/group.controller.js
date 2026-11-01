@@ -9,6 +9,7 @@ import { emitToUsers } from "../utils/notify.js"
 import { releaseAttachments } from "./message.controller.js"
 import { answerMention } from "../utils/nexaGroup.js"
 import { previewOf, sendPush } from "../utils/push.js"
+import { mediaAttachment, parseMedia } from "./gif.controller.js"
 
 export const MEMBER_FIELDS = "fullName username avatar"
 const MAX_MEMBERS = 256
@@ -361,14 +362,16 @@ export const sendGroupMessage = async (req, res) => {
 
     const { message, replyTo } = req.body
     const text = (message || "").trim()
-    if (!text && !req.file) return fail(res, 400, "Message cannot be empty")
+    const media = req.file ? null : parseMedia(req.body.media)
+    if (req.body.media && !req.file && !media) return fail(res, 400, "That GIF or sticker can't be sent")
+    if (!text && !req.file && !media) return fail(res, 400, "Message cannot be empty")
 
     if (replyTo) {
       const original = await Message.findById(replyTo).select("groupId")
       if (!original || !sameId(original.groupId, group._id)) return fail(res, 400, "Invalid reply target")
     }
 
-    let attachment = null
+    let attachment = mediaAttachment(media)
     if (req.file) {
       try {
         attachment = await uploadToCloudinary(req.file)

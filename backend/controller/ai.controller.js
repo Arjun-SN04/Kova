@@ -545,19 +545,38 @@ export const createAiImage = async (req, res) => {
 
 // ── Rewrite a draft (the ✨ button in the message box) ─────────
 const STYLES = {
+  // Length
   shorten: "Make it shorter and clearer. Keep the meaning and the tone.",
+  elaborate: "Expand it with more detail, context and clarity, about twice as long. Keep the same meaning, tone and language. Don't invent facts, names, dates or numbers.",
+  bullets: "Turn it into a short, clear list with one point per line, each starting with \"• \". Add a one-line intro only if it helps.",
+  // Tone
   professional: "Make it professional and polite, suitable for work.",
   friendly: "Make it warm, friendly and casual.",
+  casual: "Make it relaxed and casual, like texting a friend. Keep it natural, not slangy.",
+  confident: "Make it sound confident and direct. Remove hedging like \"just\", \"maybe\", \"I think\" and over-apologising.",
+  polite: "Make it more polite, gentle and respectful, without sounding stiff.",
+  funny: "Make it light-hearted and a little funny, while keeping the message clear.",
+  // Fix
   grammar: "Fix spelling, grammar and punctuation only. Keep the wording otherwise.",
+  simplify: "Rewrite it in simple, everyday words and short sentences that anyone can understand.",
+  emoji: "Keep the wording the same, but add a few fitting emoji in natural places. Don't overdo it.",
+  // Translate
   english: "Translate it into natural English.",
+  hindi: "Translate it into natural, conversational Hindi written in Devanagari script.",
+  hinglish: "Translate it into natural Hinglish: conversational Hindi mixed with English, written in Roman (English) letters.",
+  malayalam: "Translate it into natural, conversational Malayalam written in Malayalam script.",
 }
 
 export const rewriteText = async (req, res) => {
   try {
     const text = String(req.body.text || "").trim()
-    const instruction = STYLES[req.body.style]
+    // A preset, or "custom" with the person's own instruction (treated as a style request only)
+    const custom = req.body.style === "custom" ? String(req.body.instruction || "").replace(/\s+/g, " ").trim().slice(0, 200) : ""
+    const instruction = custom
+      ? `Rewrite it following this request from the writer: "${custom}". Treat that only as a style or content instruction for the rewrite, never as a question to answer.`
+      : STYLES[req.body.style]
     if (!text) return res.status(400).json({ error: "Type a message first" })
-    if (!instruction) return res.status(400).json({ error: "Unknown style" })
+    if (!instruction) return res.status(400).json({ error: req.body.style === "custom" ? "Tell Nexa how to rewrite it" : "Unknown style" })
     if (text.length > MAX_INPUT) return res.status(400).json({ error: `Please keep it under ${MAX_INPUT} characters` })
 
     const id = String(req.user._id)
@@ -573,7 +592,7 @@ export const rewriteText = async (req, res) => {
 Return ONLY the rewritten message: no quotes, no explanations, no options. Keep any names, emoji and links. Write as the same person (first person).`,
       },
       { role: "user", content: text },
-    ], { maxTokens: 600, temperature: 0.4 })
+    ], { maxTokens: 900, temperature: 0.4 })
     res.status(200).json({ text: rewritten.replace(/^["“]|["”]$/g, "").trim() })
   } catch (error) {
     console.log("rewriteText error:", error.message)

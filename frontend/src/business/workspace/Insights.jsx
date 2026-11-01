@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import axios from 'axios'
-import { LuLoaderCircle, LuMessageCircle, LuShoppingBag, LuSparkles, LuTimer, LuUserPlus } from 'react-icons/lu'
+import { LuLoaderCircle, LuMessageCircle, LuShoppingBag, LuTimer, LuUserPlus, LuScrollText } from 'react-icons/lu'
 import { api, bizUrl, errorOf, money } from '../utils'
 import { PageHeader, Panel, SegmentTabs, Stat, btn } from './ui'
 
@@ -65,7 +65,7 @@ const Insights = ({ ws }) => {
         description="How your business chats are going."
         actions={
           <>
-            {ws.role === 'owner' && <button onClick={sendSummary} className={btn.secondary}><LuSparkles className="size-4" /> {summary || "Send today's summary to Nexa"}</button>}
+            {ws.role === 'owner' && <button onClick={sendSummary} className={btn.secondary}><LuScrollText className="size-4" /> {summary || "Send today's summary to Nexa"}</button>}
             <SegmentTabs value={days} onChange={(d) => { setData(null); setDays(d) }} tabs={[[7, '7 days'], [30, '30 days'], [90, '90 days']]} />
           </>
         }

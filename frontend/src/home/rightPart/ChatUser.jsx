@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuArrowLeft, LuEllipsisVertical, LuEye, LuEyeOff, LuImage, LuInfo, LuLock, LuLockOpen, LuPhone, LuPin, LuSearch, LuTimer, LuSparkles, LuTrash2, LuVideo } from 'react-icons/lu'
+import { LuArrowLeft, LuEllipsisVertical, LuEye, LuEyeOff, LuImage, LuInfo, LuLock, LuLockOpen, LuPhone, LuPin, LuSearch, LuTimer, LuTrash2, LuVideo, LuScrollText } from 'react-icons/lu'
 import { timerLabel, timerShort, togglePinChat } from '../../utils/chatExtras'
 import { useGroupCall } from '../../context/GroupCallProvider'
 import useConversation from '../../Zustand/UserConversation'
@@ -192,7 +192,7 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
             className="mr-1 inline-flex h-8 items-center gap-1.5 rounded-full bg-violet-50 px-2 sm:px-3 text-xs font-medium text-violet-700 ring-1 ring-violet-200 transition hover:bg-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/30 dark:hover:bg-violet-500/20"
             title="Summarize what you missed"
           >
-            <LuSparkles className="size-3.5 shrink-0" /> <span className="hidden sm:inline">Catch me up · </span>{catchUp.count} new
+            <LuScrollText className="size-3.5 shrink-0" /> <span className="hidden sm:inline">Catch me up · </span>{catchUp.count} new
           </button>
         )}
         {pinCount > 0 && (

@@ -3,7 +3,7 @@ import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import { remarkHtmlBreaks } from '../../utils/markdown'
 import { motion } from 'motion/react'
-import { LuLoaderCircle, LuSparkles, LuX } from 'react-icons/lu'
+import { LuLoaderCircle, LuX } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 
 const HTML_BREAKS = [remarkHtmlBreaks]
@@ -39,7 +39,7 @@ const CatchUp = () => {
       className="absolute inset-x-3 top-[4.5rem] z-20 mx-auto max-w-2xl rounded-2xl bg-white p-4 text-sm shadow-xl ring-1 ring-violet-200 sm:inset-x-6 dark:bg-slate-900 dark:ring-violet-500/30"
     >
       <div className="flex items-center gap-2">
-        <span className="flex size-6 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-white"><LuSparkles className="size-3.5" /></span>
+        <img src="/images/nexa-avatar.jpg" alt="" className="size-6 shrink-0 rounded-full object-cover" />
         <p className="font-semibold">Catch up · {catchUp.count} new messages</p>
         <button onClick={() => setCatchUp(null)} aria-label="Close summary" className="ml-auto flex size-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200">
           <LuX className="size-4" />

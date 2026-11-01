@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import axios from "axios";
-import { LuArrowRight, LuAtSign, LuLock, LuMail, LuPencil, LuShieldCheck, LuUser, LuZap } from "react-icons/lu";
+import { LuArrowRight, LuAtSign, LuCheck, LuLoaderCircle, LuLock, LuMail, LuPencil, LuRefreshCw, LuShieldCheck, LuUser, LuX, LuZap } from "react-icons/lu";
 import { useAuth } from "../context/AuthProvider";
 import AuthLayout, { FloatCard } from "./AuthLayout";
 import { Alert, Button, Input } from "./ui";
@@ -48,13 +48,96 @@ const Quote = () => (
   </div>
 );
 
+
+// Free usernames based on the name typed above, plus a live "available / taken" check
+const UsernameHelper = ({ name, email, value, onPick }) => {
+  const [ideas, setIdeas] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [round, setRound] = useState(0);
+  const [status, setStatus] = useState(null); // { username, ok, text }
+  const reqId = useRef(0);
+
+  // Suggestions follow the name (wait until typing stops)
+  useEffect(() => {
+    const n = name.trim();
+    if (n.length < 2 && !email.includes("@")) { setIdeas([]); return; }
+    const id = ++reqId.current;
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await axios.get("/api/user/username-suggestions", { params: { name: n, email } });
+        if (id === reqId.current) setIdeas(res.data.suggestions || []);
+      } catch { /* suggestions are optional */ }
+      finally { if (id === reqId.current) setLoading(false); }
+    }, 450);
+    return () => clearTimeout(t);
+  }, [name, email, round]);
+
+  // Is what they typed free?
+  useEffect(() => {
+    const u = normalizeUsername(value);
+    if (u.length < 3) { setStatus(null); return; }
+    const t = setTimeout(async () => {
+      const result = await checkUsernameFree(u);
+      setStatus({ username: u, ok: result === true, text: result === true ? `@${u} is available` : result });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [value]);
+
+  const current = normalizeUsername(value);
+  const shown = status && status.username === current;
+  if (!ideas.length && !shown) return null;
+
+  return (
+    <div className="-mt-1.5 space-y-2">
+      {shown && (
+        <p className={`flex items-center gap-1.5 text-xs font-medium ${status.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+          {status.ok ? <LuCheck className="size-3.5" /> : <LuX className="size-3.5" />} {status.text}
+        </p>
+      )}
+      {ideas.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-0.5 text-xs text-slate-500 dark:text-slate-400">Available:</span>
+          {ideas.map((u) => (
+            <button
+              key={u}
+              type="button"
+              onClick={() => onPick(u)}
+              className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                u === current
+                  ? "bg-indigo-600 text-white"
+                  : "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-500/20 dark:hover:bg-indigo-500/20"
+              }`}
+            >
+              @{u}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setRound((r) => r + 1)}
+            disabled={loading}
+            title="More ideas"
+            aria-label="More username ideas"
+            className="flex size-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-slate-200"
+          >
+            {loading ? <LuLoaderCircle className="size-3.5 animate-spin" /> : <LuRefreshCw className="size-3.5" />}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Signup = () => {
   usePageTitle("Create account");
   const [, setAuthUser] = useAuth();
   const [serverError, setServerError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { register, handleSubmit, watch, formState: { errors } } = useForm();
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm();
   const password = watch("password", "");
+  const fullName = watch("fullname", "");
+  const email = watch("email", "");
+  const username = watch("username", "");
 
   const onSubmit = async (data) => {
     setServerError(""); setIsLoading(true);
@@ -110,6 +193,12 @@ const Signup = () => {
             setValueAs: normalizeUsername,
             validate: (v) => checkUsernameFree(v),
           })}
+        />
+        <UsernameHelper
+          name={fullName}
+          email={email}
+          value={username}
+          onPick={(u) => setValue("username", u, { shouldValidate: true, shouldDirty: true })}
         />
         <Input
           label="Email"

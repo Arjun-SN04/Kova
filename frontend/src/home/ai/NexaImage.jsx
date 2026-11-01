@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
 import { downloadFile } from '../../utils/attachments'
-import { LuDownload, LuImage, LuRefreshCw, LuSparkles } from 'react-icons/lu'
+import { LuDownload, LuImage, LuRefreshCw } from 'react-icons/lu'
 
 // Nexa's pictures are drawn on our server (Puter FLUX) and kept on Cloudinary.
 const SIZES = { square: [1024, 1024], portrait: [768, 1024], landscape: [1024, 768] }
@@ -50,7 +50,7 @@ const NexaImage = ({ messageId, action, fresh, onSaved }) => {
     return (
       <div className={box}>
         <div className="flex w-full animate-pulse flex-col items-center justify-center gap-2 bg-violet-50 text-violet-500 dark:bg-violet-500/10 dark:text-violet-300" style={{ aspectRatio: `${w} / ${h}` }}>
-          <LuSparkles className="size-6" />
+          <LuImage className="size-6" />
           <span className="text-xs font-medium">Creating image…</span>
         </div>
       </div>
@@ -63,7 +63,7 @@ const NexaImage = ({ messageId, action, fresh, onSaved }) => {
       <p className="mt-1 line-clamp-3 border-l-2 border-slate-200 pl-2 text-sm text-slate-700 dark:border-slate-600 dark:text-slate-200">{action.prompt}</p>
       {error && <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
       <button onClick={draw} className="mt-2 inline-flex h-7 items-center gap-1 rounded-md bg-violet-600 px-2.5 text-xs font-medium text-white transition hover:bg-violet-500">
-        {state === 'error' ? <><LuRefreshCw className="size-3.5" /> Try again</> : <><LuSparkles className="size-3.5" /> Create image</>}
+        {state === 'error' ? <><LuRefreshCw className="size-3.5" /> Try again</> : <><LuImage className="size-3.5" /> Create image</>}
       </button>
     </div>
   )

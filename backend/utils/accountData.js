@@ -164,8 +164,9 @@ export const purgeUser = async (userId) => {
   const files = []
   const collect = (docs, pick) => docs.forEach((d) => { const a = pick(d); if (a?.publicId) files.push(a) })
 
-  const me = await User.findById(id).select("avatar")
+  const me = await User.findById(id).select("avatar stickers")
   if (me?.avatar?.publicId) files.push({ publicId: me.avatar.publicId, resourceType: "image" })
+  me?.stickers?.forEach((s) => { if (s.publicId) files.push({ publicId: s.publicId, resourceType: "image" }) })
 
   // Direct chats (both sides) and my group messages
   const direct = await Message.find({ groupId: null, $or: [{ senderId: id }, { receiverId: id }] }).select("attachment")

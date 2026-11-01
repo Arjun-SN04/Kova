@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
-import { LuArrowUpRight, LuCheck, LuChevronDown, LuCopy, LuFileText, LuLoaderCircle, LuSparkles } from 'react-icons/lu'
+import { LuArrowUpRight, LuCheck, LuChevronDown, LuCopy, LuFileText, LuLoaderCircle, LuCaptions } from 'react-icons/lu'
 import { AnimatePresence, motion } from 'motion/react'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
@@ -81,6 +81,19 @@ export const Transcript = ({ message, itsMe }) => {
   const [width, setWidth] = useState(null) // null: follow the bubble; a number while open or animating
   const baseRef = useRef(0)
   const wrapRef = useRef(null)
+  const targetWidth = (now) => (String(message.transcript || '').length < 90 ? Math.max(now, 340) : TRANSCRIPT_W)
+
+  // Just transcribed: it opens by itself, so widen the bubble the same way the button does
+  const justDone = useRef(false)
+  useEffect(() => {
+    if (!justDone.current || !message.transcript || !wrapRef.current) return
+    justDone.current = false
+    const now = wrapRef.current.offsetWidth
+    baseRef.current = now
+    setWidth(now)
+    requestAnimationFrame(() => requestAnimationFrame(() => setWidth(targetWidth(now))))
+  }, [message.transcript]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!message.transcript && !isVoice(message.attachment)) return null
 
   if (message.transcript) {
@@ -95,7 +108,7 @@ export const Transcript = ({ message, itsMe }) => {
       if (expanded) { setExpanded(false); animateTo(now, baseRef.current); return }
       baseRef.current = now
       setExpanded(true)
-      animateTo(now, message.transcript.length < 90 ? Math.max(now, 340) : TRANSCRIPT_W)
+      animateTo(now, targetWidth(now))
     }
     return (
       // Closed: takes the bubble's width (w-0 + min-w-full) so it never stretches it.
@@ -147,6 +160,7 @@ export const Transcript = ({ message, itsMe }) => {
     setError('')
     try {
       const res = await axios.post(`/api/ai/transcribe/${message._id}`, {}, api)
+      justDone.current = true
       setMessages((prev) => prev.map((m) => (m._id === message._id ? { ...m, transcript: res.data.transcript } : m)))
       setExpanded(true)
     } catch (err) {
@@ -157,7 +171,7 @@ export const Transcript = ({ message, itsMe }) => {
   }
   return (
     <button onClick={run} disabled={busy} className={`mt-1 inline-flex items-center gap-1 text-[12px] font-medium ${itsMe ? 'text-indigo-100 hover:text-white' : 'text-indigo-600 hover:underline dark:text-indigo-400'}`}>
-      {busy ? <LuLoaderCircle className="size-3 animate-spin" /> : <LuSparkles className="size-3" />}
+      {busy ? <LuLoaderCircle className="size-3 animate-spin" /> : <LuCaptions className="size-3" />}
       {busy ? 'Transcribing…' : error || 'Transcribe'}
     </button>
   )

@@ -28,7 +28,7 @@ export const formatBytes = (bytes = 0) =>
 
 // Short label used in previews and reply quotes
 export const attachmentLabel = (a) =>
-  !a ? '' : a.kind === 'image' ? 'Photo' : a.kind === 'video' ? 'Video' : a.kind === 'audio' ? 'Voice message' : a.name || 'File'
+  !a ? '' : a.kind === 'sticker' ? 'Sticker' : a.kind === 'gif' ? 'GIF' : a.kind === 'image' ? 'Photo' : a.kind === 'video' ? 'Video' : a.kind === 'audio' ? 'Voice message' : a.name || 'File'
 
 const toBlob = (canvas, type, quality) => new Promise((resolve) => canvas.toBlob(resolve, type, quality))
 

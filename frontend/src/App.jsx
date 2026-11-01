@@ -5,6 +5,7 @@ import ChatLayout from './home/ChatLayout'
 import Signup from './components/Signup'
 import Login from './components/Login'
 import ForgotPassword from './components/ForgotPassword'
+import FaqPage from './components/FaqPage'
 import HomePage from './components/HomePage'
 import Profile from './components/Profile'
 import InvitePage from './components/InvitePage'
@@ -42,6 +43,7 @@ const App = () => {
       <AnimatePresence mode="wait" onExitComplete={() => window.scrollTo(0, 0)}>
         <Routes location={location} key={location.pathname}>
           <Route path='/home' element={page(<HomePage />)} />
+          <Route path='/faq' element={page(<FaqPage />)} />
           <Route path='/' element={AuthUser ? page(<ChatLayout />) : <Navigate to="/home" />} />
           <Route path='/signup' element={AuthUser ? <Navigate to="/" /> : page(<Signup />)} />
           <Route path='/login' element={AuthUser ? <Navigate to="/" /> : page(<Login />)} />
