@@ -347,7 +347,6 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
         {senderLabel && <p className="mb-0.5 ml-1 text-xs font-medium text-indigo-600 dark:text-indigo-400">{senderLabel}</p>}
         <div
           onClick={selectionMode ? undefined : onBubbleClick}
-          onDoubleClick={selectionMode ? undefined : (e) => { e.preventDefault(); window.getSelection()?.removeAllRanges(); react('❤️') }}
           title={new Date(message.createdAt).toLocaleString()}
           className={message.card || sticker
             // Business cards and stickers bring their own frame: no bubble around them
@@ -408,12 +407,13 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           </div>
         )}
 
-        {(last || starred || pinned || kept || message.auto) && (
+        {(last || starred || pinned || kept || message.auto || message.toNexa) && (
           <p className={`flex items-center gap-1 px-1 text-[11px] text-slate-400 ${last ? 'mt-1' : 'mt-0.5'}`}>
             {pinned && <LuPin className="size-3 -rotate-45 text-indigo-500" title="Pinned" aria-label="Pinned" />}
             {starred && <LuStar className="size-3 fill-amber-400 text-amber-400" title="Starred" aria-label="Starred" />}
             {kept && <LuBookmark className="size-3 fill-indigo-400 text-indigo-400" title="Kept: won't disappear" aria-label="Kept" />}
             {last && expiring && <LuTimer className="size-3" title={`Disappears ${new Date(message.expiresAt).toLocaleString()}`} aria-label="Disappearing message" />}
+            {message.toNexa && <span className="inline-flex items-center gap-1 text-violet-500 dark:text-violet-400" title="Sent in Nexa mode: Nexa answers it"><img src="/images/nexa-avatar.jpg" alt="" className="size-3 rounded-full object-cover" />to Nexa ·</span>}
             {message.auto && <span className="inline-flex items-center gap-0.5" title="Sent automatically"><LuBot className="size-3" />{message.auto === 'nexa' ? 'Nexa auto-reply' : 'Automatic'} ·</span>}
             {last && formatTime(message.createdAt)}
             {last && message.edited && ' · edited'}

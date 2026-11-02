@@ -5,7 +5,7 @@ import { uploadAvatarSingle } from "../config/cloudinary.js"
 import {
   addInternalNote, addTeamMember, closeReport, decideVerification, deleteInternalNote, getCustomerChat, getInsights,
   getMyBusiness, getOverview, listCustomers, listVerifications, loadBusiness, removeTeamMember, replyToCustomer,
-  requestVerification, sendBroadcast, summaryNow, updateCover, updateCustomer, updateProfile, updateSettings,
+  requestVerification, sendBroadcast, updatePaymentQr, deleteBusiness, summaryNow, updateCover, updateCustomer, updateProfile, updateSettings,
 } from "../controller/business.controller.js"
 import {
   cancelMyBooking, claimPayment, connectToBusiness, createBooking, createProduct, deleteProduct, getPublicBusiness, getSlots,
@@ -25,6 +25,8 @@ router.use(secureRoute)
 router.get("/me", getMyBusiness)
 router.put("/profile", updateProfile)
 router.put("/cover", uploadAvatarSingle("cover"), updateCover)
+router.put("/payment-qr", uploadAvatarSingle("qr"), updatePaymentQr)
+router.delete("/me", deleteBusiness)
 router.post("/verification", requestVerification)
 
 // As a customer

@@ -381,7 +381,9 @@ export const sendGroupMessage = async (req, res) => {
       }
     }
 
-    const newMessage = await Message.create({ senderId: me, groupId: group._id, message: text, replyTo: replyTo || null, attachment })
+    // Nexa mode: every message goes to Nexa until they type "exit"
+    const askNexa = req.body.askNexa === true || req.body.askNexa === "true"
+    const newMessage = await Message.create({ senderId: me, groupId: group._id, message: text, replyTo: replyTo || null, attachment, toNexa: askNexa || undefined })
     group.reads.set(String(me), new Date())
     group.updatedAt = new Date()
     await group.save()
@@ -392,7 +394,7 @@ export const sendGroupMessage = async (req, res) => {
     sendPush(group.members.filter((m) => !sameId(m, me)), { title: group.name, body: `${req.user.fullName.split(" ")[0]}: ${previewOf(newMessage)}`, tag: `group-${group._id}` }, { chatId: group._id }).catch(() => {})
 
     // "@Nexa …": answer in the group (in the background)
-    answerMention({ groupId: group._id, message: newMessage, sender: req.user, timeZone: safeZone(req.headers["x-time-zone"]) })
+    answerMention({ groupId: group._id, message: newMessage, sender: req.user, timeZone: safeZone(req.headers["x-time-zone"]), force: askNexa })
       .catch((err) => console.log("@Nexa error:", err.message))
   } catch (error) {
     console.log("sendGroupMessage error:", error)

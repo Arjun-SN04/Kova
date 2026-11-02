@@ -37,7 +37,7 @@ const NexaImage = ({ messageId, action, fresh, onSaved }) => {
           <img src={src} alt={action.prompt} className="block w-full" style={{ aspectRatio: `${w} / ${h}` }} />
         </a>
         <div className="flex items-center gap-2 px-3 py-2">
-          <p className="line-clamp-1 flex-1 text-xs text-slate-500 dark:text-slate-400" title={action.prompt}>{action.prompt}</p>
+          <p className="line-clamp-1 flex-1 text-xs text-slate-500 dark:text-slate-400" title={action.prompt}>{action.model && <span className="mr-1 font-medium text-violet-600 dark:text-violet-300">{action.model} ·</span>}{action.prompt}</p>
           <button type="button" onClick={() => downloadFile(src, `nexa-image-${action.id || Date.now()}`)} className="flex size-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:text-slate-100" title="Download" aria-label="Download">
             <LuDownload className="size-3.5" />
           </button>

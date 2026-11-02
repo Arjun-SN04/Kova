@@ -15,6 +15,8 @@ const aiMessageSchema = new mongoose.Schema({
   // Disappearing (24 h by default): removed with its files at this time unless kept
   expiresAt: { type: Date, default: null, index: true },
   kept: { type: Boolean, default: false },
+  // The earlier Nexa answer this question replies to (a short excerpt, shown as a quote)
+  quote: { type: String, default: null },
   // Text pulled out of a document, for follow-up questions (not sent to the browser)
   doc: { type: { name: String, pages: Number, text: String, truncated: Boolean, _id: false }, default: null },
 }, { timestamps: true })

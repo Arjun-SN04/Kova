@@ -39,6 +39,8 @@ const userSchema = mongoose.Schema({
     },
     // My chat with Nexa disappears after this many seconds (0 = keep everything)
     nexaDisappearAfter:{ type:Number, default:86400 },
+    // Which image model Nexa tries first ("auto" = best available); see utils/imageGen.js
+    nexaImageModel:{ type:String, default:"auto" },
     // Chats pinned to the top of my list (user or group ids, in pin order)
     pinnedChats:{ type:[String], default:[] },
     // Chat wallpapers: { global: spec | null, chats: { [chatId]: spec } }
@@ -118,6 +120,8 @@ const userSchema = mongoose.Schema({
             verificationRequested:{ type:Boolean, default:false },
             // Banner photo on the business page (null = a stock photo for the category)
             cover:{ type:{ url:String, publicId:String }, default:null },
+            // Payment QR code (any UPI / bank / wallet QR), shown to customers on payment requests and the business page
+            paymentQr:{ type:{ url:String, publicId:String, label:String }, default:null },
             _id:false,
         },
         default:null

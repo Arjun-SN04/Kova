@@ -36,6 +36,8 @@ const messageSchema = new mongoose.Schema({
   botChat: { type: [mongoose.Schema.Types.ObjectId], default: undefined },
   // On Nexa's answers: the photos / documents it looked at [{ messageId, kind, name, url }]
   nexaRefs: { type: [mongoose.Schema.Types.Mixed], default: undefined },
+  // Sent while Nexa mode was on in this chat (Nexa answers it without "@Nexa")
+  toNexa: { type: Boolean, default: undefined },
   // Text of a voice note, filled in when someone taps Transcribe
   transcript: { type: String, default: null },
   // A reminder's link back to the message it's about

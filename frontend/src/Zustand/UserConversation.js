@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { chatRelockMs } from '../utils/appLock'
 
 // When I last opened the Calls tab (for the missed-calls badge)
 const SEEN_KEY = 'callsSeenAt'
@@ -9,7 +10,6 @@ const saveCallsSeenAt = (time) => {
   try { localStorage.setItem(SEEN_KEY, String(time)) } catch { /* ignore */ }
 }
 
-const UNLOCK_MS = 5 * 60_000
 
 const useConversation = create((set) => ({
   selectedConversation: null,
@@ -18,8 +18,8 @@ const useConversation = create((set) => ({
   setSelectedConversation: (selectedConversation) =>
     set((s) => ({
       selectedConversation, chatOpenedAt: Date.now(), replyingTo: null, editingMessage: null, pendingFiles: [], selectionMode: false, selectedIds: [], pinsOpenFor: null,
-      // Opening a locked chat while still unlocked keeps the unlock going for another 5 minutes
-      unlockedUntil: s.unlockedUntil > Date.now() && s.lockedChats.includes(String(selectedConversation?._id)) ? Date.now() + UNLOCK_MS : s.unlockedUntil,
+      // Opening a locked chat while still unlocked keeps the unlock going (time set in Profile → Locked chats)
+      unlockedUntil: s.unlockedUntil > Date.now() && s.lockedChats.includes(String(selectedConversation?._id)) ? Date.now() + chatRelockMs() : s.unlockedUntil,
     })),
 
   // Multi-select mode for forwarding / copying / deleting several messages
@@ -99,6 +99,17 @@ const useConversation = create((set) => ({
       return { nexaThinking: next }
     }),
 
+  // Nexa mode: chats where every message goes to Nexa (turned on with "@Nexa", off with "exit")
+  nexaMode: (() => { try { return JSON.parse(localStorage.getItem('nexchat:nexaMode') || '{}') || {} } catch { return {} } })(),
+  setNexaMode: (chatId, on) =>
+    set((state) => {
+      const next = { ...state.nexaMode }
+      if (on) next[String(chatId)] = true
+      else delete next[String(chatId)]
+      try { localStorage.setItem('nexchat:nexaMode', JSON.stringify(next)) } catch { /* private window */ }
+      return { nexaMode: next }
+    }),
+
   // Bumped when a scheduled message is created, sent or cancelled (lists refetch)
   scheduledVersion: 0,
   bumpScheduled: () => set((state) => ({ scheduledVersion: state.scheduledVersion + 1 })),
@@ -144,7 +155,9 @@ const useConversation = create((set) => ({
   // After the code is entered, locked chats open freely until this time (memory only:
   // a page refresh asks for the code again)
   unlockedUntil: 0,
-  unlockNow: () => set({ unlockedUntil: Date.now() + UNLOCK_MS }),
+  unlockNow: () => set({ unlockedUntil: Date.now() + chatRelockMs() }),
+  // Re-lock now (after the timing setting changes)
+  relockChats: () => set({ unlockedUntil: 0 }),
   // Ask for the secret code: { action: 'open' | 'lock' | 'unlock', ids: [] }
   lockRequest: null,
   setLockRequest: (lockRequest) => set({ lockRequest }),

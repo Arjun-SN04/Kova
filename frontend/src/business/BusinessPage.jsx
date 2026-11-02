@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { Link, useSearchParams } from 'react-router-dom'
-import { LuArrowLeft, LuArrowRight, LuExternalLink, LuCalendarDays, LuChartColumn, LuChevronDown, LuInbox, LuLoaderCircle, LuMegaphone, LuPackage, LuSettings, LuShoppingBag, LuUsers } from 'react-icons/lu'
+import { LuArrowLeft, LuArrowRight, LuBriefcase, LuRotateCcw, LuTrash2, LuExternalLink, LuCalendarDays, LuChartColumn, LuChevronDown, LuInbox, LuLoaderCircle, LuMegaphone, LuPackage, LuSettings, LuShoppingBag, LuUsers } from 'react-icons/lu'
 import useThemeClass from '../hooks/useThemeClass'
 import usePageTitle from '../hooks/usePageTitle'
 import { useAuth } from '../context/AuthProvider'
@@ -20,6 +20,7 @@ import Catalog from './workspace/Catalog'
 import Broadcasts from './workspace/Broadcasts'
 import Insights from './workspace/Insights'
 import Settings from './workspace/Settings'
+import ConfirmDialog from '../home/ConfirmDialog'
 
 const SECTIONS = [
   { id: 'inbox', label: 'Inbox', Icon: LuInbox, roles: ['owner', 'admin', 'agent'] },
@@ -32,24 +33,92 @@ const SECTIONS = [
   { id: 'settings', label: 'Settings', Icon: LuSettings, roles: ['owner', 'admin'] },
 ]
 
-// ── Turn on a business account ─────────────────────────────────
-const Setup = ({ workFor, onOpen, onEnabled }) => {
+// The business someone switched off: switch back to it, or delete it for good
+const PreviousBusiness = ({ previous, onRestore, onDeleted, busy }) => {
   const [AuthUser, setAuthUser] = useAuth()
-  const [category, setCategory] = useState(CATEGORIES[0])
+  const [confirm, setConfirm] = useState(false)
+  const remove = async () => {
+    await axios.delete('/api/business/me', api)
+    const user = { ...AuthUser, business: null }
+    localStorage.setItem('chatUser', JSON.stringify(user))
+    setAuthUser(user)
+    setConfirm(false)
+    onDeleted()
+  }
+  const since = previous.since ? new Date(previous.since).toLocaleDateString([], { month: 'short', year: 'numeric' }) : null
+  const stats = [
+    [LuPackage, previous.products, 'item'],
+    [LuShoppingBag, previous.orders, 'order'],
+    [LuCalendarDays, previous.bookings, 'booking'],
+    [LuUsers, previous.customers, 'customer'],
+  ]
+  return (
+    <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+      <div className="relative h-24">
+        <img src={previous.cover || categoryCover(previous.category)} alt="" className="size-full object-cover" />
+        <div className="absolute inset-0 bg-linear-to-t from-slate-950/80 to-slate-950/10" />
+        <div className="absolute bottom-3 left-4 flex items-center gap-3 text-white">
+          <span className="rounded-full ring-2 ring-white/80"><Avatar name={AuthUser?.fullName} src={AuthUser?.avatar?.url} size="sm" /></span>
+          <span>
+            <span className="block text-sm font-semibold">{AuthUser?.fullName}</span>
+            <span className="block text-xs text-white/75">{previous.category}{since ? ` · since ${since}` : ''}</span>
+          </span>
+        </div>
+        <span className="absolute right-3 top-3 rounded-full bg-black/50 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur">Switched off</span>
+      </div>
+      <div className="p-4">
+        <p className="text-[13px] font-medium text-slate-700 dark:text-slate-300">Your previous business</p>
+        {previous.description && <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{previous.description}</p>}
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          {stats.map(([Icon, n, word]) => (
+            <div key={word} className="rounded-lg bg-slate-50 px-2 py-2 text-center dark:bg-slate-900">
+              <Icon className="mx-auto size-4 text-slate-400" />
+              <p className="mt-1 text-sm font-semibold tabular-nums">{n}</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">{word}{n === 1 ? '' : 's'}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button onClick={onRestore} disabled={busy} className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">
+            <LuRotateCcw className="size-4" /> {busy ? 'Switching…' : 'Switch back to this business'}
+          </button>
+          <button onClick={() => setConfirm(true)} disabled={busy} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium text-red-600 ring-1 ring-red-200 transition hover:bg-red-50 dark:text-red-400 dark:ring-red-500/30 dark:hover:bg-red-500/10">
+            <LuTrash2 className="size-4" /> Delete
+          </button>
+        </div>
+      </div>
+      <ConfirmDialog
+        open={confirm}
+        onClose={() => setConfirm(false)}
+        onConfirm={remove}
+        title="Delete this business for good?"
+        description={`Your catalog (${previous.products} item${previous.products === 1 ? '' : 's'}), customer notes and labels, quick replies, team, cover photo and payment QR are deleted. This can't be undone. Orders and bookings stay in your customers' history.`}
+        confirmLabel="Delete business"
+      />
+    </div>
+  )
+}
+
+// ── Turn on a business account ─────────────────────────────────
+const Setup = ({ workFor, previous, onOpen, onEnabled }) => {
+  const [AuthUser, setAuthUser] = useAuth()
+  const [category, setCategory] = useState(previous?.category && CATEGORIES.includes(previous.category) ? previous.category : CATEGORIES[0])
   const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const enable = async (e) => {
-    e.preventDefault()
+  const [fresh, setFresh] = useState(false) // set up with new details instead of switching back
+  const turnOn = async (body) => {
     setBusy(true); setError('')
     try {
-      const res = await axios.put('/api/business/profile', { enabled: true, category, description, timeZone: localZone() }, api)
+      const res = await axios.put('/api/business/profile', { enabled: true, timeZone: localZone(), ...body }, api)
       const user = { ...AuthUser, business: res.data.business }
       localStorage.setItem('chatUser', JSON.stringify(user))
       setAuthUser(user)
       onEnabled()
     } catch (err) { setError(errorOf(err)); setBusy(false) }
   }
+  const enable = (e) => { e.preventDefault(); turnOn({ category, description }) }
+  const showForm = !previous || fresh
   return (
     <div className="grid h-dvh overflow-hidden bg-white text-slate-900 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] dark:bg-slate-950 dark:text-slate-100">
       {/* Form */}
@@ -60,8 +129,18 @@ const Setup = ({ workFor, onOpen, onEnabled }) => {
         </div>
 
         <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col justify-center py-8">
-          <h1 className="text-[28px] font-semibold tracking-tight">Set up your business</h1>
-          <p className="mt-2 text-[15px] leading-relaxed text-slate-500 dark:text-slate-400">Sell, take bookings and reply to customers from Kova. Your personal chats stay as they are.</p>
+          <h1 className="text-[28px] font-semibold tracking-tight">{previous ? 'Welcome back' : 'Set up your business'}</h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-slate-500 dark:text-slate-400">{previous ? 'Your business is switched off. Everything is saved, so you can pick up where you left off.' : 'Sell, take bookings and reply to customers from Kova. Your personal chats stay as they are.'}</p>
+
+          {previous && (
+            <PreviousBusiness previous={previous} busy={busy} onRestore={() => turnOn({})} onDeleted={() => { setFresh(false); onEnabled() }} />
+          )}
+          {previous && !fresh && error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {previous && !fresh && (
+            <button onClick={() => setFresh(true)} className="mt-4 inline-flex items-center gap-1.5 self-start text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+              <LuBriefcase className="size-4" /> Switch back with a new category or description
+            </button>
+          )}
 
           {workFor.length > 0 && (
             <div className="mt-8">
@@ -79,7 +158,7 @@ const Setup = ({ workFor, onOpen, onEnabled }) => {
             </div>
           )}
 
-          <form onSubmit={enable} className="mt-6 space-y-5">
+          {showForm && <form onSubmit={enable} className="mt-6 space-y-5">
             <div>
               <p className="text-[13px] font-medium text-slate-700 dark:text-slate-300">Business name</p>
               <div className="mt-1.5 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900">
@@ -107,8 +186,9 @@ const Setup = ({ workFor, onOpen, onEnabled }) => {
             </Field>
 
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-            <button disabled={busy} className="h-11 w-full rounded-lg bg-slate-900 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">{busy ? 'Setting up…' : 'Create business account'}</button>
-          </form>
+            <button disabled={busy} className="h-11 w-full rounded-lg bg-slate-900 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">{busy ? 'Setting up…' : previous ? 'Switch back with these details' : 'Create business account'}</button>
+            {previous && <p className="text-xs text-slate-500 dark:text-slate-400">Your catalog, customers and settings come back too.</p>}
+          </form>}
 
           <p className="mt-6 border-t border-slate-200 pt-4 text-[13px] leading-relaxed text-slate-500 dark:border-slate-800 dark:text-slate-400">
             Includes a business page with your catalog, orders and payment requests, bookings, a shared inbox for your team, and insights. You can turn it off any time in Settings.
@@ -212,7 +292,7 @@ const BusinessPage = () => {
 
   if (!me) return <div className="flex h-dvh items-center justify-center bg-white dark:bg-slate-950"><LuLoaderCircle className="size-6 animate-spin text-slate-400" /></div>
 
-  if (!biz) return <Setup workFor={me.workFor || []} onOpen={(id) => go({ biz: id })} onEnabled={() => useBusiness.getState().loadMe()} />
+  if (!biz) return <Setup key={me.previous ? 'back' : 'new'} workFor={me.workFor || []} previous={me.previous} onOpen={(id) => go({ biz: id })} onEnabled={() => useBusiness.getState().loadMe()} />
 
   const ws = {
     biz, role, overview, business: overview?.business, settings: overview?.settings,

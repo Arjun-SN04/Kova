@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto"
 import { AiMessage } from "../models/aiMessage.model.js"
 import { GoogleAccount } from "../models/googleAccount.model.js"
 import { ScheduledMessage } from "../models/scheduledMessage.model.js"
@@ -10,7 +11,8 @@ import { TIMER_CHOICES, nexaFiles } from "../utils/disappear.js"
 import { wantsCreative, writeCreative } from "../utils/creative.js"
 import { speakText } from "../utils/tts.js"
 import { parseMedia } from "./gif.controller.js"
-import { generateImage } from "../utils/imageGen.js"
+import { IMAGE_MODELS, generateImage, isImageModel } from "../utils/imageGen.js"
+import { CLAIMED_IMAGE_RE, LOOSE_IMAGE_RE, REFUSED_IMAGE_RE, asksForImage } from "../utils/imageIntent.js"
 import { VISION_MODEL, excerptFor, extractDocText, imageForModel, isDoc, isImage } from "../utils/aiFiles.js"
 import { Message } from "../models/message.model.js"
 import User from "../models/user.model.js"
@@ -85,12 +87,12 @@ const APP_FACTS = `Kova facts (only describe these; if something isn't listed, s
 - Left rail: Chats, Status, Calls, Communities, Starred. Profile (gear): name, @username, photo, password. Light/dark toggle in the left rail.`
 
 // How Nexa shapes an answer: poems as verse, stories as paragraphs, lists as bullets
-const FORMAT_RULES = `Pick the format that fits the request:
-- A poem, song or shayari as an original, deeply moving piece with a **title** line, followed by rich, evocative couplets or stanzas (7 to 10 shers for shayari, 4 to 6 stanzas for poems, separated by a blank line). Capture genuine soul, poetic depth, and musical flow. Never bullets.
-- A story, letter, wish or message as rich, immersive paragraphs.
-- Steps, options, comparisons or structured facts as clean "- " bullets (numbered for steps).
-- Explanations, technical breakdowns, advice or discussions: thorough, articulate, and satisfying.
-Provide generous, thoughtful, and complete answers without artificial brevity. Never reproduce existing copyrighted song lyrics, poems or book text; always write original pieces.`
+const FORMAT_RULES = `Keep answers SHORT and easy to read on a phone. Answer first, in plain everyday words.
+- Most answers: 1 to 3 short sentences, or 2 to 5 short "- " bullets (numbered for steps), each under 15 words.
+- Only go longer when they clearly ask for detail, a full explanation, code, a story, a letter or many items.
+- A poem, song or shayari: an original piece with a **title** line, then short stanzas separated by blank lines. Never bullets.
+- No intro ("Hello!", "Great question"), no sign-off, no filler, no repeating the question.
+Never reproduce existing copyrighted song lyrics, poems or book text; always write original pieces.`
 
 export const systemPrompt = (user, ctx, intents) => [
   `You are Nexa, the friendly AI assistant in Kova (a messenger), chatting with ${user.fullName} (@${user.username}).
@@ -99,7 +101,7 @@ Now: ${formatWhen(new Date(), ctx.timeZone)} (${ctx.timeZone}, ${offsetOf(ctx.ti
   `Tools: send_message and schedule_message (to a contact, group, or "me"; "me" = a reminder Nexa pops up here). schedule_message can repeat (repeat_every_minutes: 2, 60, 1440 for daily; optional repeat_until / repeat_times); never say you can't repeat. list_scheduled_messages / cancel_scheduled_message to view or stop them.${intents.people ? " get_recent_messages to read a chat (summaries, catch up). create_poll for polls." : ""}
 browser_search: use it for anything current (news, prices, weather, sports, recent facts); never invent news or numbers; don't paste bare URLs (sources show under your answer).
 Downloads: you can't download or send files from the web. For a song, film, show, book or app, your FIRST line says you can't download it (it's copyrighted), then browser_search it and list where to get it legally: official streaming (YouTube, Spotify, JioSaavn, Apple Music, Gaana), stores, or the artist's page, with each service's offline/download option. Make each service name a Markdown link, e.g. [Spotify](url), using the exact page URL from your search results (never guess a URL; if you have no URL for a service, leave it unlinked). Never mention or link pirate download sites (Pagal sites, MP3 download sites). Add a few useful facts (artist, album, year) if found. Never print full song lyrics. Never reply with only "I can't help with that".`,
-  intents.image ? `generate_image: you CAN create images (ignore any earlier reply saying otherwise). Write a vivid English prompt, then reply in one short line.` : "",
+  `generate_image: you CAN create images; whenever the user wants a picture (any wording, typos, "yes do it", or a change to the last picture), call it right away instead of asking or refusing (ignore any earlier reply saying otherwise). For a change, rewrite the full earlier prompt with the change applied. Write a vivid English prompt, then reply in one short line.`,
   ctx.google
     ? (intents.calendar ? `Google Calendar + Tasks are connected (${ctx.google.email}): get_calendar_events, create_calendar_event (add_meet: true = Google Meet link; is_reminder: true + repeat daily/weekdays/weekly/monthly for reminders), delete_calendar_event, get_tasks, add_task, complete_task, snooze_reminder.
 Reminders ("remind me to call mom at 6", "every day at 9") go on the calendar as is_reminder events. Google can't repeat more often than daily, so "every N minutes/hours" uses schedule_message to "me". To invite contacts to a Meet, create it with a link, then offer to send them the link. Don't invent emails.` : "")
@@ -108,7 +110,7 @@ Reminders ("remind me to call mom at 6", "every day at 9") go on the calendar as
     : intents.mailAsked ? `Gmail isn't connected: if asked about email, tell them to open the calendar button at the top of the Nexa chat and tap Connect Gmail.` : "",
   intents.people ? describeContext(ctx) : `(Contacts and groups aren't listed for this question. If the user wants to message someone, ask who.)`,
   `Rules: only send or schedule when clearly asked; if the person, group or time is unclear, ask one short question. Send the user's own words unless they ask for rewording. After acting, confirm in one short sentence. Never claim something worked unless the tool said ok.
-Style: warm, thoughtful, and expressive. ${FORMAT_RULES} Text to send goes in a quote ("> ..."). No headings, intro lines or sign-offs. At most one emoji. Never use em or en dashes.`,
+Style: warm and friendly, like a helpful friend texting. ${FORMAT_RULES} Text to send goes in a quote ("> ..."). No headings, intro lines or sign-offs. At most one emoji. Never use em or en dashes.`,
   intents.visual ? `When it helps, use a Markdown table (2 to 5 columns) or a Mermaid diagram in a \`\`\`mermaid block ("flowchart TD", node ids A, B, C with labels in double quotes, under 12 nodes, no styling), then at most 2 bullets. Never use HTML tags like <br>; in a table cell separate items with "; ".` : "",
   intents.code ? `Code: complete and working. Each file in its own fenced block with language and file name, e.g. \`\`\`js server.js. Keep the explanation to a few bullets.` : "",
 ].filter(Boolean).join("\n\n")
@@ -130,7 +132,8 @@ const historyFor = (messages, budget = HISTORY_CHARS) => {
   const out = []
   let used = 0
   for (const m of [...messages].reverse()) {
-    const note = m.attachment ? ` [${attachmentNote(m.attachment)}]` : ""
+    const made = (m.actions || []).filter((a) => a?.type === "image" && a.prompt).map((a) => ` [made an image: "${String(a.prompt).slice(0, 300)}"]`).join("")
+    const note = (m.attachment ? ` [${attachmentNote(m.attachment)}]` : "") + made
     const content = shorten((m.content || "(done)") + note)
     if (used + content.length > budget) break
     used += content.length
@@ -141,19 +144,14 @@ const historyFor = (messages, budget = HISTORY_CHARS) => {
   return out
 }
 
-// "draw a cat", "create an iamge of…", "make me a wallpaper": these must call generate_image
-const IMAGE_NOUN = "(?:image|imag|iamge|imgae|imge|img|picture|pic|photo|drawing|painting|illustration|wallpaper|logo|artwork|poster|sketch|portrait|icon|avatar)s?"
-const IMAGE_RE = new RegExp(`\\b(?:draw|paint|sketch|generate|create|make|design|render|produce|give me|show me)\\b.{0,40}\\b${IMAGE_NOUN}\\b|^\\s*(?:please\\s+|can you\\s+|could you\\s+)?(?:draw|paint|sketch)\\b|\\b${IMAGE_NOUN}\\s+of\\b`, "i")
-const NOT_IMAGE_RE = /\b(how (do|can|to)|where|profile (pic|picture|photo)|send (a |the )?(photo|pic|picture|image)|attach)/i
-const wantsImage = (text) => text.length < 600 && IMAGE_RE.test(text) && !NOT_IMAGE_RE.test(text)
 const FORCE_IMAGE = { type: "function", function: { name: "generate_image" } }
 
 // Nexa's tools (calendar ones only when Google is connected) plus Groq's built-in web search
 const CORE_TOOLS = ["send_message", "schedule_message", "list_scheduled_messages", "cancel_scheduled_message"]
-export const toolsFor = (ctx, intents, forceImage = false) => [
+export const toolsFor = (ctx, intents) => [
   ...NEXA_TOOLS.filter((t) => CORE_TOOLS.includes(t.function.name)
     || (intents.people && ["get_recent_messages", "create_poll"].includes(t.function.name))
-    || ((intents.image || forceImage) && t.function.name === "generate_image")),
+    || t.function.name === "generate_image"),
   ...(intents.calendar ? CALENDAR_TOOLS : []),
   ...(intents.mail ? GMAIL_TOOLS : []),
   { type: "browser_search" },
@@ -270,17 +268,23 @@ export const sendAiMessage = async (req, res) => {
     // Keep the brief on the user's current local time
     if (ctx.google && ctx.google.timeZone !== ctx.timeZone) GoogleAccount.updateOne({ _id: ctx.google._id }, { timeZone: ctx.timeZone }).catch(() => {})
     const history = (await AiMessage.find({ user: me._id }).sort({ createdAt: -1 }).limit(HISTORY)).reverse()
-    const question = await AiMessage.create({ user: me._id, role: "user", content: text, attachment: media })
+    // Replying to one of Nexa's earlier answers: it sees which part they mean
+    const quote = String(req.body.quote || "").replace(/\s+/g, " ").trim().slice(0, 600) || null
+    const question = await AiMessage.create({ user: me._id, role: "user", content: text, attachment: media, quote })
     // A GIF or sticker: Nexa sees its title and replies in kind (short and friendly)
     const asked = media
       ? `${text ? `${text}\n` : ""}[I ${attachmentNote(media)}. Reply naturally and briefly to it, matching its mood.]`
-      : text
+      : quote ? `(Replying to this part of your earlier answer: "${quote}")\n${text}` : text
 
     // Let the model call tools until it gives a final answer
     const earlier = historyFor(history)
     // What this question is about (decides which instructions and tools are sent)
     const prev = history.slice(-2).map((m) => String(m.content || "").slice(0, 300)).join(" ")
     const intents = intentsFor(asked, prev, ctx)
+    // A picture request (any wording, typos, "yes do it", "make it blue" after a picture): draw it the first time
+    const lastWasImage = !!history.slice(-2).some((m) => m.role === "assistant" && m.actions?.some((a) => a?.type === "image"))
+    const imageAsked = !media && await asksForImage(text, { recent: historyFor(history.slice(-4), 1200).map((m) => `${m.role}: ${m.content}`).join("\n"), lastWasImage })
+    if (imageAsked) intents.image = true
     let trimmed = false
     // A document from the last few messages: give Nexa the parts that matter for this question
     const recentDoc = [...history].reverse().find((m) => m.doc?.text)?.doc
@@ -298,14 +302,14 @@ export const sendAiMessage = async (req, res) => {
     const searched = [] // every URL the web search returned (links in the reply must be one of these)
     let reply = ""
     // Poems, songs, shayari: their own careful path (draft + rhyme check)
-    if (!media && !req.file && wantsCreative(text)) {
+    if (!media && !req.file && !imageAsked && wantsCreative(text)) {
       try { reply = await writeCreative(text, `Asked by ${me.fullName}.`) } catch (err) { console.log("creative error:", err.message) }
     }
     try {
       for (let round = 0; round < MAX_TOOL_ROUNDS && !reply; round++) {
         // An image request: the first turn must call generate_image (the model sometimes refuses otherwise)
-        const forceImage = round === 0 && !media && wantsImage(text)
-        const options = { tools: toolsFor(ctx, intents, forceImage), maxTokens: 2500, ...(forceImage ? { toolChoice: FORCE_IMAGE } : {}) }
+        const forceImage = round === 0 && imageAsked
+        const options = { tools: toolsFor(ctx, intents), maxTokens: 2500, ...(forceImage ? { toolChoice: FORCE_IMAGE } : {}) }
         let msg
         try {
           msg = await groqChat(convo, options)
@@ -333,6 +337,34 @@ export const sendAiMessage = async (req, res) => {
         await AiMessage.deleteOne({ _id: question._id })
         return res.status(503).json({ error: err.message })
       }
+    }
+    // Nexa can always draw: if it said it can't (or claimed a picture it never made), make the picture anyway
+    const madeImage = actions.some((a) => a.type === "image")
+    const refused = REFUSED_IMAGE_RE.test(reply)
+    const pictureTalk = imageAsked || lastWasImage || LOOSE_IMAGE_RE.test(text)
+    if (!media && !madeImage && ((refused && pictureTalk) || (CLAIMED_IMAGE_RE.test(reply) && (imageAsked || lastWasImage)))) {
+      try {
+        const msg = await groqChat(
+          [...convo.filter((m) => m.role !== "tool" && !m.tool_calls), { role: "system", content: "The user wants a picture. Call generate_image now." }],
+          { tools: [NEXA_TOOLS.find((t) => t.function.name === "generate_image")], toolChoice: FORCE_IMAGE, maxTokens: 600 },
+        )
+        const callItem = msg.tool_calls?.find((c) => c.function?.name === "generate_image")
+        if (callItem) {
+          let args = {}
+          try { args = JSON.parse(callItem.function.arguments || "{}") } catch { /* fall back to their words */ }
+          if (!args.prompt) args.prompt = text
+          const { action } = await runNexaTool("generate_image", args, ctx)
+          if (action) { actions.push(action); reply = "Here you go 🎨" }
+        }
+      } catch (err) { console.log("image retry error:", err.message) }
+      // The model wouldn't write a prompt: draw from their own words
+      if (!actions.some((a) => a.type === "image")) {
+        const { action } = await runNexaTool("generate_image", { prompt: text }, ctx)
+        if (action) { actions.push(action); reply = "Here you go 🎨" }
+      }
+    } else if (refused) {
+      // Not a picture request, but never leave "I can't create images" in an answer
+      reply = reply.split(/(?<=[.!?])\s+|\n/).filter((line) => !REFUSED_IMAGE_RE.test(line)).join(" ").trim()
     }
     if (!reply) reply = actions.length ? "Done." : "Sorry, I couldn't finish that. Could you rephrase?"
     reply = linkServices(keepRealLinks(reply, searched), searched)
@@ -371,8 +403,17 @@ const answerAboutFile = async (req, res, { me, file, text }) => {
     const question = await AiMessage.create({ user: me._id, role: "user", content: text, attachment, doc: doc ? { name: file.originalname, pages: doc.pages, text: doc.text, truncated: doc.truncated } : null })
 
     let reply
+    let actions = []
     try {
-      if (image) {
+      if (image && await asksForImage(text)) {
+        // "Make this a cartoon", "put me on a beach": describe the photo, then draw the new picture
+        const look = await groqChat([
+          { role: "system", content: "Describe this photo for an AI image generator in under 80 words: the people or subjects (appearance, clothes, pose), setting, colours and lighting. Plain description only." },
+          { role: "user", content: [{ type: "text", text: `Request: ${text}` }, { type: "image_url", image_url: { url: imageForModel(file, stored.url) } }] },
+        ], { model: VISION_MODEL(), only: true, maxTokens: 250, temperature: 0.2 }).then((m) => m.content?.trim()).catch(() => "")
+        actions = [{ type: "image", id: randomUUID(), prompt: `${text}${look ? `. Based on this reference photo: ${look}` : ""}`.slice(0, 1000), shape: "square" }]
+        reply = "Here you go 🎨"
+      } else if (image) {
         const msg = await groqChat([
           { role: "system", content: fileSystemPrompt(me) },
           ...historyFor(history, 1500),
@@ -395,7 +436,7 @@ const answerAboutFile = async (req, res, { me, file, text }) => {
       return res.status(503).json({ error: err.message })
     }
 
-    const answer = await AiMessage.create({ user: me._id, role: "assistant", content: reply || "Sorry, I couldn't read that. Try another file?" })
+    const answer = await AiMessage.create({ user: me._id, role: "assistant", content: reply || "Sorry, I couldn't read that. Try another file?", actions })
     const { doc: _omit, ...plainQuestion } = question.toObject()
     res.status(201).json({ question: plainQuestion, answer })
   } catch (error) {
@@ -465,7 +506,19 @@ export const keepAiMessage = async (req, res) => {
   }
 }
 
-export const getAiSettings = (req, res) => res.json({ disappearAfter: req.user.nexaDisappearAfter ?? 86400 })
+export const getAiSettings = (req, res) => res.json({
+  disappearAfter: req.user.nexaDisappearAfter ?? 86400,
+  imageModel: isImageModel(req.user.nexaImageModel) ? req.user.nexaImageModel : "auto",
+  imageModels: IMAGE_MODELS(),
+})
+
+// Which image model Nexa tries first (falls back to the others if it fails)
+export const setImageModel = async (req, res) => {
+  const id = String(req.body.imageModel || "")
+  if (!isImageModel(id)) return res.status(400).json({ error: "That image model isn't available" })
+  await User.updateOne({ _id: req.user._id }, { nexaImageModel: id })
+  res.json({ imageModel: id })
+}
 
 // Changing the timer applies to every message not kept (off = nothing disappears)
 export const setAiSettings = async (req, res) => {
@@ -517,7 +570,7 @@ export const createAiImage = async (req, res) => {
     drawing.add(actionId)
     try {
       const { prompt, shape } = message.actions[index]
-      const made = await generateImage(prompt, shape)
+      const made = await generateImage(prompt, shape, req.user.nexaImageModel)
       imageUse.set(String(req.user._id), { day: today, count: count + 1 })
       const stored = await uploadToCloudinary({ buffer: made.buffer, mimetype: made.mimetype, originalname: "nexa-image" }, { subfolder: "ai-images", transformation: made.transformation })
 
@@ -528,7 +581,7 @@ export const createAiImage = async (req, res) => {
         deleteFromCloudinary([stored])
         return res.status(404).json({ error: "Image not found" })
       }
-      const action = { ...fresh.actions[i], url: stored.url, publicId: stored.publicId, resourceType: "image", width: stored.width, height: stored.height }
+      const action = { ...fresh.actions[i], url: stored.url, publicId: stored.publicId, resourceType: "image", width: stored.width, height: stored.height, model: made.model?.label }
       fresh.actions[i] = action
       fresh.markModified("actions")
       await fresh.save()
@@ -838,5 +891,19 @@ export const speakMessage = async (req, res) => {
   } catch (err) {
     console.log("speak error:", err.code || "", err.message)
     res.status(err.code === "empty" ? 400 : 503).json({ error: err.message, code: err.code || "failed" })
+  }
+}
+
+// ── Voice typing in the Nexa box: speech to text (the audio isn't stored) ──
+export const dictate = async (req, res) => {
+  try {
+    const file = req.file
+    if (!file || !/^(audio|video)\//.test(file.mimetype)) return res.status(400).json({ error: "Record something first" })
+    if (!allow(req.user._id, "dictate", 15)) return res.status(429).json({ error: "Too many requests. Wait a moment." })
+    const text = await groqTranscribe(file.buffer, file.originalname || "voice.webm", file.mimetype)
+    res.status(200).json({ text })
+  } catch (error) {
+    console.log("dictate error:", error.message)
+    res.status(503).json({ error: error.message || "Couldn't understand that. Try again." })
   }
 }

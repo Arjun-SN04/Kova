@@ -10,11 +10,55 @@ import { emitToUsers } from "./notify.js"
 import { fileDownloadUrl, uploadToCloudinary } from "../config/cloudinary.js"
 import { generateImage } from "./imageGen.js"
 import { wantsCreative, writeCreative } from "./creative.js"
+import { CLAIMED_IMAGE_RE, LOOSE_IMAGE_RE, REFUSED_IMAGE_RE, asksForImage } from "./imageIntent.js"
 
 export const MENTION_RE = /(^|[^\w@])@nexa\b/i
-const PER_MINUTE = 6          // answers per group per minute
-const busy = new Set()        // groups Nexa is answering right now
-const recent = {}             // groupId -> timestamps
+const PER_MINUTE = 10         // answers per chat per minute
+const recent = {}             // chat key -> timestamps
+
+// One answer at a time per chat: in Nexa mode people send several questions in a row,
+// so later ones wait their turn instead of being dropped
+const chains = new Map()
+const inTurn = (key, fn) => {
+  const run = (chains.get(key) || Promise.resolve()).catch(() => {}).then(fn)
+  chains.set(key, run)
+  run.finally(() => { if (chains.get(key) === run) chains.delete(key) }).catch(() => {})
+  return run
+}
+const overLimit = (key) => {
+  const now = Date.now()
+  recent[key] = (recent[key] || []).filter((t) => now - t < 60_000)
+  if (recent[key].length >= PER_MINUTE) return true
+  recent[key].push(now)
+  return false
+}
+// What they asked: the text without "@Nexa" (or a sensible question for a lone photo / file)
+const questionOf = (message) => String(message.message || "").replace(MENTION_RE, "$1").trim()
+  || (message.attachment?.kind === "image" ? "What's in this photo?" : message.attachment ? "Summarise this file." : "(they just mentioned you)")
+// Nexa's latest answer in the chat was a picture (so "make it blue" means a new picture)
+const lastWasImage = (chat, botId) => [...(chat?.messages || [])].reverse().slice(0, 4)
+  .find((m) => String(m.senderId) === String(botId))?.attachment?.kind === "image"
+
+// How Nexa answers in chats: short and easy to read, like a friend texting back
+const ANSWER_STYLE = `Keep it SHORT and easy to read on a phone:
+- Answer the question first, in plain everyday words. No intro ("Hello!", "Great question"), no sign-off, no follow-up question unless you truly need one.
+- Most answers: 1 to 3 short sentences, or 2 to 5 short "- " bullets (numbered for steps). Each bullet under 15 words.
+- Only go longer when they clearly ask for detail, a full explanation, a story, a letter or a list of many items.
+- Poem, song or shayari: an original piece with a short **title** line, then 3 to 4 short stanzas or 4 to 6 shers, separated by blank lines. Never bullets.
+- A message to send or a wish: one short paragraph in a quote ("> ...").
+Never reproduce existing song lyrics, poems or book text; write your own original words.`
+
+// "What can you do?" in a chat: a quick, consistent answer
+const CAPABILITY_RE = /\b(what (can|could|do) (you|u) (do|help)|what are (you|u) (capable|able)|your (capabilities|features|skills)|how can (you|u) help|what can nexa)\b|^\s*(help|capabilities|features)\s*\??\s*$/i
+const CAPABILITIES_SHORT = `I can help right here in your chats:
+- **Answer questions** and explain things simply
+- **Write** messages, wishes, poems and captions
+- **Create images**: "draw a cabin in the snow"
+- **Summarise** this chat or catch you up
+- **Read photos and files** you send here
+- **Decide**: "pick a restaurant from what we said"
+
+Tip: after @Nexa, keep chatting with me without typing it again. Type **exit** to stop.`
 
 // ── What Nexa looks at: photos and documents in the chat ──
 // The message they replied to, the file sent with the question, or (when the question is
@@ -79,32 +123,12 @@ const askNexa = async (system, userText, sources, question) => {
       console.log("nexa photo answer error:", err.message)
     }
   }
-  const reply = await askGroq([{ role: "system", content: sys }, { role: "user", content: userText }], { maxTokens: 2500 })
+  const reply = await askGroq([{ role: "system", content: sys }, { role: "user", content: userText }], { maxTokens: 1200 })
   return { reply, refs }
 }
 
 // ── Special requests: "draw / create an image …" and "summarise / recap the chat" ──
-// Includes common typos ("iamge", "imgae", "img") and "a better / another one" follow-ups
-const IMAGE_NOUNS = "images?|imag|iamges?|imgaes?|imges?|imgs?|pictures?|pics?|photos?|drawings?|illustrations?|posters?|logos?|art|artwork|wallpapers?|stickers?|cartoons?|avatars?|banners?|cards?|portraits?|scenes?|versions?"
-const IMAGE_RE = new RegExp(`\\b(create|make|generate|draw|design|paint|sketch|imagine|render|illustrate|redo|remake|recreate|improve|edit)\\b[\\s\\S]{0,80}\\b(${IMAGE_NOUNS})\\b|^(draw|paint|sketch|illustrate)\\b|\\b(make|create|generate|give me|do)\\b[\\s\\S]{0,20}\\b(another|a better|a new|one more)\\b[\\s\\S]{0,20}\\b(one|version|image|iamge|pic)\\b`, "i")
-// Nexa said it can't make pictures: never leave it at that
-const REFUSED_IMAGE_RE = /\b(can(no|')?t|cannot|unable to|not able to|don'?t have the ability to)\b[^.\n]{0,40}\b(generate|create|make|draw|produce)\b[^.\n]{0,30}\b(images?|pictures?|art|photos?)\b/i
-const LOOSE_IMAGE_RE = new RegExp(`\\b(${IMAGE_NOUNS})\\b`, "i")
-// Nexa says it made a picture but nothing was attached
-const CLAIMED_IMAGE_RE = /\b(here('s| is| are)|i('ve| have) (made|created|generated|drawn)|created|generated)\b[^\n]{0,80}\b(images?|pictures?|pics?|versions?|drawings?|illustrations?|art(work)?)\b/i
-
-// Wording varies ("whip up", "can you do one…"): when an image is mentioned, ask the model
-const asksForImage = async (question) => {
-  if (IMAGE_RE.test(question)) return true
-  if (!LOOSE_IMAGE_RE.test(question)) return false
-  try {
-    const out = await askGroq([
-      { role: "system", content: "Does this message ask the assistant to CREATE, MAKE, EDIT, REDO or IMPROVE a picture/image (not just describe or discuss one)? Answer only yes or no." },
-      { role: "user", content: question.slice(0, 600) },
-    ], { maxTokens: 3, temperature: 0 })
-    return /^\s*yes/i.test(String(out))
-  } catch { return false }
-}
+// Picture requests are detected in utils/imageIntent.js (shared with the Nexa chat)
 const SUMMARY_RE = /\b(summar(y|ies|ise|ize|ising|izing)|conclusions?|conclude|recap|tl;?dr|wrap(\s|-)?up|overview|key points|minutes|what (did|have) we (decide|discuss|agree)|catch me up)\b/i
 const IMAGES_PER_DAY = 10
 const imageUse = new Map() // userId -> { day, count }
@@ -151,7 +175,7 @@ ${chat?.lines.slice(-25).join("\n") || "(none)"}`,
     const parsed = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] || "{}")
     if (parsed.prompt) plan = { prompt: String(parsed.prompt).slice(0, 600), shape: ["square", "portrait", "landscape"].includes(parsed.shape) ? parsed.shape : "square", caption: String(parsed.caption || "").slice(0, 120) }
   } catch { /* fall back to their own words */ }
-  const made = await generateImage(plan.prompt, plan.shape)
+  const made = await generateImage(plan.prompt, plan.shape, sender.nexaImageModel)
   const stored = await uploadToCloudinary({ buffer: made.buffer, mimetype: made.mimetype, originalname: "nexa-image.jpg" }, { subfolder: "ai-images", transformation: made.transformation })
   imageUse.set(String(sender._id), { day, count: count + 1 })
   return {
@@ -186,8 +210,9 @@ One or two lines that wrap it up.`,
 }
 
 // Image or summary when that's what they asked for; null otherwise
-const specialAnswer = async ({ question, chat, sender, viewerId, chatId, where, timeZone, photos = [], force = false }) => {
-  if (force || await asksForImage(question)) {
+const specialAnswer = async ({ question, chat, sender, viewerId, chatId, where, timeZone, photos = [], force = false, afterImage = false }) => {
+  if (!force && question.length < 80 && CAPABILITY_RE.test(question)) return { reply: CAPABILITIES_SHORT }
+  if (force || await asksForImage(question, { recent: chat?.lines.slice(-6).join("\n") || "", lastWasImage: afterImage })) {
     try { return await makeImage({ question, chat, sender, photos }) } catch (err) {
       console.log("nexa image error:", err.message)
       return { reply: "- Sorry, I couldn't create the image right now. Try again in a minute." }
@@ -204,44 +229,38 @@ const specialAnswer = async ({ question, chat, sender, viewerId, chatId, where, 
 }
 
 // Someone wrote "@Nexa …" in a group: answer there, for everyone, as a reply to their message
-export const answerMention = async ({ groupId, message, sender, timeZone = "UTC" }) => {
+export const answerMention = async ({ groupId, message, sender, timeZone = "UTC", force = false }) => {
   const gid = String(groupId)
-  if (!MENTION_RE.test(message.message || "") || busy.has(gid)) return
-  const now = Date.now()
-  recent[gid] = (recent[gid] || []).filter((t) => now - t < 60_000)
-  if (recent[gid].length >= PER_MINUTE) return
-  recent[gid].push(now)
-  busy.add(gid)
+  if (!force && !MENTION_RE.test(message.message || "")) return
+  if (overLimit(gid)) return
+  return inTurn(gid, () => groupAnswer({ gid, message, sender, timeZone }))
+}
 
+const groupAnswer = async ({ gid, message, sender, timeZone }) => {
   const group = await Group.findById(gid).select("members name")
   const bot = await getNexaBot()
   const typing = (event) => emitToUsers(group.members, event, { from: gid, user: String(bot._id), name: event === "typing" ? "Nexa" : undefined })
   typing("typing")
   try {
     const chat = await readChat(sender._id, gid, { count: 40, timeZone })
-    const question = String(message.message).replace(MENTION_RE, "$1").trim() || "(they just mentioned you)"
+    const question = questionOf(message)
     let reply
     let refs = []
     let attachment = null
     try {
       const sources = await sourcesFor(message, chat?.messages)
-      const specialArgs = { question, chat, sender, viewerId: sender._id, chatId: gid, where: `the group "${group.name}"`, timeZone, photos: sources.photos }
+      const specialArgs = { question, chat, sender, viewerId: sender._id, chatId: gid, where: `the group "${group.name}"`, timeZone, photos: sources.photos, afterImage: lastWasImage(chat, bot._id) }
       const special = await specialAnswer(specialArgs)
       if (special) ({ reply, attachment = null, refs = [] } = special)
       else ({ reply, refs } = await askNexa(`You are Nexa, the AI assistant inside the Kova group "${group.name}". ${sender.fullName} mentioned you, and your answer is posted in the group for everyone.
 In the recent messages below, "Me" means ${sender.fullName}. Messages from "Nexa" are your own earlier answers.
-Pick the format that fits what they asked for:
-- Poem, song, shayari or verse: an original, deeply moving piece. A short **title** line, followed by rich, beautifully developed couplets or stanzas (7 to 10 shers for shayari, 4 to 6 stanzas for poems; each couplet or stanza separated by a blank line). Capture genuine emotion, musical rhythm, evocative imagery, and authentic vocabulary. Never write dry, rushed, or shallow couplets. Never use bullets.
-- Story, letter, message to send, speech or wish: well-developed, expressive, evocative paragraphs with heart and substance.
-- Steps, options, comparisons or several facts: clearly structured "- " bullets (numbered for sequential steps).
-- Questions, discussions or explanations: thorough, articulate, helpful, and insightful.
-Provide rich, complete, and satisfying responses. Never cut answers artificially short or withhold depth. Never reproduce existing song lyrics, poems or book text; write your own original words.
+${ANSWER_STYLE}
 Use people's first names exactly as written (never shorten them). No headings, no em or en dashes. Always do what they ask; never say you can't create images (pictures are made separately when asked). If asked to decide or pick, pick clearly and say why in one line.
 
 Recent messages:
 ${chat?.lines.join("\n") || "(none)"}`, `${sender.fullName}: ${question}`, sources, question))
       // It said it can't make pictures, but they asked for one: make it
-      if (!attachment && (REFUSED_IMAGE_RE.test(reply || "") || CLAIMED_IMAGE_RE.test(reply || "")) && LOOSE_IMAGE_RE.test(question)) {
+      if (!attachment && (REFUSED_IMAGE_RE.test(reply || "") || (CLAIMED_IMAGE_RE.test(reply || "") && (LOOSE_IMAGE_RE.test(question) || specialArgs.afterImage)))) {
         const made = await specialAnswer({ ...specialArgs, force: true })
         if (made) ({ reply, attachment = null, refs = [] } = made)
       }
@@ -253,23 +272,20 @@ ${chat?.lines.join("\n") || "(none)"}`, `${sender.fullName}: ${question}`, sourc
     emitToUsers(group.members, "newMessage", msg)
   } finally {
     typing("stopTyping")
-    busy.delete(gid)
   }
 }
 
 // "@Nexa …" in a one-to-one chat (or Message yourself): answer there, visible to both people
-export const answerDirectMention = async ({ sender, otherId, message, timeZone = "UTC" }) => {
-  if (!MENTION_RE.test(message.message || "")) return
+export const answerDirectMention = async ({ sender, otherId, message, timeZone = "UTC", force = false }) => {
+  if (!force && !MENTION_RE.test(message.message || "")) return
   const me = String(sender._id)
   const other = String(otherId)
   const key = `dm:${[me, other].sort().join(":")}`
-  if (busy.has(key)) return
-  const now = Date.now()
-  recent[key] = (recent[key] || []).filter((t) => now - t < 60_000)
-  if (recent[key].length >= PER_MINUTE) return
-  recent[key].push(now)
-  busy.add(key)
+  if (overLimit(key)) return
+  return inTurn(key, () => directAnswer({ sender, me, other, message, timeZone }))
+}
 
+const directAnswer = async ({ sender, me, other, message, timeZone }) => {
   const bot = await getNexaBot()
   const people = me === other ? [me] : [me, other]
   // Each person sees the typing in their chat with the other one
@@ -282,28 +298,23 @@ export const answerDirectMention = async ({ sender, otherId, message, timeZone =
     const self = me === other
     const otherName = self ? "" : (await User.findById(other).select("fullName"))?.fullName || "the other person"
     const chat = await readChat(me, other, { count: 30, timeZone })
-    const question = String(message.message).replace(MENTION_RE, "$1").trim() || "(they just mentioned you)"
+    const question = questionOf(message)
     let reply
     let refs = []
     let attachment = null
     try {
       const sources = await sourcesFor(message, chat?.messages)
-      const specialArgs = { question, chat, sender, viewerId: me, chatId: other, where: self ? "their private notes chat" : `their chat with ${otherName}`, timeZone, photos: sources.photos }
+      const specialArgs = { question, chat, sender, viewerId: me, chatId: other, where: self ? "their private notes chat" : `their chat with ${otherName}`, timeZone, photos: sources.photos, afterImage: lastWasImage(chat, bot._id) }
       const special = await specialAnswer(specialArgs)
       if (special) ({ reply, attachment = null, refs = [] } = special)
       else ({ reply, refs } = await askNexa(`You are Nexa, the AI assistant inside Kova. ${sender.fullName} mentioned you in ${self ? "their private notes chat" : `their private chat with ${otherName}`}, and your answer is posted in that chat${self ? "" : " for both of them"}.
 In the recent messages below, "Me" means ${sender.fullName}. Messages from "Nexa" are your own earlier answers.
-Pick the format that fits what they asked for:
-- Poem, song, shayari or verse: an original, deeply moving piece. A short **title** line, followed by rich, beautifully developed couplets or stanzas (7 to 10 shers for shayari, 4 to 6 stanzas for poems; each couplet or stanza separated by a blank line). Capture genuine emotion, musical rhythm, evocative imagery, and authentic vocabulary. Never write dry, rushed, or shallow couplets. Never use bullets.
-- Story, letter, message to send, speech or wish: well-developed, expressive, evocative paragraphs with heart and substance.
-- Steps, options, comparisons or several facts: clearly structured "- " bullets (numbered for sequential steps).
-- Questions, discussions or explanations: thorough, articulate, helpful, and insightful.
-Provide rich, complete, and satisfying responses. Never cut answers artificially short or withhold depth. Never reproduce existing song lyrics, poems or book text; write your own original words.
+${ANSWER_STYLE}
 Use people's first names exactly as written. No headings, no em or en dashes. Always do what they ask; never say you can't create images (pictures are made separately when asked).
 
 Recent messages:
 ${chat?.lines.join("\n") || "(none)"}`, `${sender.fullName}: ${question}`, sources, question))
-      if (!attachment && (REFUSED_IMAGE_RE.test(reply || "") || CLAIMED_IMAGE_RE.test(reply || "")) && LOOSE_IMAGE_RE.test(question)) {
+      if (!attachment && (REFUSED_IMAGE_RE.test(reply || "") || (CLAIMED_IMAGE_RE.test(reply || "") && (LOOSE_IMAGE_RE.test(question) || specialArgs.afterImage)))) {
         const made = await specialAnswer({ ...specialArgs, force: true })
         if (made) ({ reply, attachment = null, refs = [] } = made)
       }
@@ -330,6 +341,5 @@ ${chat?.lines.join("\n") || "(none)"}`, `${sender.fullName}: ${question}`, sourc
     emitToUsers(people, "newMessage", msg)
   } finally {
     typing("stopTyping")
-    busy.delete(key)
   }
 }

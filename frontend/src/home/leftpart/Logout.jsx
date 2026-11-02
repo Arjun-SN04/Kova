@@ -6,7 +6,8 @@ import { LuLoaderCircle, LuLogOut } from 'react-icons/lu'
 import { useAuth } from '../../context/AuthProvider'
 import useConversation from '../../Zustand/UserConversation'
 
-const Logout = ({ className = '' }) => {
+// `label`: show text next to the icon (a full-width row) instead of an icon-only button
+const Logout = ({ className = '', label = '' }) => {
   const [loading, setLoading] = useState(false)
   const [, setAuthUser] = useAuth()
   const { setSelectedConversation, setMessages, setPreviews, setUnreadCounts } = useConversation()
@@ -37,9 +38,10 @@ const Logout = ({ className = '' }) => {
       disabled={loading}
       title="Log out"
       aria-label="Log out"
-      className={`flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400 ${className}`}
+      className={label ? className : `flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400 ${className}`}
     >
       {loading ? <LuLoaderCircle className="size-4.5 animate-spin" /> : <LuLogOut className="size-4.5" />}
+      {label && <span>{label}</span>}
     </button>
   )
 }

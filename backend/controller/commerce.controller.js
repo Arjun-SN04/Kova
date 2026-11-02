@@ -276,6 +276,7 @@ export const sendCard = async (req, res) => {
         business: String(owner._id),
         payee: owner.fullName,
         upiId: owner.business.upiId || null,
+        qr: owner.business.paymentQr?.url || null,
         amount,
         note,
         orderId: order ? String(order._id) : null,

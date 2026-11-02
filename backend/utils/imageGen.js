@@ -97,19 +97,41 @@ const subnp = async (prompt, shape, model) => {
   return { ...(await download(done.imageUrl)), transformation: SUBNP_CROP }
 }
 
-// ── Try each provider in turn ─────────────────────────────────
-export const generateImage = async (prompt, shape = "square") => {
-  const attempts = [
-    ...(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN ? CF_MODELS.map((m) => ({ name: m, run: () => cloudflare(prompt, shape, m) })) : []),
-    ...(process.env.PUTER_AUTH_TOKEN ? [{ name: "puter", run: () => puter(prompt, shape) }] : []),
-    ...SUBNP_MODELS.map((m) => ({ name: `subnp:${m}`, run: () => subnp(prompt, shape, m) })),
-  ]
+// ── Models people can pick (only the ones this server can use) ──
+const CF_LABELS = {
+  "@cf/black-forest-labs/flux-2-klein-4b": { label: "FLUX.2 Klein", note: "Best detail and any shape" },
+  "@cf/black-forest-labs/flux-1-schnell": { label: "FLUX.1 Schnell", note: "Fastest, square only" },
+}
+const hasCloudflare = () => !!(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN)
+
+const providers = (prompt, shape) => [
+  ...(hasCloudflare() ? CF_MODELS.map((m) => ({
+    id: `cf:${m}`, label: CF_LABELS[m]?.label || m.split("/").pop(), note: CF_LABELS[m]?.note || "Cloudflare Workers AI",
+    run: () => cloudflare(prompt, shape, m),
+  })) : []),
+  ...(process.env.PUTER_AUTH_TOKEN ? [{ id: "puter", label: "FLUX Schnell (Puter)", note: "Backup FLUX model", run: () => puter(prompt, shape) }] : []),
+  ...SUBNP_MODELS.map((m) => ({ id: `subnp:${m}`, label: m === "magic" ? "Magic (SubNP)" : `SubNP ${m}`, note: "Free backup, softer style", run: () => subnp(prompt, shape, m) })),
+]
+
+// What the model picker shows: [{ id, label, note }], best first
+export const IMAGE_MODELS = () => [
+  { id: "auto", label: "Auto", note: "Best available, with backups" },
+  ...providers("", "square").map(({ id, label, note }) => ({ id, label, note })),
+]
+export const isImageModel = (id) => IMAGE_MODELS().some((m) => m.id === id)
+
+// ── Try each provider in turn (the chosen one first, the rest as backups) ──
+// Returns { buffer, mimetype, transformation?, model: { id, label } }
+export const generateImage = async (prompt, shape = "square", preferred = "auto") => {
+  const all = providers(prompt, shape)
+  const chosen = all.find((p) => p.id === preferred)
+  const attempts = chosen ? [chosen, ...all.filter((p) => p !== chosen)] : all
   const failures = []
-  for (const { name, run } of attempts) {
+  for (const { id, label, run } of attempts) {
     try {
-      return await run()
+      return { ...(await run()), model: { id, label } }
     } catch (e) {
-      failures.push(`${name}: ${e?.error?.message || e?.message || e}`)
+      failures.push(`${id}: ${e?.error?.message || e?.message || e}`)
     }
   }
   throw err("Couldn't create the image right now. Try again in a bit.", 502, failures.join(" | "))

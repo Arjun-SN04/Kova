@@ -10,14 +10,16 @@ const useSendMessage = () => {
   const { selectedConversation, setMessages, upsertPreview } = useConversation();
 
   // `media`: a GIF or sticker { kind, url, title, width, height }
-  const sendMessage = async (messageText, replyTo = null, file = null, onProgress, media = null) => {
+  // `askNexa`: Nexa mode is on, so Nexa answers this message without "@Nexa"
+  const sendMessage = async (messageText, replyTo = null, file = null, onProgress, media = null, { askNexa = false } = {}) => {
     if (!selectedConversation?._id || (!messageText.trim() && !file && !media)) return null;
 
-    let body = { message: messageText, replyTo, ...(media ? { media } : {}) };
+    let body = { message: messageText, replyTo, ...(media ? { media } : {}), ...(askNexa ? { askNexa: true } : {}) };
     if (file) {
       body = new FormData();
       body.append("message", messageText);
       if (replyTo) body.append("replyTo", replyTo);
+      if (askNexa) body.append("askNexa", "true");
       body.append("file", file);
     }
 
@@ -29,7 +31,7 @@ const useSendMessage = () => {
       });
       setMessages((prev) => [...prev, res.data]);
       upsertPreview(selectedConversation._id, res.data);
-      if (/(^|[^\w@])@nexa\b/i.test(messageText)) {
+      if (askNexa || /(^|[^\w@])@nexa\b/i.test(messageText)) {
         const chatId = selectedConversation._id;
         useConversation.getState().setNexaThinking(chatId, true);
         setTimeout(() => {

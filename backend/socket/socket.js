@@ -79,6 +79,16 @@ const endCall = (userId, reason = "ended") => {
   if (peerSocket) io.to(peerSocket).emit("call:ended", { callId: call.callId, reason });
 };
 
+// A one-to-one call becoming a group call: end it quietly (no "call ended" for the other side) and log it
+const releaseCall = (userId) => {
+  const call = activeCalls[userId];
+  if (!call) return;
+  delete activeCalls[userId];
+  if (activeCalls[call.peer]?.callId === call.callId) delete activeCalls[call.peer];
+  record(call.info);
+};
+const oneToOne = { peerOf: (userId) => activeCalls[userId]?.peer, release: releaseCall };
+
 const registerCallHandlers = (socket, userId) => {
   const inCallWith = (peer, callId) =>
     activeCalls[userId]?.peer === peer && activeCalls[userId]?.callId === callId;
@@ -183,7 +193,7 @@ io.on("connection", (socket) => {
   socket.on("stopTyping", relay("stopTyping"))
 
   if (userId && userId !== "undefined") registerCallHandlers(socket, userId)
-  const leaveGroupCalls = userId && userId !== "undefined" ? registerGroupCallHandlers(io, socket, userId, userSocketMap) : () => {}
+  const leaveGroupCalls = userId && userId !== "undefined" ? registerGroupCallHandlers(io, socket, userId, userSocketMap, oneToOne) : () => {}
 
   socket.on("disconnect", () => {
     if (userId && userSocketMap[userId] === socket.id) {

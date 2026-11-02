@@ -6,6 +6,7 @@ import { Message } from "../models/message.model.js"
 import { Conversation } from "../models/conversation.model.js"
 import { Order } from "../models/order.model.js"
 import { Booking } from "../models/booking.model.js"
+import { Product } from "../models/product.model.js"
 import { Report } from "../models/report.model.js"
 import { emitToUsers } from "../utils/notify.js"
 import { safeZone, sendNexaMessage } from "../utils/agenda.js"
@@ -59,8 +60,21 @@ export const getMyBusiness = async (req, res) => {
   try {
     const me = await User.findById(req.user._id).select("fullName username avatar business")
     const workFor = await BusinessSettings.find({ "team.user": req.user._id }).populate("owner", "fullName username avatar business")
+    // A business that was switched off: shown on the setup page to switch back or delete
+    let previous = null
+    if (me.business && !me.business.enabled && me.business.category) {
+      const [products, orders, bookings, customers, settings] = await Promise.all([
+        Product.countDocuments({ business: me._id }),
+        Order.countDocuments({ business: me._id }),
+        Booking.countDocuments({ business: me._id }),
+        Customer.countDocuments({ business: me._id }),
+        BusinessSettings.findOne({ owner: me._id }).select("createdAt"),
+      ])
+      previous = { category: me.business.category, description: me.business.description || "", cover: me.business.cover?.url || null, products, orders, bookings, customers, since: settings?.createdAt || null }
+    }
     res.status(200).json({
       business: me.business,
+      previous,
       status: hoursState(me.business),
       isAdmin: isAppAdmin(req.user),
       workFor: workFor.filter((s) => s.owner?.business?.enabled).map((s) => ({ ...publicProfile(s.owner), role: roleIn(req.user._id, s.owner._id, s) })),
@@ -120,6 +134,53 @@ export const updateCover = async (req, res) => {
   } catch (error) {
     console.log("updateCover error:", error)
     fail(res, 500, "Couldn't save the cover photo")
+  }
+}
+
+// Payment QR code (UPI, bank or wallet). No file = remove it.
+export const updatePaymentQr = async (req, res) => {
+  try {
+    const me = await User.findById(req.user._id)
+    if (!me.business?.enabled) return fail(res, 400, "Turn on your business account first")
+    const old = me.business.paymentQr
+    const qr = req.file ? await uploadToCloudinary(req.file, { subfolder: "payment-qr" }) : null
+    me.set("business.paymentQr", qr ? { url: qr.url, publicId: qr.publicId, label: str(req.body?.label, 40) } : null)
+    await me.save()
+    if (old?.publicId) deleteFromCloudinary([{ publicId: old.publicId, resourceType: "image" }])
+    emitToUsers([me._id, ...(me.contacts || [])], "userUpdated", { _id: String(me._id), business: me.business })
+    res.status(200).json({ business: me.business })
+  } catch (error) {
+    console.log("updatePaymentQr error:", error)
+    fail(res, 500, "Couldn't save the QR code")
+  }
+}
+
+// Delete my (switched-off) business for good: catalog, settings, customer records, cover and QR.
+// Orders and bookings stay, because customers keep them in their own history.
+export const deleteBusiness = async (req, res) => {
+  try {
+    const me = await User.findById(req.user._id)
+    if (!me.business) return res.status(200).json({ deleted: true })
+    if (me.business.enabled) return fail(res, 400, "Switch to a personal account first")
+    const products = await Product.find({ business: me._id }).select("image")
+    const files = [
+      ...products.map((p) => p.image).filter((i) => i?.publicId),
+      ...(me.business.cover?.publicId ? [me.business.cover] : []),
+      ...(me.business.paymentQr?.publicId ? [me.business.paymentQr] : []),
+    ].map((f) => ({ publicId: f.publicId, resourceType: "image" }))
+    await Promise.all([
+      Product.deleteMany({ business: me._id }),
+      Customer.deleteMany({ business: me._id }),
+      BusinessSettings.deleteOne({ owner: me._id }),
+    ])
+    me.business = null
+    await me.save()
+    if (files.length) deleteFromCloudinary(files)
+    emitToUsers([me._id, ...(me.contacts || [])], "userUpdated", { _id: String(me._id), business: null })
+    res.status(200).json({ deleted: true })
+  } catch (error) {
+    console.log("deleteBusiness error:", error)
+    fail(res, 500, "Couldn't delete the business")
   }
 }
 

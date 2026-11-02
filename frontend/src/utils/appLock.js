@@ -3,12 +3,38 @@
 
 const KEY = (userId) => `kovaAppLock:${userId}`
 const HIDDEN_AT = 'kovaHiddenAt'
+// Minutes away from Kova before the PIN is asked again (-1: only when Kova is opened again)
 export const LOCK_AFTER = [
   { value: 0, label: 'Immediately' },
   { value: 1, label: 'After 1 minute' },
+  { value: 5, label: 'After 5 minutes' },
   { value: 15, label: 'After 15 minutes' },
+  { value: 30, label: 'After 30 minutes' },
   { value: 60, label: 'After 1 hour' },
+  { value: 240, label: 'After 4 hours' },
+  { value: -1, label: 'Only when Kova reopens' },
 ]
+
+// ── Chat lock: how long locked chats stay open after the code is entered (this device) ──
+const RELOCK_KEY = 'kovaChatRelock'
+// Minutes (0: ask every time a locked chat opens; -1: until Kova is closed or refreshed)
+export const CHAT_RELOCK = [
+  { value: 0, label: 'Every time' },
+  { value: 1, label: 'After 1 minute' },
+  { value: 5, label: 'After 5 minutes' },
+  { value: 15, label: 'After 15 minutes' },
+  { value: 30, label: 'After 30 minutes' },
+  { value: 60, label: 'After 1 hour' },
+  { value: -1, label: 'Until Kova closes' },
+]
+export const getChatRelock = () => {
+  try {
+    const v = Number(localStorage.getItem(RELOCK_KEY) ?? 5)
+    return CHAT_RELOCK.some((o) => o.value === v) ? v : 5
+  } catch { return 5 }
+}
+export const setChatRelock = (minutes) => { try { localStorage.setItem(RELOCK_KEY, String(minutes)) } catch { /* private window */ } }
+export const chatRelockMs = () => { const m = getChatRelock(); return m < 0 ? Infinity : m * 60_000 }
 
 const enc = new TextEncoder()
 const toB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))

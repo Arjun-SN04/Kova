@@ -51,7 +51,7 @@ export const EXAMPLES = {
   'How do replies, reactions and forwarding work?': A(
     'In the “Hostel Gang” group, Rohan asks: “Who’s coming for dinner?” and Sana asks: “Has anyone got the notes?”',
     '• Priya taps Reply on Rohan’s message and writes “Me!”. Her message shows his question above it, so nobody is confused about what she answered.',
-    '• Arjun double-clicks Rohan’s message to add a quick ❤️.',
+    '• Arjun taps React on Rohan’s message and adds a ❤️.',
     '• Sana’s notes PDF is useful, so Priya forwards it to 3 classmates at once. Each copy says “Forwarded”.',
   ),
   'Can I edit or delete a message?': A(

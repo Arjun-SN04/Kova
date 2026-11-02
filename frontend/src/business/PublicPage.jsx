@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { LuArrowLeft, LuCalendarDays, LuStar, LuTag, LuClock, LuGlobe, LuLoaderCircle, LuMail, LuMapPin, LuMessageSquare, LuMinus, LuPackage, LuPlus, LuShoppingBag, LuX } from 'react-icons/lu'
+import { QRCodeCanvas } from 'qrcode.react'
+import { LuArrowLeft, LuCalendarDays, LuCheck, LuCopy, LuQrCode, LuStar, LuTag, LuClock, LuGlobe, LuLoaderCircle, LuMail, LuMapPin, LuMessageSquare, LuMinus, LuPackage, LuPlus, LuShoppingBag, LuX } from 'react-icons/lu'
 import useThemeClass from '../hooks/useThemeClass'
 import usePageTitle from '../hooks/usePageTitle'
 import { useAuth } from '../context/AuthProvider'
@@ -10,7 +11,7 @@ import Sheet from '../home/groups/Sheet'
 import { Logo } from '../components/ui'
 import useConversation from '../Zustand/UserConversation'
 import { BusinessBadge } from './BusinessInfo'
-import { DAY_NAMES, api, clock, coverOf, errorOf, hoursState, money, saveReturnTo, sectionArt, startBusinessChat } from './utils'
+import { DAY_NAMES, api, clock, coverOf, errorOf, hoursState, money, saveReturnTo, sectionArt, startBusinessChat, upiLink } from './utils'
 import { btn, textareaCls } from './workspace/ui'
 
 // Next 14 days as YYYY-MM-DD in the business's time zone
@@ -88,6 +89,32 @@ const BookingDialog = ({ data, onClose, onBooked }) => {
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       </div>
     </Sheet>
+  )
+}
+
+// Scan or copy to pay the business (their uploaded QR, or one made from their UPI ID)
+const PayCard = ({ name, qr, upiId }) => {
+  const [copied, setCopied] = useState(false)
+  if (!qr?.url && !upiId) return null
+  const copy = async () => { try { await navigator.clipboard.writeText(upiId); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { /* ignore */ } }
+  return (
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <p className="flex items-center gap-2 text-sm font-semibold"><LuQrCode className="size-4 text-emerald-600 dark:text-emerald-400" /> Pay {name}</p>
+      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{qr?.label || 'Scan with any UPI app'}</p>
+      <div className="mx-auto mt-4 w-fit rounded-xl bg-white p-2 ring-1 ring-slate-200">
+        {qr?.url
+          ? <a href={qr.url} target="_blank" rel="noreferrer" title="Open full size"><img src={qr.url} alt={`Payment QR for ${name}`} className="size-48 object-contain" /></a>
+          : <QRCodeCanvas value={upiLink({ upiId, payee: name })} size={176} />}
+      </div>
+      {upiId && (
+        <div className="mt-4 flex gap-2">
+          <a href={upiLink({ upiId, payee: name })} className="inline-flex h-9 flex-1 items-center justify-center rounded-lg bg-emerald-600 text-sm font-medium text-white transition hover:bg-emerald-500">Pay with UPI</a>
+          <button onClick={copy} className="inline-flex h-9 min-w-0 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800" title="Copy UPI ID">
+            {copied ? <LuCheck className="size-4 shrink-0" /> : <LuCopy className="size-4 shrink-0" />}<span className="truncate">{copied ? 'Copied' : upiId}</span>
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -354,6 +381,7 @@ const PublicPage = () => {
                 {b.email && <a href={`mailto:${b.email}`} className={`${infoRow} hover:underline`}><LuMail className="mt-0.5 size-4 shrink-0 text-slate-400" /><span className="min-w-0 truncate">{b.email}</span></a>}
               </div>
             )}
+            <PayCard name={owner.fullName} qr={b.paymentQr} upiId={b.upiId} />
             <div className="relative isolate overflow-hidden rounded-2xl p-5 text-white">
               <img src={sectionArt('inbox')} alt="" className="absolute inset-0 -z-10 size-full object-cover" loading="lazy" />
               <div className="absolute inset-0 -z-10 bg-linear-to-br from-indigo-950/90 to-indigo-800/70" />

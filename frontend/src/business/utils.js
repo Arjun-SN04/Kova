@@ -82,9 +82,9 @@ export const hoursState = (business, date = new Date()) => {
 
 export const isBusiness = (user) => !!user?.business?.enabled
 
-// UPI deep link: opens the customer's UPI app with the amount filled in
+// UPI deep link: opens the customer's UPI app with the amount filled in (no amount: they type it)
 export const upiLink = ({ upiId, payee, amount, note }) =>
-  `upi://pay?${new URLSearchParams({ pa: upiId, pn: payee || '', am: String(amount), cu: 'INR', ...(note ? { tn: note } : {}) })}`
+  `upi://pay?${new URLSearchParams({ pa: upiId, pn: payee || '', ...(amount ? { am: String(amount) } : {}), cu: 'INR', ...(note ? { tn: note } : {}) })}`
 
 export const shopUrl = (username) => `${window.location.origin}/b/${username}`
 

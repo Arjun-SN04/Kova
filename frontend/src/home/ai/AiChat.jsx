@@ -4,7 +4,7 @@ import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuArrowLeft, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuEllipsisVertical, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImages, LuMessageCircle, LuSendHorizontal, LuSmile, LuLoaderCircle, LuSquare, LuTrash2, LuVolume2, LuX, LuLightbulb } from 'react-icons/lu'
+import { LuArrowLeft, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuEllipsisVertical, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImages, LuMessageCircle, LuSendHorizontal, LuSmile, LuLoaderCircle, LuSquare, LuTrash2, LuVolume2, LuX, LuLightbulb, LuReply, LuRefreshCw, LuPencil, LuPenLine, LuUndo2, LuMic, LuUpload, LuWandSparkles } from 'react-icons/lu'
 import { canSpeak, speak, useSpeech } from '../../utils/speak'
 import { selfContact } from '../../utils/conversations'
 import useConversation from '../../Zustand/UserConversation'
@@ -26,6 +26,8 @@ import { StickerHost } from '../media/StickerMaker'
 import { remarkHtmlBreaks, remarkLineBreaks } from '../../utils/markdown'
 import useWallpaper from '../../hooks/useWallpaper'
 import { AI_CHAT } from '../../utils/ai'
+import RewriteMenu from '../rightPart/RewriteMenu'
+import useVoiceRecorder, { MAX_VOICE_SECONDS } from '../../hooks/useVoiceRecorder'
 
 const REMARK = [remarkGfm, remarkHtmlBreaks, remarkLineBreaks]
 
@@ -137,6 +139,9 @@ const md = {
   td: (props) => <td className="border-b border-slate-100 px-2 py-1 align-top dark:border-slate-800" {...props} />,
 }
 
+// Nexa's Markdown as one plain line (for reply quotes)
+const plainText = (md) => String(md || '').replace(/```[\s\S]*?```/g, ' ').replace(/[*_`>#|~]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s+/g, ' ').trim()
+
 // Plain text of a Markdown node, leaving out nested lists
 const textOf = (node) => {
   if (!node) return ''
@@ -244,7 +249,7 @@ const Sources = ({ items }) => (
   </div>
 )
 
-const NexaBubble = memo(({ message, statuses, onCancel, onOpen, onPick, onAsk, onImageSaved, onKeep, onDelete }) => {
+const NexaBubble = memo(({ message, statuses, onCancel, onOpen, onPick, onAsk, onImageSaved, onKeep, onDelete, onReply, onRetry }) => {
   if (message.actions?.some((a) => a.type === 'capabilities')) {
     return (
       <div className="mb-3 flex items-end gap-2 pb-1">
@@ -256,10 +261,10 @@ const NexaBubble = memo(({ message, statuses, onCancel, onOpen, onPick, onAsk, o
       </div>
     )
   }
-  return <NexaAnswer message={message} statuses={statuses} onCancel={onCancel} onOpen={onOpen} onAsk={onAsk} onImageSaved={onImageSaved} onKeep={onKeep} onDelete={onDelete} />
+  return <NexaAnswer message={message} statuses={statuses} onCancel={onCancel} onOpen={onOpen} onAsk={onAsk} onImageSaved={onImageSaved} onKeep={onKeep} onDelete={onDelete} onReply={onReply} onRetry={onRetry} />
 })
 
-const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved, onKeep, onDelete }) => {
+const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved, onKeep, onDelete, onReply, onRetry }) => {
   const [copied, setCopied] = useState(false)
   const components = useMemo(() => ({ ...md, li: listItem(onAsk) }), [onAsk])
   // Diagrams and tables get a wider bubble
@@ -297,6 +302,16 @@ const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved, 
             {copied ? 'Copied' : 'Copy'}
           </button>
           <ListenButton id={`ai-${message._id}`} text={message.content} />
+          {onReply && !String(message._id).startsWith('temp-') && (
+            <button onClick={() => onReply(message)} className="inline-flex items-center gap-1 opacity-0 transition hover:text-slate-700 group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100 dark:hover:text-slate-200" title="Reply to this answer">
+              <LuReply className="size-3" /> Reply
+            </button>
+          )}
+          {onRetry && (
+            <button onClick={() => onRetry(message)} className="inline-flex items-center gap-1 opacity-0 transition hover:text-slate-700 group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100 dark:hover:text-slate-200" title="Ask again for a new answer">
+              <LuRefreshCw className="size-3" /> Regenerate
+            </button>
+          )}
           <MessageTools message={message} onKeep={onKeep} onDelete={onDelete} />
         </p>
       </div>
@@ -360,9 +375,31 @@ const FileChip = ({ name, size, onDark }) => (
   </span>
 )
 
-const MyBubble = memo(({ message, onKeep, onDelete }) => (
+// Copy / Edit under your own question
+const MyTools = ({ message, onEdit }) => {
+  const [copied, setCopied] = useState(false)
+  if (!message.content || String(message._id).startsWith('temp-')) return null
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(message.content); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { /* ignore */ }
+  }
+  const btn = 'inline-flex items-center gap-1 rounded px-1 opacity-0 transition hover:text-slate-700 group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100 dark:hover:text-slate-200'
+  return (
+    <span className="order-first flex items-center gap-2">
+      <button onClick={copy} className={btn}>{copied ? <LuCheck className="size-3" /> : <LuCopy className="size-3" />}{copied ? 'Copied' : 'Copy'}</button>
+      <button onClick={() => onEdit(message)} className={btn} title="Put this question back in the box to change it"><LuPencil className="size-3" /> Edit</button>
+    </span>
+  )
+}
+
+const MyBubble = memo(({ message, onKeep, onDelete, onEdit }) => (
   <div className="group mb-3 flex justify-end pb-1">
     <div className={`flex flex-col items-end gap-1 ${bubbleWidth}`}>
+      {message.quote && (
+        <p className="flex max-w-full items-start gap-1.5 rounded-xl bg-slate-100 px-2.5 py-1.5 text-xs text-slate-500 ring-1 ring-slate-200/70 dark:bg-slate-800/70 dark:text-slate-400 dark:ring-slate-700/60">
+          <LuReply className="mt-0.5 size-3 shrink-0 text-violet-500" />
+          <span className="line-clamp-2">{message.quote}</span>
+        </p>
+      )}
       {message.attachment?.kind === 'image' && (
         <a href={message.attachment.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl rounded-br-md ring-1 ring-slate-200 dark:ring-slate-700">
           <img src={message.attachment.url} alt={message.attachment.name || 'Photo'} className="block max-h-72 max-w-full object-cover" />
@@ -382,6 +419,7 @@ const MyBubble = memo(({ message, onKeep, onDelete }) => (
       )}
       {message.content && <p className="whitespace-pre-wrap break-words max-w-full rounded-2xl rounded-br-md bg-indigo-600 px-3.5 py-2 text-sm leading-relaxed text-white">{message.content}</p>}
       <p className="mt-1 flex items-center gap-2 px-1 text-[11px] text-slate-400">
+        <MyTools message={message} onEdit={onEdit} />
         <MessageTools message={message} onKeep={onKeep} onDelete={onDelete} align="right" />
         {message.createdAt && formatTime(message.createdAt)}
       </p>
@@ -431,9 +469,39 @@ const AiChat = () => {
   const [timer, setTimer] = useState(86400)
   const [timerOpen, setTimerOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  // Which image model Nexa uses (the others are kept as backups)
+  const [imageModel, setImageModel] = useState('auto')
+  const [imageModels, setImageModels] = useState([])
+  const [modelOpen, setModelOpen] = useState(false)
   useEffect(() => {
-    axios.get('/api/ai/settings', api).then((res) => setTimer(res.data.disappearAfter)).catch(() => { })
+    axios.get('/api/ai/settings', api).then((res) => {
+      setTimer(res.data.disappearAfter)
+      if (res.data.imageModel) setImageModel(res.data.imageModel)
+      if (res.data.imageModels) setImageModels(res.data.imageModels)
+    }).catch(() => { })
   }, [])
+  const changeImageModel = async (id) => {
+    setModelOpen(false)
+    const before = imageModel
+    setImageModel(id)
+    try { await axios.put('/api/ai/settings/image-model', { imageModel: id }, api) } catch { setImageModel(before); setError("Couldn't change the image model.") }
+  }
+  const modelLabel = imageModels.find((m) => m.id === imageModel)?.label || 'Auto'
+  const modelMenu = (
+    <>
+      <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Image model</p>
+      <p className="px-3 pb-2 text-xs text-slate-500 dark:text-slate-400">Nexa draws with this one first. If it's busy, it uses another so you still get your picture.</p>
+      {imageModels.map((m) => (
+        <button key={m.id} role="menuitemradio" aria-checked={imageModel === m.id} onClick={() => changeImageModel(m.id)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800">
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm text-slate-700 dark:text-slate-200">{m.label}</span>
+            <span className="block truncate text-xs text-slate-400">{m.note}</span>
+          </span>
+          {imageModel === m.id && <LuCheck className="size-4 shrink-0 text-indigo-600 dark:text-indigo-400" />}
+        </button>
+      ))}
+    </>
+  )
   const changeTimer = async (secs) => {
     setTimerOpen(false)
     const before = timer
@@ -565,22 +633,25 @@ const AiChat = () => {
     }
   }
 
-  const ask = async (question = text) => {
-    const file = pending?.file
+  // retry: ask a question again (Regenerate) without touching the box, its file or reply
+  const ask = async (question = text, { retry = false, quote: retryQuote = null } = {}) => {
+    const file = retry ? null : pending?.file
     const value = question.trim()
     if ((!value && !file) || thinking) return
+    const reply = retry ? null : replyTo
+    const quote = retry ? retryQuote : reply?.text || null
     setError('')
-    setText('')
+    if (!retry) { setText(''); setUndoText(null); setReplyTo(null) }
     const temp = {
-      _id: `temp-${Date.now()}`, role: 'user', createdAt: new Date().toISOString(),
+      _id: `temp-${Date.now()}`, role: 'user', createdAt: new Date().toISOString(), quote,
       content: value || (file ? (file.type.startsWith('image/') ? "What's in this photo?" : 'Summarize this document.') : ''),
       attachment: file ? { kind: file.type.startsWith('image/') ? 'image' : 'file', url: pending.url, name: file.name, size: file.size } : null,
     }
     setMessages((prev) => [...prev, temp])
-    setPending(null)
+    if (!retry) setPending(null)
     setThinking(true)
     try {
-      let body = { message: value, timeZone }
+      let body = { message: value, timeZone, ...(quote ? { quote } : {}) }
       if (file) {
         body = new FormData()
         body.append('message', value)
@@ -592,13 +663,104 @@ const AiChat = () => {
       if (temp.attachment?.url?.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(temp.attachment.url), 5000)
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m._id !== temp._id))
-      setText(value)
-      if (file) setPending({ file, url: temp.attachment.url })
+      if (!retry) {
+        setText(value)
+        setReplyTo(reply)
+        if (file) setPending({ file, url: temp.attachment.url })
+      }
       setError(err.response?.data?.error || "Nexa couldn't answer. Try again.")
     } finally {
       setThinking(false)
       inputRef.current?.focus()
     }
+  }
+
+  // Reply to one of Nexa's answers: the question is sent with a quote of it
+  const [replyTo, setReplyTo] = useState(null) // { id, text }
+  const replyToAnswer = (m) => {
+    setReplyTo({ id: m._id, text: plainText(m.content).slice(0, 300) || 'Your picture' })
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
+  // Regenerate: drop the last question and answer, then ask the same question again
+  const regenerate = async (answer) => {
+    if (thinking) return
+    const i = messages.findIndex((m) => m._id === answer._id)
+    const question = [...messages.slice(0, i)].reverse().find((m) => m.role === 'user')
+    if (!question?.content || question.attachment) return
+    try {
+      await Promise.all([axios.delete(`/api/ai/messages/${answer._id}`, api), axios.delete(`/api/ai/messages/${question._id}`, api)])
+    } catch { setError("Couldn't regenerate that. Try again."); return }
+    setMessages((prev) => prev.filter((m) => m._id !== answer._id && m._id !== question._id))
+    ask(question.content, { retry: true, quote: question.quote || null })
+  }
+
+  // ✏️ Rewrite the question before sending (same menu as in chats), with Undo
+  const rewriteRef = useRef(null)
+  const rewriteBtnRef = useRef(null)
+  const [rewriteOpen, setRewriteOpen] = useState(false)
+  const [rewriting, setRewriting] = useState(false)
+  const [undoText, setUndoText] = useState(null)
+  useEffect(() => {
+    if (!rewriteOpen) return
+    const onDown = (e) => !rewriteRef.current?.contains(e.target) && !rewriteBtnRef.current?.contains(e.target) && setRewriteOpen(false)
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [rewriteOpen])
+  const rewrite = async (style, instruction) => {
+    setRewriteOpen(false)
+    const original = text
+    if (!original.trim()) return
+    setRewriting(true)
+    setError('')
+    try {
+      const res = await axios.post('/api/ai/rewrite', { text: original, style, instruction }, api)
+      setText(res.data.text)
+      setUndoText(original)
+      inputRef.current?.focus()
+    } catch (err) {
+      setError(err.response?.data?.error || "Nexa couldn't rewrite that. Try again.")
+    } finally {
+      setRewriting(false)
+    }
+  }
+
+  // 🎤 Voice typing: speak, and the words land in the box to check before sending
+  const voice = useVoiceRecorder()
+  const [dictating, setDictating] = useState(false)
+  const stopDictation = async () => {
+    const blob = await voice.finish()
+    if (!blob || blob.size < 1000) return
+    setDictating(true)
+    setError('')
+    try {
+      const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm'
+      const form = new FormData()
+      form.append('audio', new File([blob], `dictation.${ext}`, { type: blob.type }))
+      const res = await axios.post('/api/ai/dictate', form, api)
+      const said = String(res.data.text || '').trim()
+      if (said) setText((t) => (t.trim() ? `${t.trimEnd()} ${said}` : said))
+      else setError("Didn't catch that. Try again.")
+    } catch (err) {
+      setError(err.response?.data?.error || "Couldn't understand that. Try again.")
+    } finally {
+      setDictating(false)
+      inputRef.current?.focus()
+    }
+  }
+  useEffect(() => {
+    if (voice.recording && voice.seconds >= MAX_VOICE_SECONDS) stopDictation()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voice.seconds])
+
+  // Drop a photo or document anywhere on the chat
+  const [dragging, setDragging] = useState(false)
+  const onDragOver = (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); setDragging(true) } }
+  const onDrop = (e) => {
+    e.preventDefault()
+    setDragging(false)
+    const f = e.dataTransfer?.files?.[0]
+    if (f) pickFile(f)
   }
 
   // Stable handle for "Know more" buttons, so Nexa's answers don't re-render on every keystroke
@@ -626,7 +788,10 @@ const AiChat = () => {
 
   // Same functions on every render, so the memoized bubbles don't redraw while typing
   const latest = useRef({})
-  useEffect(() => { latest.current = { cancelScheduled, openChat, fill } })
+  useEffect(() => { latest.current = { cancelScheduled, openChat, fill, replyToAnswer, regenerate } })
+  const onReplyStable = useCallback((m) => latest.current.replyToAnswer(m), [])
+  const onRetryStable = useCallback((m) => latest.current.regenerate(m), [])
+  const onEditStable = useCallback((m) => latest.current.fill(m.content), [])
   const onCancelStable = useCallback((id) => latest.current.cancelScheduled(id), [])
   const onOpenStable = useCallback((action) => latest.current.openChat(action), [])
   const onPickStable = useCallback((example) => latest.current.fill(example), [])
@@ -651,10 +816,22 @@ const AiChat = () => {
   const onKeyDown = (e) => {
     if (history.onKeyDown(e)) return
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask() }
+    else if (e.key === 'Escape' && replyTo) { e.preventDefault(); setReplyTo(null) }
   }
+  // Regenerate is offered on the latest answer when its question was plain text
+  const lastAnswerId = useMemo(() => {
+    const last = messages[messages.length - 1]
+    const before = messages[messages.length - 2]
+    return last?.role === 'assistant' && before?.role === 'user' && before.content && !before.attachment && !String(last._id).startsWith('temp-') ? last._id : null
+  }, [messages])
 
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col">
+    <div onDragOver={onDragOver} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false) }} onDrop={onDrop} className="relative flex h-full min-w-0 flex-1 flex-col">
+      {dragging && (
+        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-violet-50/80 backdrop-blur-sm dark:bg-slate-950/80">
+          <p className="flex items-center gap-2 rounded-2xl border-2 border-dashed border-violet-300 px-6 py-4 text-sm font-medium text-violet-700 dark:border-violet-500/50 dark:text-violet-300"><LuUpload className="size-4" /> Drop a photo or document to ask Nexa about it</p>
+        </div>
+      )}
       <header className="flex h-16 shrink-0 items-center gap-2 sm:gap-3 border-b border-slate-200 bg-white px-3 sm:px-5 dark:border-slate-800 dark:bg-slate-950">
         <button onClick={() => setSelectedConversation(null)} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 md:hidden dark:hover:bg-slate-800" aria-label="Back to chats">
           <LuArrowLeft className="size-5" />
@@ -677,6 +854,18 @@ const AiChat = () => {
           <button onClick={() => setLibraryOpen(true)} className="hidden sm:flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800" title="Media, links and docs" aria-label="Media, links and docs">
             <LuImages className="size-4.5" />
           </button>
+
+          <div className="relative hidden sm:block">
+            <button onClick={() => setModelOpen((o) => !o)} className={`flex size-9 items-center justify-center rounded-lg transition hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-500/10 dark:hover:text-violet-300 ${imageModel !== 'auto' ? 'text-violet-600 dark:text-violet-300' : 'text-slate-500 dark:text-slate-400'}`} title={`Image model: ${modelLabel}`} aria-label="Image model" aria-expanded={modelOpen}>
+              <LuWandSparkles className="size-4.5" />
+            </button>
+            {modelOpen && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setModelOpen(false)} />
+                <div role="menu" className="absolute right-0 top-full z-30 mt-1.5 w-72 rounded-xl bg-white p-1 shadow-xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">{modelMenu}</div>
+              </>
+            )}
+          </div>
 
           <div className="relative hidden sm:block">
             <button onClick={() => setTimerOpen((o) => !o)} className={`flex size-9 items-center justify-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 ${timer ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} title={`Disappearing messages: ${timerLabel(timer)}`} aria-label="Disappearing messages" aria-expanded={timerOpen}>
@@ -730,6 +919,14 @@ const AiChat = () => {
                   </button>
                   <button
                     role="menuitem"
+                    onClick={() => { setMobileMenuOpen(false); setModelOpen(true) }}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <LuWandSparkles className="size-4 text-slate-400" />
+                    <span>Image model ({modelLabel})</span>
+                  </button>
+                  <button
+                    role="menuitem"
                     onClick={() => { setMobileMenuOpen(false); setLibraryOpen(true) }}
                     className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
@@ -763,6 +960,12 @@ const AiChat = () => {
             ? 'The Nexa messages with these links are deleted. This can’t be undone.'
             : 'The files are removed from the chat and from storage. The message text stays. This can’t be undone.')}
         />
+        {modelOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 sm:hidden">
+            <div className="fixed inset-0" onClick={() => setModelOpen(false)} />
+            <div role="menu" className="relative z-10 w-full max-w-xs rounded-2xl bg-white p-2 shadow-xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">{modelMenu}</div>
+          </div>
+        )}
         {/* Mobile popup for timer when triggered from mobile menu */}
         {timerOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 sm:hidden">
@@ -793,8 +996,8 @@ const AiChat = () => {
           ) : (
             <div className="pb-2 pt-4">
               {messages.map((m) => (m.role === 'assistant'
-                ? <NexaBubble key={m._id} message={m} statuses={statuses} onCancel={onCancelStable} onOpen={onOpenStable} onPick={onPickStable} onAsk={askAbout} onImageSaved={imageSaved} onKeep={keepMessage} onDelete={deleteMessage} />
-                : <MyBubble key={m._id} message={m} onKeep={keepMessage} onDelete={deleteMessage} />))}
+                ? <NexaBubble key={m._id} message={m} statuses={statuses} onCancel={onCancelStable} onOpen={onOpenStable} onPick={onPickStable} onAsk={askAbout} onImageSaved={imageSaved} onKeep={keepMessage} onDelete={deleteMessage} onReply={onReplyStable} onRetry={m._id === lastAnswerId && !thinking ? onRetryStable : undefined} />
+                : <MyBubble key={m._id} message={m} onKeep={keepMessage} onDelete={deleteMessage} onEdit={onEditStable} />))}
               <AnimatePresence>{thinking && <Thinking />}</AnimatePresence>
             </div>
           )}
@@ -806,7 +1009,27 @@ const AiChat = () => {
         <AnimatePresence>
           {mediaOpen && <MediaPicker onEmoji={insertEmoji} onMedia={sendMedia} onClose={closeMedia} toggleRef={mediaBtnRef} className="left-4 sm:left-6 lg:left-8" />}
         </AnimatePresence>
-        {error && <p className="mb-2 px-1 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
+        {rewriteOpen && <RewriteMenu ref={rewriteRef} onPick={rewrite} />}
+        {undoText !== null && !rewriting && (
+          <div className="mb-2 flex items-center gap-2 px-1 text-xs text-slate-500 dark:text-slate-400">
+            <LuPenLine className="size-3.5 text-violet-500" /> Rewritten by Nexa
+            <button onClick={() => { setText(undoText); setUndoText(null) }} className="inline-flex items-center gap-1 font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+              <LuUndo2 className="size-3" /> Undo
+            </button>
+            <button onClick={() => setUndoText(null)} className="ml-auto hover:text-slate-700 dark:hover:text-slate-200">Dismiss</button>
+          </div>
+        )}
+        {(error || voice.error) && <p className="mb-2 px-1 text-xs font-medium text-red-600 dark:text-red-400">{error || voice.error}</p>}
+        {replyTo && (
+          <div className="mb-2 flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200 dark:bg-slate-800/50 dark:ring-slate-700/60">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300"><LuReply className="size-4" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-violet-600 dark:text-violet-300">Reply to Nexa</p>
+              <p className="truncate text-[13px] text-slate-500 dark:text-slate-400">{replyTo.text}</p>
+            </div>
+            <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply" title="Cancel (Esc)" className="flex size-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-200/70 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-white"><LuX className="size-4" /></button>
+          </div>
+        )}
         {pending && (
           <div className="mb-2 flex items-center gap-2">
             {pending.url
@@ -832,21 +1055,57 @@ const AiChat = () => {
           >
             <LuSmile className="size-4.5" />
           </button>
-          <textarea
-            onPaste={onPaste}
-            ref={inputRef}
-            rows={1}
-            value={text}
-            onChange={(e) => { setText(e.target.value); history.reset() }}
-            onKeyDown={onKeyDown}
-            maxLength={4000}
-            placeholder={pending ? 'Ask about this file (optional)' : 'Message Nexa'}
-            className="min-h-10 flex-1 resize-none bg-transparent py-2.5 pl-2.5 text-sm leading-5 text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100"
-            style={{ maxHeight: MAX_HEIGHT }}
-          />
-          <button type="submit" disabled={(!text.trim() && !pending) || thinking} aria-label="Send" title="Send" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:bg-indigo-500 active:scale-95 disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-500">
-            <LuSendHorizontal className="size-4" />
-          </button>
+          {voice.recording ? (
+            <div className="flex min-h-10 flex-1 items-center gap-3 px-2">
+              <span className="relative flex size-2.5">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-400 opacity-75" />
+                <span className="relative inline-flex size-2.5 rounded-full bg-red-500" />
+              </span>
+              <span className="text-sm font-medium tabular-nums">{Math.floor(voice.seconds / 60)}:{String(voice.seconds % 60).padStart(2, '0')}</span>
+              <span className="truncate text-xs text-slate-400">Listening… tap ✓ to turn it into text</span>
+              <button type="button" onClick={voice.cancel} className="ml-auto flex size-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10" aria-label="Discard recording" title="Discard"><LuTrash2 className="size-4" /></button>
+            </div>
+          ) : (
+            <textarea
+              onPaste={onPaste}
+              ref={inputRef}
+              rows={1}
+              value={text}
+              onChange={(e) => { setText(e.target.value); history.reset() }}
+              onKeyDown={onKeyDown}
+              maxLength={4000}
+              placeholder={pending ? 'Ask about this file (optional)' : dictating ? 'Turning your voice into text…' : replyTo ? 'Reply to Nexa' : 'Message Nexa'}
+              className="min-h-10 flex-1 resize-none bg-transparent py-2.5 pl-2.5 text-sm leading-5 text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100"
+              style={{ maxHeight: MAX_HEIGHT }}
+            />
+          )}
+          {text.trim().length > 1 && !voice.recording && (
+            <button
+              ref={rewriteBtnRef}
+              type="button"
+              onClick={() => setRewriteOpen((o) => !o)}
+              disabled={rewriting || thinking}
+              aria-label="Rewrite with Nexa"
+              aria-expanded={rewriteOpen}
+              title="Rewrite with Nexa"
+              className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-500/10 dark:hover:text-violet-400 ${rewriteOpen || rewriting ? 'text-violet-600 dark:text-violet-400' : 'text-slate-500 dark:text-slate-400'}`}
+            >
+              <LuPenLine className={`size-4.5 ${rewriting ? 'animate-pulse' : ''}`} />
+            </button>
+          )}
+          {voice.recording ? (
+            <button type="button" onClick={stopDictation} aria-label="Done speaking" title="Done" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:bg-indigo-500 active:scale-95">
+              <LuCheck className="size-4" />
+            </button>
+          ) : !text.trim() && !pending && !thinking ? (
+            <button type="button" onClick={() => { setError(''); voice.start() }} disabled={dictating} aria-label="Voice typing" title="Speak your question" className="flex size-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white">
+              {dictating ? <LuLoaderCircle className="size-4.5 animate-spin" /> : <LuMic className="size-4.5" />}
+            </button>
+          ) : (
+            <button type="submit" disabled={(!text.trim() && !pending) || thinking} aria-label="Send" title="Send" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:bg-indigo-500 active:scale-95 disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-500">
+              <LuSendHorizontal className="size-4" />
+            </button>
+          )}
         </form>
         <p className="mt-1.5 text-center text-[11px] text-slate-400">Nexa is AI and can make mistakes.</p>
       </div>

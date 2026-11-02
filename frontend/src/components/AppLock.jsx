@@ -36,7 +36,7 @@ const AppLockGate = () => {
     if (!lock) return
     const onVisible = () => {
       if (document.hidden) markHidden()
-      else if (awayMinutes() >= (lock.after || 0)) { setLocked(true); setPinValue(''); setError('') }
+      else if ((lock.after ?? 0) >= 0 && awayMinutes() >= (lock.after || 0)) { setLocked(true); setPinValue(''); setError('') }
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)

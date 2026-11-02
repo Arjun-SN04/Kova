@@ -121,8 +121,10 @@ export const sendMessage = async (req, res) => {
     }
 
     const self = isSelf(senderId, receiverId)
+    // Nexa mode: every message in this chat goes to Nexa until they type "exit"
+    const askNexa = req.body.askNexa === true || req.body.askNexa === "true"
     // Notes to self are never "unread"
-    const newMessage = new Message({ senderId, receiverId, message: text, replyTo: replyTo || null, attachment, seen: self })
+    const newMessage = new Message({ senderId, receiverId, message: text, replyTo: replyTo || null, attachment, seen: self, toNexa: askNexa || undefined })
     conversation.messages.push(newMessage._id)
     await Promise.all([conversation.save(), newMessage.save()])
 
@@ -140,7 +142,7 @@ export const sendMessage = async (req, res) => {
     if (!self) onDirectMessage(newMessage).catch((err) => console.log("business hook error:", err.message))
 
     // "@Nexa …": Nexa answers in this chat, for both people (in the background)
-    answerDirectMention({ sender: req.user, otherId: receiverId, message: newMessage, timeZone: zoneHeader(req) })
+    answerDirectMention({ sender: req.user, otherId: receiverId, message: newMessage, timeZone: zoneHeader(req), force: askNexa })
       .catch((err) => console.log("@Nexa (direct) error:", err.message))
   } catch (error) {
     console.log("sendMessage error:", error)

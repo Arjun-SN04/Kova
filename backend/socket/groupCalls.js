@@ -1,51 +1,81 @@
+import { randomUUID } from "crypto"
 import { Group } from "../models/group.model.js"
 import User from "../models/user.model.js"
 import { sendPush } from "../utils/push.js"
 
 // Group voice/video calls. Every participant connects directly to every other one (a "mesh"),
-// so calls are limited to MAX people. The server only rings members and relays connection details.
+// so calls are limited to MAX people. The server only rings people and relays connection details.
+//
+// Two kinds of call share this code, keyed by `groupId`:
+// - a group's call (key = the group's id): members can join; anyone in it can ring members who aren't
+// - an ad-hoc call (key = "room:<uuid>"): made when someone adds people to a one-to-one call.
+//   Only invited people can join; anyone in it can add their own contacts.
 
 export const MAX_GROUP_CALL = 8
-const calls = {} // groupId -> { id, type, startedBy, startedAt, participants: Set<userId> }
+const calls = {} // key -> { id, type, name, startedBy, startedAt, participants: Set, invited?: Set, profiles: {} }
+const isRoom = (key) => String(key || "").startsWith("room:")
 
-const stateOf = (groupId) => {
-  const c = calls[groupId]
-  return c ? { groupId, callId: c.id, type: c.type, participants: [...c.participants], startedAt: c.startedAt } : { groupId, callId: null, participants: [] }
+const stateOf = (key) => {
+  const c = calls[key]
+  return c
+    ? { groupId: key, callId: c.id, type: c.type, name: c.name, room: isRoom(key), participants: [...c.participants], startedAt: c.startedAt, profiles: c.profiles }
+    : { groupId: key, callId: null, participants: [] }
 }
 
-export const registerGroupCallHandlers = (io, socket, userId, userSocketMap) => {
+const profileOf = async (id) => {
+  const u = await User.findById(id).select("fullName avatar")
+  return u ? { _id: String(u._id), fullName: u.fullName, avatar: u.avatar } : { _id: String(id), fullName: "Someone" }
+}
+
+// oneToOne: { peerOf(userId), release(userId) } from socket.js, to move a one-to-one call into a room
+export const registerGroupCallHandlers = (io, socket, userId, userSocketMap, oneToOne) => {
   const sendTo = (id, event, data) => { const sid = userSocketMap[String(id)]; if (sid) io.to(sid).emit(event, data) }
-  const loadGroup = async (groupId) => {
-    const g = await Group.findById(groupId).select("name members announcement admins")
+  const fail = (key, error) => socket.emit("gcall:error", { groupId: key, error })
+
+  // The group (or ad-hoc call) if I may be in it: { _id, name, members, announcement }
+  const loadGroup = async (key) => {
+    if (isRoom(key)) {
+      const c = calls[key]
+      return c?.invited?.has(userId) ? { _id: key, name: c.name, members: [...c.invited], announcement: false } : null
+    }
+    const g = await Group.findById(key).select("name members announcement admins")
     return g && g.members.some((m) => String(m) === userId) ? g : null
   }
-  // Tell every member whether a call is going on (for the "Join" banner)
+  // Tell everyone who could join whether a call is going on (for the "Join" banner)
   const broadcastState = (g) => { const s = stateOf(String(g._id)); for (const m of g.members) sendTo(m, "gcall:state", s) }
 
-  const leave = async (groupId) => {
-    const c = calls[groupId]
+  const ring = async (key, ids, { type, name }) => {
+    const me = await profileOf(userId)
+    const from = { _id: userId, fullName: me.fullName, avatar: me.avatar }
+    for (const m of ids) sendTo(m, "gcall:ringing", { groupId: key, groupName: name, type, from, room: isRoom(key) })
+    sendPush(ids, { title: name, body: `${me.fullName || "Someone"} ${isRoom(key) ? "invited you to a" : "started a group"} ${type} call`, tag: `gcall-${key}`, urgent: true }).catch(() => {})
+  }
+
+  const leave = async (key) => {
+    const c = calls[key]
     if (!c || !c.participants.has(userId)) return
     c.participants.delete(userId)
-    for (const p of c.participants) sendTo(p, "gcall:peer-left", { groupId, userId })
-    if (!c.participants.size) delete calls[groupId]
-    const g = await Group.findById(groupId).select("members")
+    for (const p of c.participants) sendTo(p, "gcall:peer-left", { groupId: key, userId })
+    const g = await loadGroupFor(key, c)
+    if (!c.participants.size) delete calls[key]
     if (g) broadcastState(g)
   }
+  // Members to tell about a change (also after the call was deleted)
+  const loadGroupFor = async (key, c) => isRoom(key)
+    ? { _id: key, members: [...(c.invited || [])] }
+    : Group.findById(key).select("members")
 
   // Start a call (or join the one already going) and ring the others
   socket.on("gcall:start", async ({ groupId, type } = {}) => {
     try {
-      if (!["voice", "video"].includes(type)) return
+      if (!["voice", "video"].includes(type) || isRoom(groupId)) return
       const g = await loadGroup(groupId)
-      if (!g) return socket.emit("gcall:error", { groupId, error: "You're not in that group" })
-      if (g.announcement) return socket.emit("gcall:error", { groupId, error: "Calls aren't available in announcement groups" })
+      if (!g) return fail(groupId, "You're not in that group")
+      if (g.announcement) return fail(groupId, "Calls aren't available in announcement groups")
       const gid = String(g._id)
       if (!calls[gid]) {
-        calls[gid] = { id: `${gid}-${Date.now()}`, type, startedBy: userId, startedAt: Date.now(), participants: new Set() }
-        const me = await User.findById(userId).select("fullName avatar")
-        const others = g.members.map(String).filter((m) => m !== userId)
-        for (const m of others) sendTo(m, "gcall:ringing", { groupId: gid, groupName: g.name, type, from: { _id: userId, fullName: me?.fullName, avatar: me?.avatar } })
-        sendPush(others, { title: g.name, body: `${me?.fullName || "Someone"} started a group ${type} call`, tag: `gcall-${gid}`, urgent: true }).catch(() => {})
+        calls[gid] = { id: `${gid}-${Date.now()}`, type, name: g.name, startedBy: userId, startedAt: Date.now(), participants: new Set(), profiles: {} }
+        await ring(gid, g.members.map(String).filter((m) => m !== userId), { type, name: g.name })
       }
       await join(g)
     } catch (err) {
@@ -56,13 +86,14 @@ export const registerGroupCallHandlers = (io, socket, userId, userSocketMap) => 
   const join = async (g) => {
     const gid = String(g._id)
     const c = calls[gid]
-    if (!c) return socket.emit("gcall:error", { groupId: gid, error: "That call has ended" })
-    if (!c.participants.has(userId) && c.participants.size >= MAX_GROUP_CALL) return socket.emit("gcall:error", { groupId: gid, error: `Group calls are limited to ${MAX_GROUP_CALL} people` })
+    if (!c) return fail(gid, "That call has ended")
+    if (!c.participants.has(userId) && c.participants.size >= MAX_GROUP_CALL) return fail(gid, `Calls are limited to ${MAX_GROUP_CALL} people`)
     // The new person calls everyone already there
     const existing = [...c.participants].filter((p) => p !== userId)
     c.participants.add(userId)
-    socket.emit("gcall:joined", { groupId: gid, callId: c.id, type: c.type, participants: existing, startedAt: c.startedAt })
-    for (const p of existing) sendTo(p, "gcall:peer-joined", { groupId: gid, userId })
+    c.profiles[userId] ||= await profileOf(userId)
+    socket.emit("gcall:joined", { groupId: gid, callId: c.id, type: c.type, name: c.name, room: isRoom(gid), participants: existing, startedAt: c.startedAt, profiles: c.profiles })
+    for (const p of existing) sendTo(p, "gcall:peer-joined", { groupId: gid, userId, profile: c.profiles[userId] })
     broadcastState(g)
   }
 
@@ -70,8 +101,61 @@ export const registerGroupCallHandlers = (io, socket, userId, userSocketMap) => 
     try {
       const g = await loadGroup(groupId)
       if (g) await join(g)
+      else fail(groupId, "That call has ended")
     } catch (err) {
       console.log("gcall:join error:", err.message)
+    }
+  })
+
+  // Add people to the call I'm in: group members (group call) or my contacts (ad-hoc call)
+  socket.on("gcall:add", async ({ groupId, userIds } = {}) => {
+    try {
+      const key = String(groupId)
+      const c = calls[key]
+      if (!c?.participants.has(userId)) return
+      const wanted = [...new Set((Array.isArray(userIds) ? userIds : []).map(String))].filter((id) => id !== userId && !c.participants.has(id)).slice(0, MAX_GROUP_CALL)
+      if (!wanted.length) return
+      if (c.participants.size + wanted.length > MAX_GROUP_CALL) return fail(key, `Calls are limited to ${MAX_GROUP_CALL} people`)
+      let allowed
+      if (isRoom(key)) {
+        const me = await User.findById(userId).select("contacts")
+        const mine = new Set((me?.contacts || []).map(String))
+        allowed = wanted.filter((id) => mine.has(id))
+        allowed.forEach((id) => c.invited.add(id))
+      } else {
+        const g = await Group.findById(key).select("members")
+        const members = new Set((g?.members || []).map(String))
+        allowed = wanted.filter((id) => members.has(id))
+      }
+      if (!allowed.length) return fail(key, "You can only add your contacts")
+      await ring(key, allowed, { type: c.type, name: c.name })
+      socket.emit("gcall:added", { groupId: key, userIds: allowed })
+      if (isRoom(key)) broadcastState({ _id: key, members: [...c.invited] })
+    } catch (err) {
+      console.log("gcall:add error:", err.message)
+    }
+  })
+
+  // Adding people to a one-to-one call: both of us move into a new ad-hoc call, and the new people are rung
+  socket.on("gcall:upgrade", async ({ peerId, type, userIds } = {}) => {
+    try {
+      const peer = String(peerId || "")
+      if (!["voice", "video"].includes(type) || !peer || oneToOne?.peerOf(userId) !== peer) return fail(null, "That call has ended")
+      const me = await User.findById(userId).select("contacts fullName")
+      const mine = new Set((me?.contacts || []).map(String))
+      const added = [...new Set((Array.isArray(userIds) ? userIds : []).map(String))].filter((id) => id !== userId && id !== peer && mine.has(id)).slice(0, MAX_GROUP_CALL - 2)
+      if (!added.length) return fail(null, "Pick at least one contact to add")
+      const key = `room:${randomUUID()}`
+      const people = await Promise.all([userId, peer, ...added].map(profileOf))
+      const name = people.map((p) => p.fullName?.split(" ")[0]).filter(Boolean).slice(0, 3).join(", ") + (people.length > 3 ? ` +${people.length - 3}` : "")
+      calls[key] = { id: `${key}-${Date.now()}`, type, name, startedBy: userId, startedAt: Date.now(), participants: new Set(), invited: new Set([userId, peer, ...added]), profiles: {} }
+      // The one-to-one call ends quietly (it's logged); both sides switch to the new call
+      oneToOne.release(userId)
+      socket.emit("gcall:moved", { groupId: key, groupName: name, type })
+      sendTo(peer, "gcall:moved", { groupId: key, groupName: name, type })
+      await ring(key, added, { type, name })
+    } catch (err) {
+      console.log("gcall:upgrade error:", err.message)
     }
   })
 
@@ -80,6 +164,13 @@ export const registerGroupCallHandlers = (io, socket, userId, userSocketMap) => 
     const c = calls[String(groupId)]
     if (!c || !c.participants.has(userId) || !c.participants.has(String(to))) return
     sendTo(to, "gcall:signal", { groupId: String(groupId), from: userId, data })
+  })
+
+  // Mute / camera / screen-share changes, shown on my tile for everyone
+  socket.on("gcall:media", ({ groupId, muted, cameraOff, sharing } = {}) => {
+    const c = calls[String(groupId)]
+    if (!c?.participants.has(userId)) return
+    for (const p of c.participants) if (p !== userId) sendTo(p, "gcall:media", { groupId: String(groupId), userId, muted: !!muted, cameraOff: !!cameraOff, sharing: !!sharing })
   })
 
   socket.on("gcall:leave", ({ groupId } = {}) => { leave(String(groupId)).catch(() => {}) })

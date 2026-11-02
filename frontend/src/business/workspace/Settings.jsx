@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { QRCodeCanvas } from 'qrcode.react'
-import { LuBadgeCheck, LuCheck, LuCopy, LuImagePlus, LuPlus, LuTrash2 } from 'react-icons/lu'
+import { LuBadgeCheck, LuCheck, LuCopy, LuImagePlus, LuPlus, LuQrCode, LuTrash2 } from 'react-icons/lu'
 import { compressImage } from '../../utils/attachments'
 import { useAuth } from '../../context/AuthProvider'
 import Avatar from '../../home/Avatar'
 import useBusiness from '../store'
-import { CATEGORIES, DAY_FULL, categoryCover, DEFAULT_HOURS, LABEL_COLORS, api, bizUrl, errorOf, shopUrl, timeZones } from '../utils'
+import { CATEGORIES, DAY_FULL, categoryCover, DEFAULT_HOURS, LABEL_COLORS, api, bizUrl, errorOf, shopUrl, timeZones, upiLink } from '../utils'
 import { Field, PageHeader, Panel, Toggle, btn, inputCls, textareaCls } from './ui'
 import Select from '../../components/ui/Select'
 import { SwitchToPersonal } from '../AccountExtras'
@@ -110,6 +110,61 @@ const CoverPicker = ({ ws, category }) => {
   )
 }
 
+// ── Payment QR: customers scan it from payment requests and the business page ──
+const PaymentQrPicker = ({ ws, upiId }) => {
+  const [AuthUser, setAuthUser] = useAuth()
+  const b = ws.business.business
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [label, setLabel] = useState(b.paymentQr?.label || '')
+  const input = useRef(null)
+  const upload = async (file) => {
+    setBusy(true); setError('')
+    try {
+      const body = new FormData()
+      if (file) {
+        // QR codes must stay sharp: only shrink big photos
+        const small = file.size > 1.5 * 1024 * 1024 ? await compressImage(file) : file
+        if (small.size > 2 * 1024 * 1024) throw new Error('That image is too large (max 2 MB)')
+        body.append('qr', small, small.name || 'payment-qr.png')
+        body.append('label', label)
+      }
+      const res = await axios.put('/api/business/payment-qr', body, api)
+      ws.setBusiness({ business: res.data.business })
+      const user = { ...AuthUser, business: res.data.business }
+      localStorage.setItem('chatUser', JSON.stringify(user))
+      setAuthUser(user)
+    } catch (err) { setError(err.response ? errorOf(err) : err.message) } finally { setBusy(false) }
+  }
+  const qr = b.paymentQr?.url
+  const autoUpi = !qr && /^[\w.-]{2,}@[a-z]{2,}$/i.test(upiId || '')
+  return (
+    <Panel title="Payment QR code" description="Upload the QR from your UPI, bank or wallet app. Customers see it on payment requests and on your business page, and can scan it to pay.">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+        <div className="flex size-44 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 dark:border-slate-700">
+          {qr ? <img src={qr} alt="Your payment QR code" className="size-full object-contain" />
+            : autoUpi ? <QRCodeCanvas value={upiLink({ upiId, payee: ws.business.fullName })} size={160} />
+              : <LuQrCode className="size-12 text-slate-300 dark:text-slate-600" />}
+        </div>
+        <div className="min-w-0 flex-1 space-y-3">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            {qr ? 'Customers see this QR.' : autoUpi ? <>No QR uploaded, so customers see one made from your UPI ID <b>{upiId}</b>. Upload your own to replace it.</> : 'No QR yet. Upload one, or add a UPI ID above and Kova makes one for you.'}
+          </p>
+          <Field label="Label (optional)" hint="Shown above the QR, e.g. “GPay · PhonePe · Paytm”.">
+            <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={40} className={inputCls} placeholder="Scan with any UPI app" />
+          </Field>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => input.current?.click()} disabled={busy} className={btn.secondary}><LuImagePlus className="size-4" /> {busy ? 'Uploading…' : qr ? 'Replace QR' : 'Upload QR'}</button>
+            {qr && <button onClick={() => upload(null)} disabled={busy} className={btn.ghost}><LuTrash2 className="size-4" /> Remove</button>}
+          </div>
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        </div>
+        <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) upload(f) }} />
+      </div>
+    </Panel>
+  )
+}
+
 // ── Profile & hours (the owner's public profile) ───────────────
 const ProfileSection = ({ ws }) => {
   const [AuthUser, setAuthUser] = useAuth()
@@ -149,6 +204,7 @@ const ProfileSection = ({ ws }) => {
           <Field label="UPI ID" hint="Payment requests show a “Pay with UPI” button with this ID." className="sm:col-span-2"><input value={form.upiId} onChange={set('upiId')} maxLength={80} className={inputCls} placeholder="meera@okhdfc" /></Field>
         </div>
       </Panel>
+      <PaymentQrPicker ws={ws} upiId={form.upiId} />
       <Panel title="Opening hours" description="Outside these hours customers get your away message, and the chat shows “Closed”.">
         <div className="space-y-2">
           {hours.map((d, i) => (

@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
+import { QRCodeCanvas } from 'qrcode.react'
 import axios from 'axios'
 import { Link } from 'react-router-dom'
-import { LuCalendarCheck, LuCalendarPlus, LuCheck, LuMapPin, LuCircleCheck, LuCopy, LuExternalLink, LuIndianRupee, LuMessageSquare, LuPackage, LuShoppingBag, LuSquare, LuSquareCheck, LuVideo } from 'react-icons/lu'
+import { LuCalendarCheck, LuCalendarPlus, LuCheck, LuMapPin, LuCircleCheck, LuCopy, LuExternalLink, LuIndianRupee, LuMessageSquare, LuPackage, LuQrCode, LuShoppingBag, LuSquare, LuSquareCheck, LuVideo, LuX } from 'react-icons/lu'
 import { api, errorOf, formatWhen, money, statusOf, upiLink } from './utils'
 import { useAuth } from '../context/AuthProvider'
 import useConversation from '../Zustand/UserConversation'
@@ -98,7 +99,10 @@ const OrderCard = ({ card, mine }) => {
 const PaymentCard = ({ message, card, mine }) => {
   const { busy, error, run } = useAction()
   const [copied, setCopied] = useState(false)
+  const [qrOpen, setQrOpen] = useState(false)
   const paid = card.status === 'paid'
+  // Their uploaded QR, or one made from the UPI ID with this amount filled in
+  const hasQr = !!card.qr || !!card.upiId
   const claimed = card.status === 'claimed'
   const copy = async () => {
     try { await navigator.clipboard.writeText(card.upiId); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { /* ignore */ }
@@ -132,9 +136,21 @@ const PaymentCard = ({ message, card, mine }) => {
           ) : (
             <p className="w-full text-xs text-slate-500 dark:text-slate-400">Pay the business directly (cash or card).</p>
           )}
+          {hasQr && <button onClick={() => setQrOpen((o) => !o)} className={secondary}><LuQrCode className="size-3.5" /> {qrOpen ? 'Hide QR' : 'Scan QR'}</button>}
           {!claimed && (
             <button disabled={busy} onClick={() => run(() => axios.put(`/api/business/payments/${message._id}/claim`, {}, api))} className={secondary}>I've paid</button>
           )}
+        </div>
+      )}
+      {!mine && !paid && qrOpen && (
+        <div className="relative border-t border-slate-100 p-3 text-center dark:border-slate-800">
+          <button onClick={() => setQrOpen(false)} className="absolute right-2 top-2 rounded-md p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Hide QR"><LuX className="size-3.5" /></button>
+          <div className="mx-auto w-fit rounded-xl bg-white p-2 ring-1 ring-slate-200">
+            {card.qr
+              ? <a href={card.qr} target="_blank" rel="noreferrer"><img src={card.qr} alt={`Payment QR for ${card.payee || 'the business'}`} className="size-48 object-contain" /></a>
+              : <QRCodeCanvas value={upiLink(card)} size={180} />}
+          </div>
+          <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">{card.qr ? `Scan to pay ${card.payee || 'the business'}, then enter ${money(card.amount)}` : `Scan with any UPI app · ${money(card.amount)} is filled in`}</p>
         </div>
       )}
       {mine && (

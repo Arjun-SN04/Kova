@@ -26,6 +26,9 @@ import { isBusiness } from '../../business/utils'
 
 const MAX_HEIGHT = 160
 const TYPING_IDLE_MS = 2500
+const MENTION_RE = /(^|[^\w@])@nexa\b/i
+// Typed while Nexa mode is on: leave it (nothing is sent)
+const EXIT_RE = /^\/?(exit|quit|@nexa exit|exit nexa|stop nexa)[\s.!]*$/i
 
 // Message composer. Also handles editing a message and replying to one:
 // both show a banner above the input. Enter sends, Shift+Enter adds a line,
@@ -71,6 +74,11 @@ const TypeSent = () => {
   }, [nexaOpen])
   const myId = String(AuthUser?._id)
   const { socket } = useSocket()
+
+  // Nexa mode: after "@Nexa", every message in this chat goes to Nexa until you type "exit"
+  const chatKey = String(selectedConversation?._id || '')
+  const nexaMode = useConversation((st) => !!st.nexaMode[chatKey])
+  const setNexaMode = useConversation((st) => st.setNexaMode)
 
   // Business accounts: quick replies ("/"), product cards and payment requests in chats with customers
   const bizSettings = useBusiness((st) => st.settings)
@@ -265,13 +273,18 @@ const TypeSent = () => {
     const queue = useConversation.getState().pendingFiles
     if (!text.trim() && !queue.length) return
     const value = text
+    // "exit" leaves Nexa mode; a lone "@Nexa" turns it on (neither is sent)
+    if (!queue.length && nexaMode && EXIT_RE.test(value.trim())) { setNexaMode(chatKey, false); setText(''); history.reset(); return }
+    if (!queue.length && !nexaMode && /^@nexa$/i.test(value.trim())) { setNexaMode(chatKey, true); setText(''); inputRef.current?.focus(); return }
+    const askNexa = nexaMode
+    if (!nexaMode && MENTION_RE.test(value)) setNexaMode(chatKey, true)
     const replyId = replyingTo?._id || null
     stopTypingSignal()
     setText('')
     setUndoText(null)
     setReplyingTo(null)
     if (!queue.length) {
-      const sendError = await sendMessage(value, replyId, null, setProgress)
+      const sendError = await sendMessage(value, replyId, null, setProgress, null, { askNexa })
       if (sendError) { setError(sendError); setText(value) }
       inputRef.current?.focus()
       return
@@ -281,7 +294,7 @@ const TypeSent = () => {
     for (let i = 0; i < queue.length; i++) {
       setSendingIndex(i)
       const item = queue[i]
-      const sendError = await sendMessage(i === 0 ? value : '', i === 0 ? replyId : null, item.file, (p) => setProgress((i + p) / queue.length))
+      const sendError = await sendMessage(i === 0 ? value : '', i === 0 ? replyId : null, item.file, (p) => setProgress((i + p) / queue.length), null, { askNexa: askNexa && i === 0 })
       if (sendError) {
         setError(queue.length > 1 ? `${item.file.name}: ${sendError}` : sendError)
         if (i === 0) setText(value)
@@ -311,6 +324,7 @@ const TypeSent = () => {
     if (!editingMessage && history.onKeyDown(e)) return
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() }
     else if (e.key === 'Escape' && (editingMessage || replyingTo)) { e.preventDefault(); cancel() }
+    else if (e.key === 'Escape' && nexaMode && !text) { e.preventDefault(); setNexaMode(chatKey, false) }
   }
 
   // ── Voice notes ──────────────────────────────────────────
@@ -388,10 +402,32 @@ const TypeSent = () => {
         <button onClick={mentionNexa} className="mb-2 inline-flex max-w-full items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[13px] shadow-sm ring-1 ring-violet-200 transition hover:bg-violet-50 dark:bg-slate-800 dark:ring-violet-500/30 dark:hover:bg-violet-500/10">
           <img src="/images/nexa-avatar.jpg" alt="" className="size-5 shrink-0 rounded-full object-cover" />
           <span className="shrink-0 font-medium">@Nexa</span>
-          <span className="min-w-0 truncate text-slate-500 dark:text-slate-400">{selectedConversation?.isGroup ? 'ask the AI, answers for everyone' : selectedConversation?.isSelf ? 'ask the AI here' : 'ask the AI, both of you see it'}</span>
+          <span className="min-w-0 truncate text-slate-500 dark:text-slate-400">{selectedConversation?.isGroup ? 'Nexa mode: answers for everyone' : selectedConversation?.isSelf ? 'Nexa mode: ask the AI here' : 'Nexa mode: both of you see it'} · type exit to stop</span>
           <kbd className="ml-1 hidden shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 font-sans text-[10px] font-medium text-slate-500 sm:inline dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">Tab</kbd>
         </button>
       )}
+
+      <AnimatePresence initial={false}>
+        {nexaMode && !editingMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.15 }}
+            className="mb-2 flex items-center gap-2 rounded-xl bg-violet-50 px-2.5 py-1.5 text-xs text-violet-800 ring-1 ring-violet-200 dark:bg-violet-500/10 dark:text-violet-200 dark:ring-violet-500/30"
+            role="status"
+          >
+            <img src="/images/nexa-avatar.jpg" alt="" className="size-5 shrink-0 rounded-full object-cover" />
+            <span className="min-w-0 flex-1 truncate">
+              <span className="font-semibold">Nexa mode</span>
+              <span className="text-violet-600/80 dark:text-violet-300/80"> · {selectedConversation?.isGroup ? 'Nexa answers every message you send, for everyone' : selectedConversation?.isSelf ? 'Nexa answers every message you send' : 'Nexa answers every message you send, both of you see it'} · type <kbd className="rounded bg-white/70 px-1 font-sans font-medium dark:bg-white/10">exit</kbd> to stop</span>
+            </span>
+            <button type="button" onClick={() => setNexaMode(chatKey, false)} className="shrink-0 rounded-md px-2 py-0.5 font-medium text-violet-700 transition hover:bg-violet-100 dark:text-violet-200 dark:hover:bg-violet-500/20">
+              Exit
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {undoText !== null && !rewriting && (
         <div className="mb-2 flex items-center gap-2 px-1 text-xs text-slate-500 dark:text-slate-400">
@@ -409,7 +445,9 @@ const TypeSent = () => {
 
       <form
         onSubmit={handleSubmit}
-        data-attach-anchor className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition focus-within:border-indigo-300 focus-within:ring-4 focus-within:ring-indigo-500/10 dark:border-slate-800 dark:bg-slate-900 dark:focus-within:border-indigo-500/50"
+        data-attach-anchor className={`overflow-hidden rounded-2xl border bg-white shadow-xs transition focus-within:ring-4 dark:bg-slate-900 ${nexaMode && !editingMessage
+          ? 'border-violet-300 focus-within:border-violet-400 focus-within:ring-violet-500/15 dark:border-violet-500/40 dark:focus-within:border-violet-500/60'
+          : 'border-slate-200 focus-within:border-indigo-300 focus-within:ring-indigo-500/10 dark:border-slate-800 dark:focus-within:border-indigo-500/50'}`}
       >
         {/* Reply / edit context, attached to the top of the box */}
         <AnimatePresence initial={false}>
@@ -574,7 +612,7 @@ const TypeSent = () => {
               onChange={handleChange}
               onKeyDown={onKeyDown}
               onPaste={onPaste}
-              placeholder={editingMessage ? 'Edit your message' : selectedConversation?.isGroup ? `Message ${selectedConversation.name}` : firstName ? `Message ${firstName}` : 'Write a message'}
+              placeholder={editingMessage ? 'Edit your message' : nexaMode ? 'Ask Nexa anything… (exit to stop)' : selectedConversation?.isGroup ? `Message ${selectedConversation.name}` : firstName ? `Message ${firstName}` : 'Write a message'}
               className="min-h-10 flex-1 resize-none bg-transparent py-2.5 pl-1 text-sm leading-5 text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100"
               style={{ maxHeight: MAX_HEIGHT }}
             />

@@ -103,7 +103,6 @@ const TOPICS = [
           '3. Tap the quote any time to jump back to the original message.',
           '## React',
           '• Tap React and pick any emoji.',
-          '• Double-click a message for a quick ❤️.',
           '• Each person can leave one reaction. Tap yours again to remove it.',
           '## Forward',
           '1. Open ⋯ → Forward.',

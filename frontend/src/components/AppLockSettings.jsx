@@ -145,7 +145,10 @@ const AppLockSettings = () => {
           <div className="flex flex-col gap-2.5 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <LuTimer className="size-4 shrink-0 text-slate-400" />
-              <p className="min-w-0 flex-1 text-sm font-medium">Lock</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">Ask for the PIN again</p>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">After you leave Kova (switch apps or tabs) for this long.</p>
+              </div>
             </div>
             <div className="w-full shrink-0 pl-7 sm:w-44 sm:pl-0">
               <Select size="sm" value={lock.after ?? 0} onChange={(v) => updateLock(id, { after: Number(v) })} options={LOCK_AFTER} aria-label="Lock after" />

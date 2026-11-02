@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { useSocket } from './SocketProvider'
 import CallScreen from '../home/call/CallScreen'
 import { playEndTone, startRingback, startRingtone } from '../utils/callTones'
+import { cameraTrack, replaceVideoTrack, screenTrack } from '../utils/callMedia'
 
 // One-to-one voice and video calls over WebRTC. The socket server only rings
 // the other person and passes connection details between the two browsers;
@@ -39,6 +40,10 @@ const CallProvider = ({ children }) => {
   const [remoteStream, setRemoteStream] = useState(null)
   const [muted, setMuted] = useState(false)
   const [cameraOff, setCameraOff] = useState(false)
+  const [sharing, setSharing] = useState(false)          // my screen instead of my camera
+  const [facing, setFacing] = useState('user')           // front / back camera
+  const [peerMedia, setPeerMedia] = useState({})         // the other person's { muted, cameraOff, sharing }
+  const [minimized, setMinimized] = useState(false)      // small floating card, so you can keep chatting
 
   const callRef = useRef(null)          // latest call, for socket handlers
   const pcRef = useRef(null)
@@ -64,7 +69,9 @@ const CallProvider = ({ children }) => {
     pcRef.current?.close(); pcRef.current = null
     localRef.current?.getTracks().forEach((t) => t.stop()); localRef.current = null
     pendingIce.current = []
+    cameraBackup.current?.stop(); cameraBackup.current = null
     setLocalStream(null); setRemoteStream(null); setMuted(false); setCameraOff(false)
+    setSharing(false); setFacing('user'); setPeerMedia({}); setMinimized(false)
 
     if (silent) return update(null)
     playEndTone()
@@ -77,6 +84,10 @@ const CallProvider = ({ children }) => {
     const c = callRef.current
     if (c) emit('call:signal', { to: c.peer._id, callId: c.id, data })
   }
+
+  // Tell the other side when I mute, turn my camera off or share my screen
+  const sendMedia = (next = {}) => signal({ media: { muted: localRef.current?.getAudioTracks()[0]?.enabled === false, cameraOff: localRef.current?.getVideoTracks()[0]?.enabled === false, sharing: false, ...next } })
+  const cameraBackup = useRef(null) // the camera track while my screen is shared
 
   const getMedia = async (type) => {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('unsupported')
@@ -95,6 +106,7 @@ const CallProvider = ({ children }) => {
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'connected') {
         update((c) => (c && c.status !== 'active' ? { ...c, status: 'active', startedAt: Date.now() } : c))
+        sendMedia({ sharing: !!cameraBackup.current })
       } else if (pc.connectionState === 'failed') {
         const c = callRef.current
         if (c) emit('call:end', { callId: c.id })
@@ -173,6 +185,7 @@ const CallProvider = ({ children }) => {
     if (!track) return
     track.enabled = !track.enabled
     setMuted(!track.enabled)
+    sendMedia({ sharing: !!cameraBackup.current })
   }
 
   const toggleCamera = () => {
@@ -180,7 +193,63 @@ const CallProvider = ({ children }) => {
     if (!track) return
     track.enabled = !track.enabled
     setCameraOff(!track.enabled)
+    sendMedia({ sharing: !!cameraBackup.current })
   }
+
+  // Put a new video track in my stream and send it instead of the old one
+  const swapVideo = async (track) => {
+    const stream = localRef.current
+    const old = stream?.getVideoTracks()[0]
+    if (!stream || !old) return null
+    stream.removeTrack(old)
+    stream.addTrack(track)
+    if (pcRef.current) await replaceVideoTrack([pcRef.current], track)
+    setLocalStream(new MediaStream(stream.getTracks()))
+    return old
+  }
+
+  // Front / back camera (phones)
+  const flipCamera = async () => {
+    if (callRef.current?.type !== 'video' || cameraBackup.current) return
+    const next = facing === 'user' ? 'environment' : 'user'
+    try {
+      const track = await cameraTrack(next)
+      track.enabled = !cameraOff
+      const old = await swapVideo(track)
+      old?.stop()
+      setFacing(next)
+    } catch { /* no second camera */ }
+  }
+
+  // Share my screen instead of my camera (video calls); the browser's "Stop sharing" also ends it
+  const toggleShare = async () => {
+    if (callRef.current?.type !== 'video') return
+    if (cameraBackup.current) {
+      const camera = cameraBackup.current
+      cameraBackup.current = null
+      const screen = await swapVideo(camera)
+      screen?.stop()
+      setSharing(false)
+      return sendMedia({ sharing: false })
+    }
+    const track = await screenTrack()
+    if (!track || !callRef.current) return track?.stop()
+    track.onended = () => { if (cameraBackup.current) toggleShare() }
+    cameraBackup.current = await swapVideo(track)
+    setSharing(true)
+    sendMedia({ sharing: true })
+  }
+
+  // Adding people moves this call into a group call (GroupCallProvider takes over)
+  const addPeople = (userIds) => {
+    const c = callRef.current
+    if (!c || c.status !== 'active') return
+    emit('gcall:upgrade', { peerId: c.peer._id, type: c.type, userIds })
+  }
+  // End this call without a tone or "Call ended" (it continues as a group call)
+  const handOff = useCallback(() => {
+    if (callRef.current) finish('ended', { silent: true })
+  }, [finish])
 
   // ── Socket events ─────────────────────────────────────────
   useEffect(() => {
@@ -210,6 +279,7 @@ const CallProvider = ({ children }) => {
 
     const onSignal = async ({ callId, data }) => {
       if (callRef.current?.id !== callId) return
+      if (data.media) return setPeerMedia(data.media)
       const pc = pcRef.current
       try {
         if (data.sdp) {
@@ -259,7 +329,10 @@ const CallProvider = ({ children }) => {
     return () => window.removeEventListener('beforeunload', onUnload)
   }, [call])
 
-  const value = { call, localStream, remoteStream, muted, cameraOff, startCall, acceptCall, declineCall, hangUp, toggleMute, toggleCamera }
+  const value = {
+    call, localStream, remoteStream, muted, cameraOff, sharing, peerMedia, minimized, setMinimized,
+    startCall, acceptCall, declineCall, hangUp, toggleMute, toggleCamera, flipCamera, toggleShare, addPeople, handOff,
+  }
 
   return (
     <CallContext.Provider value={value}>
