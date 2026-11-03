@@ -18,6 +18,8 @@ import useBusinessSocket from '../business/useBusinessSocket'
 import LockDialogHost from './leftpart/LockDialogHost'
 import WallpaperPickerHost from './WallpaperPickerHost'
 import MiniPlayer from './MiniPlayer'
+import useSidebar from '../Zustand/useSidebar'
+import { NavRail } from './leftpart/NavRail'
 import { resumeLiveShares } from '../utils/liveLocation'
 import { channelsApi, loadChannels } from '../utils/channels'
 import { HideChatsHost } from './leftpart/HiddenChats'
@@ -158,6 +160,19 @@ const ChatLayout = () => {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
+  // Collapsed side panel (computers): a slim strip with an expand button; Ctrl/Cmd+B toggles
+  const collapsed = useSidebar((s) => s.collapsed)
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b' && window.innerWidth >= 768) {
+        e.preventDefault()
+        useSidebar.getState().toggle()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const onPointerDown = (e) => {
     drag.current = { x: e.clientX, w: width }
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -199,8 +214,10 @@ const ChatLayout = () => {
       <div className="flex h-dvh flex-col overflow-hidden bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <MiniPlayer />
       <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Chat list hidden (Ctrl/Cmd+B): the section rail stays, with all its icons */}
+        {collapsed && <div className="hidden md:flex"><NavRail /></div>}
         <aside
-          className={`${selectedConversation ? 'hidden md:flex' : 'flex'} w-full shrink-0 md:w-[var(--sidebar-w)]`}
+          className={`${selectedConversation ? 'hidden' : 'flex'} ${collapsed ? 'md:hidden' : 'md:flex'} w-full shrink-0 md:w-[var(--sidebar-w)]`}
           style={{ '--sidebar-w': `${width}px` }}
         >
           <Left />
@@ -213,7 +230,7 @@ const ChatLayout = () => {
           onPointerUp={onPointerUp}
           onDoubleClick={resetWidth}
           title="Drag to resize · double-click to reset to device default"
-          className="group relative hidden w-px shrink-0 cursor-col-resize bg-slate-200 md:block dark:bg-slate-800"
+          className={`group relative hidden w-px shrink-0 cursor-col-resize bg-slate-200 dark:bg-slate-800 ${collapsed ? '' : 'md:block'}`}
         >
           <div className="absolute inset-y-0 -left-2 -right-2 z-10" />
           <div className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-indigo-500 opacity-0 transition-opacity group-hover:opacity-100" />

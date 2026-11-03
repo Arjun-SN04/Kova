@@ -10,6 +10,8 @@ export const wantsCreative = (text = "") => {
   const t = String(text || "").trim()
   if (!t || t.length > 1200) return false
   if (ABOUT_RE.test(t)) return false
+  // "lyrics of the song above", "give me the lyrics": an existing song, not new writing
+  if (/\blyrics?\b/i.test(t) && !/\b(write|compose|create|make|generate|likh|bana)\b/i.test(t)) return false
   if (CREATIVE_VERBS.test(t) && (CREATIVE_FORMS.test(t) || GENERAL_FORMS.test(t))) return true
   if (CREATIVE_FORMS.test(t)) return true
   if (GENERAL_FORMS.test(t) && /\b(romantic|love|sad|heart|emotional|dosti|friendship|deep|short|beautiful|sweet|cute|breakup|attitude|for|about|on)\b/i.test(t)) return true

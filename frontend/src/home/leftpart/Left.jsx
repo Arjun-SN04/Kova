@@ -1,6 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React from 'react'
 import { Link } from 'react-router-dom'
-import { LuLayers, LuMoon, LuSquarePen, LuSun, LuUserPlus, LuUsers, LuContact } from 'react-icons/lu'
+import { LuBriefcase, LuContact, LuEllipsisVertical, LuLayers, LuMoon, LuSquarePen, LuSun, LuUserPlus, LuUsers } from 'react-icons/lu'
+import HeaderMenu from '../../components/HeaderMenu'
+import useBusiness from '../../business/store'
+import useIsPhone from '../../hooks/useIsPhone'
 import Users from './Users'
 import CallsPanel from './CallsPanel'
 import CommunitiesPanel from './CommunitiesPanel'
@@ -8,7 +11,7 @@ import ChannelsPanel from '../channels/ChannelsPanel'
 import StarredPanel from './StarredPanel'
 import NotifyBanner from './NotifyBanner'
 import StatusPanel from '../status/StatusPanel'
-import { BusinessLink, MobileTabs, NavRail } from './NavRail'
+import { MobileTabs, NavRail } from './NavRail'
 import ContactsDialog from './ContactsDialog'
 import CreateGroupDialog from '../groups/CreateGroupDialog'
 import useConversation from '../../Zustand/UserConversation'
@@ -18,24 +21,15 @@ import { useTheme } from '../../context/ThemeProvider'
 const iconBtn =
   'flex size-8 sm:size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white'
 
-// The Chats panel: chat list with search, tabs and the New / Add contact buttons
+// The Chats panel: chat list with search and tabs. The header keeps two buttons: ✎ New
+// (group, community, contact) and ⋯ More (contacts, requests; on phones also business and theme).
 const ChatsPanel = () => {
   const { dark, toggle } = useTheme()
   const { requests, setContactsDialog, setCreateDialog } = useConversation()
   const incoming = requests.incoming.length
-
-  // "New" menu: group or community
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef(null)
-  useEffect(() => {
-    if (!menuOpen) return
-    const onDown = (e) => !menuRef.current?.contains(e.target) && setMenuOpen(false)
-    const onKey = (e) => e.key === 'Escape' && setMenuOpen(false)
-    document.addEventListener('mousedown', onDown)
-    window.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey) }
-  }, [menuOpen])
-  const startNew = (mode) => { setMenuOpen(false); setCreateDialog({ mode }) }
+  const waiting = useBusiness((st) => st.alerts.length)
+  const hasBusiness = useBusiness((st) => !!st.me?.business?.enabled || st.me?.workFor?.length > 0)
+  const phone = useIsPhone() // business and theme are in this menu only on phones (computers have the rail)
 
   return (
     <>
@@ -46,40 +40,32 @@ const ChatsPanel = () => {
           <span className="truncate text-lg sm:text-xl font-semibold tracking-tight">Chats</span>
         </Link>
         <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
-          <div ref={menuRef} className="relative">
-            <button onClick={() => setMenuOpen((o) => !o)} className={iconBtn} title="New group or community" aria-label="New group or community" aria-expanded={menuOpen}>
-              <LuSquarePen className="size-4 sm:size-4.5" />
-            </button>
-            {menuOpen && (
-              <div role="menu" className="absolute right-0 top-full z-30 mt-1.5 w-52 rounded-xl bg-white p-1 shadow-xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-                {[['group', LuUsers, 'New group'], ['community', LuLayers, 'New community']].map(([mode, Icon, label]) => (
-                  <button key={mode} role="menuitem" onClick={() => startNew(mode)} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
-                    <Icon className="size-4 text-slate-400" /> {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button onClick={() => setContactsDialog('all')} className={iconBtn} title="Contacts" aria-label="Contacts">
-            <LuContact className="size-4 sm:size-4.5" />
-          </button>
-          <button
-            onClick={() => setContactsDialog(incoming ? 'requests' : 'add')}
-            className={`${iconBtn} relative`}
-            title={incoming ? `${incoming} contact request${incoming > 1 ? 's' : ''}` : 'Add contact'}
-            aria-label="Add contact"
-          >
-            <LuUserPlus className="size-4 sm:size-4.5" />
-            {incoming > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 sm:h-4.5 sm:min-w-4.5 items-center justify-center rounded-full bg-indigo-600 px-1 text-[9px] sm:text-[10px] font-semibold text-white ring-2 ring-white dark:ring-slate-950">
-                {incoming}
-              </span>
-            )}
-          </button>
-          <BusinessLink className={`${iconBtn} md:hidden`} iconClass="size-4 sm:size-4.5" />
-          <button onClick={toggle} className={`${iconBtn} md:hidden`} title={dark ? 'Light mode' : 'Dark mode'} aria-label="Toggle theme">
-            {dark ? <LuSun className="size-4 sm:size-4.5" /> : <LuMoon className="size-4 sm:size-4.5" />}
-          </button>
+          <HeaderMenu
+            icon={LuSquarePen}
+            label="New"
+            buttonClass={iconBtn}
+            width="w-52"
+            items={[
+              { label: 'New group', icon: LuUsers, run: () => setCreateDialog({ mode: 'group' }) },
+              { label: 'New community', icon: LuLayers, run: () => setCreateDialog({ mode: 'community' }) },
+              'divider',
+              { label: 'Add contact', icon: LuUserPlus, run: () => setContactsDialog('add') },
+            ]}
+          />
+          <HeaderMenu
+            icon={LuEllipsisVertical}
+            label="More"
+            badge={incoming + (phone && waiting ? 1 : 0)}
+            buttonClass={iconBtn}
+            items={[
+              { label: 'Contacts', icon: LuContact, run: () => setContactsDialog('all') },
+              { label: 'Contact requests', icon: LuUserPlus, run: () => setContactsDialog('requests'), badge: incoming, hidden: !incoming },
+              // Phones: the section rail (with these) isn't shown
+              'divider',
+              { label: hasBusiness ? 'Business' : 'Set up a business', icon: LuBriefcase, to: '/business', badge: waiting, className: 'md:hidden' },
+              { label: dark ? 'Light mode' : 'Dark mode', icon: dark ? LuSun : LuMoon, run: toggle, className: 'md:hidden' },
+            ]}
+          />
         </div>
       </header>
 

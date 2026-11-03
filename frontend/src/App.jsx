@@ -18,6 +18,7 @@ import { takePendingInvite } from './utils/contacts'
 import { useAuth } from './context/AuthProvider'
 import { PageTransition } from './components/ui'
 import AppLockGate from './components/AppLock'
+import VideoPlayer from './components/VideoPlayer'
 
 // ── App ─────────────────────────────────────────────────────
 const page = (el) => <PageTransition>{el}</PageTransition>
@@ -57,6 +58,8 @@ const App = () => {
           <Route path='*' element={<Navigate to={AuthUser ? '/' : '/home'} />} />
         </Routes>
       </AnimatePresence>
+      {/* Pop-up YouTube player: above every page, keeps playing while you move around */}
+      <VideoPlayer />
     </MotionConfig>
   )
 }

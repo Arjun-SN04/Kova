@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthProvider'
 import ChannelAvatar from './ChannelAvatar'
 import ConfirmDialog from '../ConfirmDialog'
 import Sheet from '../groups/Sheet'
-import { LinkifiedText, LinkPreviewCard } from '../rightPart/LinkPreview'
+import { LinkifiedText, LinkPreviewCard, YouTubeFromText } from '../rightPart/LinkPreview'
 import { CHANNEL_EVENT, channelsApi, errorOf, loadChannels } from '../../utils/channels'
 import { QUICK_REACTIONS } from '../../utils/messages'
 import { compressImage } from '../../utils/attachments'
@@ -40,6 +40,7 @@ const Post = ({ post, myId, canReact, amAdmin, onReact, onDelete }) => {
           <div className="px-3.5 py-2.5">
             {post.text && <p className="whitespace-pre-wrap wrap-break-word"><LinkifiedText text={post.text} /></p>}
             {post.linkPreview && <LinkPreviewCard preview={post.linkPreview} />}
+            {post.text && !post.linkPreview?.title && <YouTubeFromText text={post.text} />}
           </div>
         )}
         <p className={`px-3.5 pb-2 text-right text-[11px] text-slate-400 ${post.text || post.linkPreview ? '-mt-1' : 'pt-2'}`}>{time(post.createdAt)}</p>

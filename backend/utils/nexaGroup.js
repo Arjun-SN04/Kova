@@ -8,8 +8,9 @@ import { VISION_MODEL, excerptFor, extractDocText, isDoc } from "./aiFiles.js"
 import { readChat } from "./chatAccess.js"
 import { emitToUsers } from "./notify.js"
 import { fileDownloadUrl, uploadToCloudinary } from "../config/cloudinary.js"
-import { generateImage } from "./imageGen.js"
+import { editInstruction, generateImage } from "./imageGen.js"
 import { wantsCreative, writeCreative } from "./creative.js"
+import { routeRequest } from "./router.js"
 import { CLAIMED_IMAGE_RE, LOOSE_IMAGE_RE, REFUSED_IMAGE_RE, asksForImage } from "./imageIntent.js"
 
 export const MENTION_RE = /(^|[^\w@])@nexa\b/i
@@ -175,7 +176,9 @@ ${chat?.lines.slice(-25).join("\n") || "(none)"}`,
     const parsed = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] || "{}")
     if (parsed.prompt) plan = { prompt: String(parsed.prompt).slice(0, 600), shape: ["square", "portrait", "landscape"].includes(parsed.shape) ? parsed.shape : "square", caption: String(parsed.caption || "").slice(0, 120) }
   } catch { /* fall back to their own words */ }
-  const made = await generateImage(plan.prompt, plan.shape, sender.nexaImageModel)
+  // A photo in the chat to change ("@Nexa make this a cartoon"): edit that photo itself
+  const editing = photos.length === 1 && /\b(this|it|me|him|her|them|photo|pic|picture|image|make|edit|change|turn|convert|natural|clean|better|cartoon|anime)\b/i.test(question)
+  const made = await generateImage(plan.prompt, plan.shape, sender.nexaImageModel, editing ? { referenceUrl: photos[0].attachment.url, editPrompt: editInstruction(question) } : {})
   const stored = await uploadToCloudinary({ buffer: made.buffer, mimetype: made.mimetype, originalname: "nexa-image.jpg" }, { subfolder: "ai-images", transformation: made.transformation })
   imageUse.set(String(sender._id), { day, count: count + 1 })
   return {
@@ -212,7 +215,9 @@ One or two lines that wrap it up.`,
 // Image or summary when that's what they asked for; null otherwise
 const specialAnswer = async ({ question, chat, sender, viewerId, chatId, where, timeZone, photos = [], force = false, afterImage = false }) => {
   if (!force && question.length < 80 && CAPABILITY_RE.test(question)) return { reply: CAPABILITIES_SHORT }
-  if (force || await asksForImage(question, { recent: chat?.lines.slice(-6).join("\n") || "", lastWasImage: afterImage })) {
+  const recent = chat?.lines.slice(-6).join("\n") || ""
+  const [route, pictureAsked] = force ? ["image", true] : await Promise.all([routeRequest(question, recent), asksForImage(question, { recent, lastWasImage: afterImage })])
+  if (route === "image" || (pictureAsked && !["web", "write"].includes(route))) {
     try { return await makeImage({ question, chat, sender, photos }) } catch (err) {
       console.log("nexa image error:", err.message)
       return { reply: "- Sorry, I couldn't create the image right now. Try again in a minute." }
@@ -220,7 +225,7 @@ const specialAnswer = async ({ question, chat, sender, viewerId, chatId, where, 
   }
   if (SUMMARY_RE.test(question)) return summarizeChat({ viewerId, chatId, sender, where, timeZone })
   // Poems, songs, shayari: careful draft + rhyme check
-  if (wantsCreative(question)) {
+  if ((!route || route === "write") && wantsCreative(question)) {
     try { return { reply: await writeCreative(question, `Asked by ${sender.fullName} in ${where}.`) } } catch (err) {
       console.log("nexa creative error:", err.message)
     }

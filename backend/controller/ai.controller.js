@@ -10,9 +10,11 @@ import { deleteFromCloudinary, uploadToCloudinary } from "../config/cloudinary.j
 import { hasGmail } from "../utils/google.js"
 import { TIMER_CHOICES, nexaFiles } from "../utils/disappear.js"
 import { wantsCreative, writeCreative } from "../utils/creative.js"
+import { routeRequest } from "../utils/router.js"
+import { exclusionsFrom, verifyYoutube } from "../utils/youtube.js"
 import { speakText } from "../utils/tts.js"
 import { parseMedia } from "./gif.controller.js"
-import { IMAGE_MODELS, canPickImageModel, generateImage, isImageModel } from "../utils/imageGen.js"
+import { IMAGE_MODELS, canEditPhotos, canPickImageModel, editInstruction, generateImage, isImageModel } from "../utils/imageGen.js"
 import { CLAIMED_IMAGE_RE, LOOSE_IMAGE_RE, REFUSED_IMAGE_RE, asksForImage } from "../utils/imageIntent.js"
 import { VISION_MODEL, excerptFor, extractDocText, imageForModel, isDoc, isImage } from "../utils/aiFiles.js"
 import { Message } from "../models/message.model.js"
@@ -113,7 +115,7 @@ Now: ${formatWhen(new Date(), ctx.timeZone)} (${ctx.timeZone}, ${offsetOf(ctx.ti
   `Tools: send_message and schedule_message (to a contact, group, or "me"; "me" = a reminder Nexa pops up here). schedule_message can repeat (repeat_every_minutes: 2, 60, 1440 for daily; optional repeat_until / repeat_times); never say you can't repeat. list_scheduled_messages / cancel_scheduled_message to view or stop them.${intents.people ? " get_recent_messages to read a chat (summaries, catch up). create_poll for polls." : ""}
 browser_search: use it for anything current (news, prices, weather, sports, recent facts); never invent news or numbers; don't paste bare URLs (sources show under your answer).
 Downloads: you can't download or send files from the web. For a song, film, show, book or app, your FIRST line says you can't download it (it's copyrighted), then browser_search it and list where to get it legally: official streaming (YouTube, Spotify, JioSaavn, Apple Music, Gaana), stores, or the artist's page, with each service's offline/download option. Make each service name a Markdown link, e.g. [Spotify](url), using the exact page URL from your search results (never guess a URL; if you have no URL for a service, leave it unlinked). Never mention or link pirate download sites (Pagal sites, MP3 download sites). Add a few useful facts (artist, album, year) if found. Never print full song lyrics. Never reply with only "I can't help with that".`,
-  `generate_image: you CAN create images; whenever the user wants a picture (any wording, typos, "yes do it", or a change to the last picture), call it right away instead of asking or refusing (ignore any earlier reply saying otherwise). For a change, rewrite the full earlier prompt with the change applied. Write a vivid English prompt, then reply in one short line.`,
+  `generate_image: you CAN create images; whenever the user wants a picture (any wording, typos, "yes do it", or a change to the last picture), call it right away instead of asking or refusing (ignore any earlier reply saying otherwise). For a change to the last picture or to a photo they sent ("make it brighter", "make me smile"), set edit_previous: true and still write the full prompt with the change applied. Write a vivid English prompt, then reply in one short line.`,
   ctx.google
     ? (intents.calendar ? `Google Calendar + Tasks are connected (${ctx.google.email}): get_calendar_events, create_calendar_event (add_meet: true = Google Meet link; is_reminder: true + repeat daily/weekdays/weekly/monthly for reminders), delete_calendar_event, get_tasks, add_task, complete_task, snooze_reminder.
 Reminders ("remind me to call mom at 6", "every day at 9") go on the calendar as is_reminder events. Google can't repeat more often than daily, so "every N minutes/hours" uses schedule_message to "me". To invite contacts to a Meet, create it with a link, then offer to send them the link. Don't invent emails.` : "")
@@ -124,6 +126,8 @@ Reminders ("remind me to call mom at 6", "every day at 9") go on the calendar as
   `Rules: only send or schedule when clearly asked; if the person, group or time is unclear, ask one short question. Send the user's own words unless they ask for rewording. After acting, confirm in one short sentence. Never claim something worked unless the tool said ok.
 Style: warm and friendly, like a helpful friend texting. ${FORMAT_RULES} Text to send goes in a quote ("> ..."). No headings, intro lines or sign-offs. At most one emoji. Never use em or en dashes.`,
   intents.visual ? `When it helps, use a Markdown table (2 to 5 columns) or a Mermaid diagram in a \`\`\`mermaid block ("flowchart TD", node ids A, B, C with labels in double quotes, under 12 nodes, no styling), then at most 2 bullets. Never use HTML tags like <br>; in a table cell separate items with "; ".` : "",
+  intents.web ? `The user wants something found online. Call browser_search first, then answer from what it found. For a song or video, give the official YouTube link (and other services' links if found) as Markdown links using the exact URLs from the results, plus the artist and year. If they ruled something out ("not the unplugged version", "not a cover"), never give that one: search again with words that exclude it (like "original", "official audio", the album name) and give a different result, or say you couldn't find it. Don't write a poem or lyrics.` : "",
+  /\blyrics?\b/i.test(ctx.question || "") ? `Lyrics: song lyrics are copyrighted, so never print them (not even a verse) and never just refuse. Work out exactly which song they mean: for "the song above" / "this song" use the title of the YouTube video shown earlier in the chat (spelling matters: "Paaro" and "Paro" are different songs), then browser_search "<exact title> <artist> lyrics" and only link pages for that exact song. Reply with: one line saying you can't paste the lyrics here but here's where to read them; Markdown links to the lyrics pages you found (official sites, JioSaavn, Spotify, Apple Music, Genius, Musixmatch or similar, exact URLs from the results, no pirate sites); a short line on what the song is about, only from what the pages you found say (never guess or reuse earlier answers; leave it out if unsure); and the artist, album and year if found.` : "",
   appControl(intents),
   intents.code ? `Code: complete and working. Each file in its own fenced block with language and file name, e.g. \`\`\`js server.js. Keep the explanation to a few bullets.` : "",
 ].filter(Boolean).join("\n\n")
@@ -171,6 +175,8 @@ const historyFor = (messages, budget = HISTORY_CHARS) => {
   let used = 0
   for (const m of [...messages].reverse()) {
     const made = (m.actions || []).filter((a) => a?.type === "image" && a.prompt).map((a) => ` [made an image: "${String(a.prompt).slice(0, 300)}"]`).join("")
+      // The video card that was shown, by its real YouTube title ("the song above" means this one)
+      + (m.actions || []).filter((a) => a?.type === "video" && a.title).map((a) => ` [showed the YouTube video: "${a.title}"${a.author ? ` by ${a.author}` : ""}]`).join("")
     const note = (m.attachment ? ` [${attachmentNote(m.attachment)}]` : "") + made
     const content = shorten((m.content || "(done)") + note)
     if (used + content.length > budget) break
@@ -207,10 +213,31 @@ const normUrl = (u = "") => u.replace(/[#?].*$/, "").replace(/\/+$/, "").toLower
 const searchedUrls = (executed = []) =>
   executed.filter((t) => t.type === "browser_search").flatMap((t) => (t.search_results?.results || []).map((r) => r.url)).filter(Boolean)
 
-// Keep [text](url) only when the URL came from the search (no made-up or pirate links)
-const keepRealLinks = (text, urls) => {
+
+// Links the model wrote that weren't in the search results: use the result from the same site,
+// or keep the link if the page really exists (checked quickly); otherwise keep just the text
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, "") } catch { return "" } }
+const pageExists = async (url) => {
+  try {
+    const res = await fetch(url, { method: "GET", redirect: "follow", signal: AbortSignal.timeout(3500), headers: { "User-Agent": "Mozilla/5.0 (compatible; KovaLinkCheck/1.0)" } })
+    res.body?.cancel?.().catch(() => {})
+    return res.ok
+  } catch { return false }
+}
+const fixLinks = async (text, urls) => {
   const ok = new Set(urls.filter(allowedSite).map(normUrl))
-  return text.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (all, label, url) => (ok.has(normUrl(url)) ? all : label))
+  const unknown = [...new Set([...text.matchAll(/\[[^\]]+\]\((https?:\/\/[^)\s]+)\)/g)].map((m) => m[1]))].filter((u) => !ok.has(normUrl(u)) && allowedSite(u)).slice(0, 6)
+  const fixed = new Map(await Promise.all(unknown.map(async (u) => {
+    const sameSite = urls.find((r) => allowedSite(r) && hostOf(r) === hostOf(u))
+    if (sameSite) return [u, sameSite]
+    return [u, (await pageExists(u)) ? u : null]
+  })))
+  return text.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (all, label, url) => {
+    if (ok.has(normUrl(url))) return all
+    const real = fixed.get(url)
+    if (process.env.NEXA_DEBUG) console.log(`[nexa] link ${url} -> ${real || "dropped"}`)
+    return real ? `[${label}](${real})` : label
+  })
 }
 
 // Music/video services: their names in a reply link to the page the search found
@@ -315,6 +342,10 @@ export const sendAiMessage = async (req, res) => {
     // Keep the brief on the user's current local time
     if (ctx.google && ctx.google.timeZone !== ctx.timeZone) GoogleAccount.updateOne({ _id: ctx.google._id }, { timeZone: ctx.timeZone }).catch(() => {})
     const history = (await AiMessage.find({ user: me._id }).sort({ createdAt: -1 }).limit(HISTORY)).reverse()
+    // The latest picture in the chat, for "make it brighter" / "now make me smile" follow-ups
+    const lastPicture = [...history].reverse().slice(0, 4).map((m) => m.actions?.slice().reverse().find((a) => a?.type === "image" && a.url)?.url || (m.attachment?.kind === "image" ? m.attachment.url : null)).find(Boolean)
+    ctx.lastPicture = lastPicture || null
+    ctx.question = text
     // What the user wrote now and just before (tools check names against it)
     ctx.userText = [text, ...history.filter((m) => m.role === "user").slice(-2).map((m) => m.content || "")].join(" ")
     // Replying to one of Nexa's earlier answers: it sees which part they mean
@@ -349,8 +380,20 @@ const answerQuestion = async ({ req, me, text, media, quote, question, ctx, hist
     const intents = intentsFor(asked, prev, ctx)
     // A picture request (any wording, typos, "yes do it", "make it blue" after a picture): draw it the first time
     const lastWasImage = !!history.slice(-2).some((m) => m.role === "assistant" && m.actions?.some((a) => a?.type === "image"))
-    const imageAsked = !media && await asksForImage(text, { recent: historyFor(history.slice(-4), 1200).map((m) => `${m.role}: ${m.content}`).join("\n"), lastWasImage })
+    const recentChat = historyFor(history.slice(-4), 1200).map((m) => `${m.role}: ${m.content}`).join("\n")
+    // What kind of request this is (utils/router.js), checked at the same time as the picture test
+    const [route, pictureAsked] = media ? [null, false] : await Promise.all([
+      routeRequest(text, recentChat),
+      asksForImage(text, { recent: recentChat, lastWasImage }),
+    ])
+    // The router overrules the picture test for searches ("find a photo of…" is still a picture only if it says so)
+    const imageAsked = route === "image" || (pictureAsked && !["web", "write"].includes(route))
     if (imageAsked) intents.image = true
+    // Give Nexa the tools and instructions for that kind of request
+    const ROUTE_INTENTS = { message: { people: true }, calendar: { calendar: !!ctx.google }, email: { mail: hasGmail(ctx.google), mailAsked: true }, business: { business: true }, groups: { social: true, people: true }, account: { account: true, people: true }, help: { app: true } }
+    Object.assign(intents, ROUTE_INTENTS[route] || {})
+    intents.web = route === "web"
+    if (process.env.NEXA_DEBUG) console.log(`[nexa] route=${route} image=${imageAsked}`)
     // "yes" to "Shall I remove Rahul from Goa Trip?": keep the app tools so Nexa can finish it
     if (ctx.userConfirmed && ctx.answeredAsk) Object.assign(intents, { business: true, social: true, account: true, people: true })
     let trimmed = false
@@ -371,8 +414,10 @@ const answerQuestion = async ({ req, me, text, media, quote, question, ctx, hist
     const started = Date.now()
     const questions = [] // steps waiting for the user's yes (delete, remove, block, broadcast)
     let reply = ""
-    // Poems, songs, shayari: their own careful path (draft + rhyme check)
-    if (!media && !req.file && !imageAsked && wantsCreative(text)) {
+    // Poems, songs, shayari: their own careful path (draft + rhyme check). Only when they want
+    // new writing (the router); keywords alone are a fallback when the router couldn't decide.
+    const wantsWriting = (!route || route === "write") && wantsCreative(text)
+    if (!media && !req.file && !imageAsked && wantsWriting) {
       try { reply = await writeCreative(text, `Asked by ${me.fullName}.`) } catch (err) { console.log("creative error:", err.message) }
     }
     try {
@@ -446,11 +491,31 @@ const answerQuestion = async ({ req, me, text, media, quote, question, ctx, hist
     }
     // Something needs a yes first: ask exactly that (the model sometimes adds "Done!" after asking)
     if (questions.length) reply = actions.length ? `Done with the rest. ${questions.join(" ")}` : questions.join("\n")
+    // "I'm sorry, but I can't provide that." on its own isn't an answer: try once more, told to help
+    if (!actions.length && reply.length < 160 && /^\s*(i['’]?m sorry|sorry|i can(no|['’])?t|i am unable|unfortunately)/i.test(reply)) {
+      try {
+        const retry = await groqChat([
+          ...convo.filter((m) => m.role !== "tool" && !m.tool_calls),
+          { role: "system", content: "Don't just refuse. If the exact thing can't be given (for example copyrighted lyrics), say so in one line, then help as much as you can: search the web and give links where to find it, plus useful facts. Follow the earlier instructions." },
+        ], { tools: [{ type: "browser_search" }], maxTokens: 1500 })
+        if (retry.content?.trim()) {
+          reply = retry.content.trim()
+          sources.push(...sourcesOf(retry.executed_tools))
+          searched.push(...searchedUrls(retry.executed_tools))
+        }
+      } catch (err) { console.log("refusal retry failed:", err.message) }
+    }
     if (!reply) reply = actions.length ? "Done." : "Sorry, I couldn't finish that. Could you rephrase?"
-    reply = linkServices(keepRealLinks(reply, searched), searched)
+    reply = linkServices(await fixLinks(reply, searched), searched)
     // Replies to a GIF or sticker sometimes come back as a quote
     if (media) reply = reply.replace(/^>\s?/gm, "")
-    const links = sources.filter((s, i) => sources.findIndex((o) => o.url === s.url) === i).slice(0, 4)
+    // YouTube links checked with YouTube: dead videos unlinked, the first playable one becomes a card
+    // (skipping versions they ruled out: "not unplugged" in this or their last message)
+    const exclude = exclusionsFrom([text, ...history.filter((m) => m.role === "user").slice(-1).map((m) => m.content || "")].join(". "))
+    const checked = await verifyYoutube(reply, sources.filter((s, i) => sources.findIndex((o) => o.url === s.url) === i), { exclude, candidates: searched, asked: text })
+    reply = checked.reply
+    const links = checked.sources.slice(0, 4)
+    if (checked.video) actions.push(checked.video)
     if (links.length) actions.push({ type: "sources", items: links })
 
     const answer = await AiMessage.create({ user: me._id, role: "assistant", content: reply, actions })
@@ -483,12 +548,14 @@ const answerAboutFile = async (req, res, { me, file, text }) => {
     let actions = []
     try {
       if (image && await asksForImage(text)) {
-        // "Make this a cartoon", "put me on a beach": describe the photo, then draw the new picture
-        const look = await groqChat([
+        // "Make this a cartoon", "put me on a beach": the photo itself goes to an editing model
+        // (keeps the face); the description is only needed when no model here can edit photos
+        const look = canEditPhotos() ? "" : await groqChat([
           { role: "system", content: "Describe this photo for an AI image generator in under 80 words: the people or subjects (appearance, clothes, pose), setting, colours and lighting. Plain description only." },
           { role: "user", content: [{ type: "text", text: `Request: ${text}` }, { type: "image_url", image_url: { url: imageForModel(file, stored.url) } }] },
         ], { model: VISION_MODEL(), only: true, maxTokens: 250, temperature: 0.2 }).then((m) => m.content?.trim()).catch(() => "")
-        actions = [{ type: "image", id: randomUUID(), prompt: `${text}${look ? `. Based on this reference photo: ${look}` : ""}`.slice(0, 1000), shape: "square" }]
+        const shape = stored.height > stored.width * 1.1 ? "portrait" : stored.width > stored.height * 1.1 ? "landscape" : "square"
+        actions = [{ type: "image", id: randomUUID(), prompt: `${text}${look ? `. Based on this reference photo: ${look}` : ""}`.slice(0, 1000), shape, ref: stored.url, editPrompt: editInstruction(text) }]
         reply = "Here you go 🎨"
       } else if (image) {
         const msg = await groqChat([
@@ -646,8 +713,8 @@ export const createAiImage = async (req, res) => {
 
     drawing.add(actionId)
     try {
-      const { prompt, shape } = message.actions[index]
-      const made = await generateImage(prompt, shape, req.user.nexaImageModel)
+      const { prompt, shape, ref, editPrompt } = message.actions[index]
+      const made = await generateImage(prompt, shape, req.user.nexaImageModel, { referenceUrl: ref || null, editPrompt })
       imageUse.set(String(req.user._id), { day: today, count: count + 1 })
       const stored = await uploadToCloudinary({ buffer: made.buffer, mimetype: made.mimetype, originalname: "nexa-image" }, { subfolder: "ai-images", transformation: made.transformation })
 

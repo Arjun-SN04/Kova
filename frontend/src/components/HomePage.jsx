@@ -520,14 +520,15 @@ const HomePage = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.4, ease: EASE }}
-              className="mt-8 flex items-center justify-center gap-3"
+              className="mt-8 flex flex-col items-center justify-center gap-2.5 sm:flex-row sm:gap-3"
             >
-              <div className="flex -space-x-2.5">
+              {/* shrink-0: the photos never get squeezed under the text on narrow screens */}
+              <div className="flex shrink-0 -space-x-2.5">
                 {[1, 2, 3, 4, 5].map((n) => (
-                  <img key={n} src={avatar(n)} alt="" className="size-8 rounded-full object-cover ring-[3px] ring-white dark:ring-zinc-950" />
+                  <img key={n} src={avatar(n)} alt="" className="size-8 shrink-0 rounded-full object-cover ring-[3px] ring-white dark:ring-zinc-950" />
                 ))}
               </div>
-              <p className="text-left text-sm leading-snug text-slate-500 dark:text-zinc-400">
+              <p className="text-center text-sm leading-snug text-slate-500 sm:text-left dark:text-zinc-400">
                 <span className="font-semibold text-slate-900 dark:text-white">Free for everyone.</span> Friends, teams and study groups.
               </p>
             </motion.div>

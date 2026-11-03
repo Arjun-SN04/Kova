@@ -1,5 +1,13 @@
 import React, { useState } from 'react'
 import { LuGlobe } from 'react-icons/lu'
+import YouTubeCard from '../../components/YouTubeCard'
+import { playIfYoutube, youtubeId, youtubeLinks } from '../../utils/youtube'
+
+// The first YouTube video in a message, as a playable card (when there's no preview card for it)
+export const YouTubeFromText = ({ text, itsMe }) => {
+  const [video] = youtubeLinks(text)
+  return video ? <YouTubeCard id={video.id} url={video.url} itsMe={itsMe} /> : null
+}
 
 const URL_RE = /(https?:\/\/[^\s<>"')\]]+)/gi
 
@@ -12,7 +20,7 @@ export const LinkifiedText = ({ text, itsMe }) => {
     const url = trail ? part.slice(0, -trail.length) : part
     return (
       <React.Fragment key={i}>
-        <a href={url} target="_blank" rel="noopener noreferrer nofollow" onClick={(e) => e.stopPropagation()}
+        <a href={url} target="_blank" rel="noopener noreferrer nofollow" onClick={(e) => { e.stopPropagation(); playIfYoutube(e, url) }}
           className={`break-all underline underline-offset-2 ${itsMe ? 'text-white decoration-white/50 hover:decoration-white' : 'text-indigo-600 decoration-indigo-300 hover:decoration-indigo-600 dark:text-indigo-300 dark:decoration-indigo-500/50'}`}>
           {url}
         </a>{trail}
@@ -25,6 +33,9 @@ export const LinkifiedText = ({ text, itsMe }) => {
 export const LinkPreviewCard = ({ preview, itsMe }) => {
   const [imgOk, setImgOk] = useState(true)
   if (!preview?.title) return null
+  // YouTube: a thumbnail that plays in the pop-up player
+  const ytId = youtubeId(preview.url)
+  if (ytId) return <YouTubeCard id={ytId} url={preview.url} title={preview.title} itsMe={itsMe} />
   return (
     <a
       href={preview.url} target="_blank" rel="noopener noreferrer nofollow" onClick={(e) => e.stopPropagation()}

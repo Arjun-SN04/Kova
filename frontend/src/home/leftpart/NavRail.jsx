@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuBriefcase, LuLayers, LuRadioTower, LuMessageSquareText, LuMoon, LuPhone, LuSettings, LuSun, LuUser, LuStar, LuCircleDashed, LuEllipsis } from 'react-icons/lu'
+import { LuBriefcase, LuLayers, LuRadioTower, LuMessageSquareText, LuMoon, LuPhone, LuSettings, LuSun, LuUser, LuStar, LuCircleDashed, LuEllipsis, LuPanelLeftClose, LuPanelLeftOpen } from 'react-icons/lu'
+import useSidebar from '../../Zustand/useSidebar'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
 import { useTheme } from '../../context/ThemeProvider'
@@ -75,6 +76,7 @@ export const NavRail = () => {
   const [AuthUser] = useAuth()
   const { dark, toggle } = useTheme()
   const { activePanel, setActivePanel } = useConversation()
+  const collapsed = useSidebar((s) => s.collapsed)
   const badges = useNavBadges()
 
   return (
@@ -85,7 +87,11 @@ export const NavRail = () => {
         return (
           <button
             key={id}
-            onClick={() => setActivePanel(id)}
+            onClick={() => {
+              setActivePanel(id)
+              // Collapsed: clicking a section brings the list back (until collapsed again)
+              if (collapsed) useSidebar.getState().setCollapsed(false)
+            }}
             title={label}
             aria-label={label}
             aria-current={on ? 'page' : undefined}
@@ -98,6 +104,9 @@ export const NavRail = () => {
       })}
 
       <div className="mt-auto flex flex-col items-center gap-1">
+        <button onClick={() => useSidebar.getState().toggle()} className={`${railBtn} text-slate-500 hover:bg-slate-200/60 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white`} title={collapsed ? 'Show the chat list (Ctrl+B)' : 'Hide the chat list (Ctrl+B)'} aria-label={collapsed ? 'Show the chat list' : 'Hide the chat list'} aria-expanded={!collapsed}>
+          {collapsed ? <LuPanelLeftOpen className="size-5" /> : <LuPanelLeftClose className="size-5" />}
+        </button>
         <BusinessLink className={`${railBtn} text-slate-500 hover:bg-slate-200/60 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white`} />
         <button onClick={toggle} className={`${railBtn} text-slate-500 hover:bg-slate-200/60 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white`} title={dark ? 'Light mode' : 'Dark mode'} aria-label="Toggle theme">
           {dark ? <LuSun className="size-5" /> : <LuMoon className="size-5" />}

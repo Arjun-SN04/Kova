@@ -27,6 +27,10 @@ import { remarkHtmlBreaks, remarkLineBreaks } from '../../utils/markdown'
 import useWallpaper from '../../hooks/useWallpaper'
 import { AI_CHAT } from '../../utils/ai'
 import RewriteMenu from '../rightPart/RewriteMenu'
+import YouTubeCard from '../../components/YouTubeCard'
+import { MessageMenu } from './MessageMenu'
+import useMessageMenu from '../../hooks/useMessageMenu'
+import { playIfYoutube } from '../../utils/youtube'
 import useVoiceRecorder, { MAX_VOICE_SECONDS } from '../../hooks/useVoiceRecorder'
 import { useNavigate } from 'react-router-dom'
 
@@ -130,7 +134,7 @@ const md = {
   h2: (props) => <p className="my-1.5 font-semibold first:mt-0" {...props} />,
   h3: (props) => <p className="my-1.5 font-semibold first:mt-0" {...props} />,
   strong: (props) => <strong className="font-semibold" {...props} />,
-  a: (props) => <a className="font-medium text-indigo-600 underline underline-offset-2 dark:text-indigo-400" target="_blank" rel="noreferrer" {...props} />,
+  a: ({ node, ...props }) => <a className="font-medium text-indigo-600 underline underline-offset-2 dark:text-indigo-400" target="_blank" rel="noreferrer" {...props} onClick={(e) => playIfYoutube(e, props.href, textOf(node))} />,
   blockquote: (props) => <blockquote className="my-1.5 border-l-2 border-slate-300 pl-2.5 text-slate-600 dark:border-slate-600 dark:text-slate-300" {...props} />,
   hr: () => <hr className="my-2 border-slate-200 dark:border-slate-700" />,
   pre: ({ node, ...props }) => {
@@ -282,6 +286,7 @@ const Sources = ({ items }) => (
         target="_blank"
         rel="noreferrer"
         title={s.title}
+        onClick={(e) => playIfYoutube(e, s.url, s.title)}
         className="inline-flex max-w-56 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] text-slate-600 ring-1 ring-slate-200 transition hover:bg-violet-50 hover:text-violet-700 hover:ring-violet-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-violet-500/10 dark:hover:text-violet-300"
       >
         <LuGlobe className="size-3 shrink-0" />
@@ -317,10 +322,23 @@ const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved, 
   const copy = async () => {
     try { await navigator.clipboard.writeText(message.content); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { /* ignore */ }
   }
+  // Right-click / long-press menu (Reply, Copy, Listen, Regenerate, Keep, Delete)
+  const menu = useMessageMenu()
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const real = !String(message._id).startsWith('temp-')
+  const speaking = useSpeech((st) => st.speakingId === `ai-${message._id}`)
+  const menuItems = [
+    { label: 'Reply', icon: LuReply, run: () => onReply(message), hidden: !onReply || !real },
+    { label: 'Copy', icon: LuCopy, run: copy, hidden: !message.content },
+    { label: speaking ? 'Stop reading' : 'Listen', icon: speaking ? LuSquare : LuVolume2, run: () => speak(`ai-${message._id}`, message.content), hidden: !canSpeak() || !message.content?.trim() },
+    { label: 'Regenerate', icon: LuRefreshCw, run: () => onRetry(message), hidden: !onRetry },
+    { label: message.kept ? "Don't keep" : 'Keep', icon: LuBookmark, run: () => onKeep(message, !message.kept), hidden: !real },
+    ...(real ? ['divider', { label: 'Delete', icon: LuTrash2, run: () => setConfirmDelete(true), danger: true }] : []),
+  ]
   return (
     <div className="group mb-3 flex items-end gap-2 pb-1">
       <AiAvatar size="xs" />
-      <div className={`flex min-w-0 flex-col items-start ${wide ? wideBubbleWidth : bubbleWidth}`}>
+      <div {...menu.handlers} className={`flex min-w-0 flex-col items-start ${wide ? wideBubbleWidth : bubbleWidth}`}>
         {!cardOnly && (
           <div className="max-w-full rounded-2xl rounded-bl-md bg-white px-3.5 py-2 text-sm leading-relaxed text-slate-800 shadow-xs ring-1 ring-slate-200/80 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700/60">
             <ReactMarkdown remarkPlugins={REMARK} components={components}>{message.content}</ReactMarkdown>
@@ -329,6 +347,8 @@ const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved, 
         {(message.actions || []).map((a, i) => (a.type === 'image'
           ? <NexaImage key={a.id || i} messageId={message._id} action={a} fresh={isFresh(message)} onSaved={onImageSaved} />
           : a.type === 'sources' ? <Sources key={i} items={a.items || []} />
+          // A YouTube video the server checked exists and can play here
+          : a.type === 'video' ? <YouTubeCard key={i} id={a.id} url={a.url} title={a.title} />
             : a.type === 'agenda' ? <AgendaCard key={i} action={a} greeting={greeting} />
               : a.type === 'event' ? <EventCard key={i} action={a} messageId={message._id} onSaved={onImageSaved} />
                 : a.type === 'snoozed' ? <SnoozedCard key={i} action={a} />
@@ -338,26 +358,14 @@ const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved, 
                         : a.type === 'app' ? <AppCard key={i} action={a} onOpen={onOpen} />
                         : <ActionCard key={i} action={a} status={a.id ? statuses[a.id] : null} onCancel={onCancel} onOpen={onOpen} />
         ))}
+        {/* Just the time; actions are in the right-click / long-press menu */}
         <p className="mt-1 flex items-center gap-2 px-1 text-[11px] text-slate-400">
           {message.createdAt && formatTime(message.createdAt)}
-          <button onClick={copy} className="inline-flex items-center gap-1 opacity-0 transition hover:text-slate-700 group-hover:opacity-100 focus:opacity-100 dark:hover:text-slate-200">
-            {copied ? <LuCheck className="size-3" /> : <LuCopy className="size-3" />}
-            {copied ? 'Copied' : 'Copy'}
-          </button>
-          <ListenButton id={`ai-${message._id}`} text={message.content} />
-          {onReply && !String(message._id).startsWith('temp-') && (
-            <button onClick={() => onReply(message)} className="inline-flex items-center gap-1 opacity-0 transition hover:text-slate-700 group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100 dark:hover:text-slate-200" title="Reply to this answer">
-              <LuReply className="size-3" /> Reply
-            </button>
-          )}
-          {onRetry && (
-            <button onClick={() => onRetry(message)} className="inline-flex items-center gap-1 opacity-0 transition hover:text-slate-700 group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100 dark:hover:text-slate-200" title="Ask again for a new answer">
-              <LuRefreshCw className="size-3" /> Regenerate
-            </button>
-          )}
-          <MessageTools message={message} onKeep={onKeep} onDelete={onDelete} />
+          <MessageStatus message={message} copied={copied} speakId={`ai-${message._id}`} />
         </p>
       </div>
+      <MessageMenu at={menu.at} onClose={menu.close} items={menuItems} />
+      <ConfirmDialog open={confirmDelete} onClose={() => setConfirmDelete(false)} onConfirm={() => onDelete(message)} title="Delete this message?" description="It's removed from your Nexa chat." />
     </div>
   )
 }
@@ -367,42 +375,24 @@ const isFresh = (message) => Date.now() - new Date(message.createdAt).getTime() 
 
 // Keep (stop it disappearing) and Delete, under each message in the Nexa chat
 // Read the answer aloud (tap again to stop)
-const ListenButton = ({ id, text }) => {
-  const speaking = useSpeech((st) => st.speakingId === id)
-  const loading = useSpeech((st) => st.loadingId === id)
-  if (!canSpeak() || !text?.trim()) return null
-  const active = speaking || loading
+// After the time: "Kept", "Copied", and Stop while the message is read aloud
+const MessageStatus = ({ message, copied, speakId }) => {
+  const speaking = useSpeech((st) => (speakId ? st.speakingId === speakId : false))
+  const loading = useSpeech((st) => (speakId ? st.loadingId === speakId : false))
   return (
-    <button onClick={() => speak(id, text)} className={`inline-flex items-center gap-1 transition hover:text-slate-700 focus:opacity-100 dark:hover:text-slate-200 ${active ? 'text-indigo-600 opacity-100 dark:text-indigo-400' : 'opacity-0 group-hover:opacity-100'}`} aria-label={active ? 'Stop reading' : 'Listen'}>
-      {loading ? <LuLoaderCircle className="size-3 animate-spin" /> : speaking ? <LuSquare className="size-3" /> : <LuVolume2 className="size-3" />}
-      {loading ? 'Preparing…' : speaking ? 'Stop' : 'Listen'}
-    </button>
+    <>
+      {message.kept && <span className="inline-flex items-center gap-1 font-medium text-indigo-500"><LuBookmarkCheck className="size-3" /> Kept</span>}
+      {copied && <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><LuCheck className="size-3" /> Copied</span>}
+      {(speaking || loading) && (
+        <button onClick={() => speak(speakId, message.content)} className="inline-flex items-center gap-1 font-medium text-indigo-600 dark:text-indigo-400" aria-label="Stop reading">
+          {loading ? <LuLoaderCircle className="size-3 animate-spin" /> : <LuSquare className="size-3" />} {loading ? 'Preparing…' : 'Stop'}
+        </button>
+      )}
+    </>
   )
 }
 
-const MessageTools = ({ message, onKeep, onDelete, align = 'left' }) => {
-  const [confirm, setConfirm] = useState(false)
-  if (String(message._id).startsWith('temp-')) return null
-  const btn = 'inline-flex items-center gap-1 rounded px-1 transition hover:text-slate-700 dark:hover:text-slate-200'
-  return (
-    <span className={`flex items-center gap-2 ${align === 'right' ? 'order-first' : ''}`}>
-      {message.kept && <span className="inline-flex items-center gap-1 font-medium text-indigo-500"><LuBookmarkCheck className="size-3" /> Kept</span>}
-      <span className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
-        <button onClick={() => onKeep(message, !message.kept)} className={btn} title={message.kept ? "Let it disappear again" : "Keep: it won't disappear"}>
-          <LuBookmark className="size-3" /> {message.kept ? "Don't keep" : 'Keep'}
-        </button>
-        {confirm ? (
-          <span className="inline-flex items-center gap-1.5">
-            <button onClick={() => onDelete(message)} className="font-medium text-red-600 hover:underline dark:text-red-400">Delete</button>
-            <button onClick={() => setConfirm(false)} className="hover:underline">Cancel</button>
-          </span>
-        ) : (
-          <button onClick={() => setConfirm(true)} className={`${btn} hover:text-red-600! dark:hover:text-red-400!`} title="Delete this message"><LuTrash2 className="size-3" /> Delete</button>
-        )}
-      </span>
-    </span>
-  )
-}
+
 
 // What Nexa can read
 const NEXA_FILES = 'image/jpeg,image/png,image/webp,image/gif,application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,.txt,text/csv,.csv'
@@ -418,25 +408,24 @@ const FileChip = ({ name, size, onDark }) => (
   </span>
 )
 
-// Copy / Edit under your own question
-const MyTools = ({ message, onEdit }) => {
+
+const MyBubble = memo(({ message, onKeep, onDelete, onEdit }) => {
+  const menu = useMessageMenu()
   const [copied, setCopied] = useState(false)
-  if (!message.content || String(message._id).startsWith('temp-')) return null
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const real = !String(message._id).startsWith('temp-')
   const copy = async () => {
     try { await navigator.clipboard.writeText(message.content); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { /* ignore */ }
   }
-  const btn = 'inline-flex items-center gap-1 rounded px-1 opacity-0 transition hover:text-slate-700 group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100 dark:hover:text-slate-200'
+  const menuItems = [
+    { label: 'Copy', icon: LuCopy, run: copy, hidden: !message.content },
+    { label: 'Edit', icon: LuPencil, run: () => onEdit(message), hidden: !message.content || !real },
+    { label: message.kept ? "Don't keep" : 'Keep', icon: LuBookmark, run: () => onKeep(message, !message.kept), hidden: !real },
+    ...(real ? ['divider', { label: 'Delete', icon: LuTrash2, run: () => setConfirmDelete(true), danger: true }] : []),
+  ]
   return (
-    <span className="order-first flex items-center gap-2">
-      <button onClick={copy} className={btn}>{copied ? <LuCheck className="size-3" /> : <LuCopy className="size-3" />}{copied ? 'Copied' : 'Copy'}</button>
-      <button onClick={() => onEdit(message)} className={btn} title="Put this question back in the box to change it"><LuPencil className="size-3" /> Edit</button>
-    </span>
-  )
-}
-
-const MyBubble = memo(({ message, onKeep, onDelete, onEdit }) => (
   <div className="group mb-3 flex justify-end pb-1">
-    <div className={`flex flex-col items-end gap-1 ${bubbleWidth}`}>
+    <div {...menu.handlers} className={`flex flex-col items-end gap-1 ${bubbleWidth}`}>
       {message.quote && (
         <p className="flex max-w-full items-start gap-1.5 rounded-xl bg-slate-100 px-2.5 py-1.5 text-xs text-slate-500 ring-1 ring-slate-200/70 dark:bg-slate-800/70 dark:text-slate-400 dark:ring-slate-700/60">
           <LuReply className="mt-0.5 size-3 shrink-0 text-violet-500" />
@@ -462,13 +451,15 @@ const MyBubble = memo(({ message, onKeep, onDelete, onEdit }) => (
       )}
       {message.content && <p className="whitespace-pre-wrap break-words max-w-full rounded-2xl rounded-br-md bg-indigo-600 px-3.5 py-2 text-sm leading-relaxed text-white">{message.content}</p>}
       <p className="mt-1 flex items-center gap-2 px-1 text-[11px] text-slate-400">
-        <MyTools message={message} onEdit={onEdit} />
-        <MessageTools message={message} onKeep={onKeep} onDelete={onDelete} align="right" />
+        <MessageStatus message={message} copied={copied} />
         {message.createdAt && formatTime(message.createdAt)}
       </p>
     </div>
+    <MessageMenu at={menu.at} onClose={menu.close} items={menuItems} />
+    <ConfirmDialog open={confirmDelete} onClose={() => setConfirmDelete(false)} onConfirm={() => onDelete(message)} title="Delete this message?" description="It's removed from your Nexa chat." />
   </div>
-))
+  )
+})
 
 // Private chat with Nexa, Kova's AI assistant (answers come from Groq via the server)
 const AiChat = () => {

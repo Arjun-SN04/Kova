@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuArrowLeft, LuEllipsisVertical, LuEye, LuEyeOff, LuImage, LuInfo, LuLock, LuLockOpen, LuPhone, LuPin, LuSearch, LuTimer, LuTrash2, LuVideo, LuScrollText } from 'react-icons/lu'
+import { LuArrowLeft, LuEllipsisVertical, LuEye, LuEyeOff, LuImage, LuInfo, LuLock, LuLockOpen, LuPhone, LuPin, LuSearch, LuTimer, LuTrash2, LuVideo, LuScrollText, LuX } from 'react-icons/lu'
 import { timerLabel, timerShort, togglePinChat } from '../../utils/chatExtras'
 import { useGroupCall } from '../../context/GroupCallProvider'
 import useConversation from '../../Zustand/UserConversation'
@@ -10,13 +10,13 @@ import { useCall } from '../../context/CallProvider'
 import Avatar, { GroupAvatar } from '../Avatar'
 import { useAuth } from '../../context/AuthProvider'
 import { BusinessBadge, OpenStatus } from '../../business/BusinessInfo'
-import { isBusiness } from '../../business/utils'
+import { hoursState, isBusiness } from '../../business/utils'
 
 const iconBtn =
   'flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'
 
 // The ⋯ menu: search, pin, info and clear (calls stay in the header)
-const ChatMenu = ({ isGroup, pinned, locked, hidden, searchOpen, infoOpen, onSearch, onPin, onLock, onHide, onWallpaper, onInfo, onClear }) => {
+const ChatMenu = ({ isGroup, pinned, locked, hidden, searchOpen, infoOpen, onSearch, onPin, onLock, onHide, onWallpaper, onInfo, onClear, onClose, pinCount = 0, onPins }) => {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   useEffect(() => {
@@ -34,12 +34,15 @@ const ChatMenu = ({ isGroup, pinned, locked, hidden, searchOpen, infoOpen, onSea
   }, [open])
 
   const items = [
+    // Phones: pinned messages live here instead of a header button
+    ...(pinCount > 0 && onPins ? [{ label: `Pinned messages (${pinCount})`, icon: LuPin, run: onPins, className: 'sm:hidden' }] : []),
     { label: searchOpen ? 'Close search' : 'Search in chat', icon: LuSearch, run: onSearch },
     { label: pinned ? 'Unpin chat' : 'Pin chat', icon: LuPin, run: onPin },
     ...(onLock ? [{ label: locked ? 'Unlock chat' : 'Lock chat', icon: locked ? LuLockOpen : LuLock, run: onLock }] : []),
     ...(onHide ? [{ label: hidden ? 'Unhide chat' : 'Hide chat', icon: hidden ? LuEye : LuEyeOff, run: onHide }] : []),
     { label: 'Wallpaper', icon: LuImage, run: onWallpaper },
     { label: infoOpen ? 'Hide info' : isGroup ? 'Group info' : 'Contact info', icon: LuInfo, run: onInfo },
+    ...(onClose ? [{ label: 'Close chat', icon: LuX, run: onClose }] : []),
     ...(!isGroup ? [{ label: 'Clear chat', icon: LuTrash2, run: onClear, danger: true }] : []),
   ]
   const itemCls = 'flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm transition'
@@ -66,12 +69,12 @@ const ChatMenu = ({ isGroup, pinned, locked, hidden, searchOpen, infoOpen, onSea
             transition={{ duration: 0.12 }}
             className="absolute top-full right-0 z-40 mt-1.5 w-52 origin-top-right overflow-hidden rounded-xl bg-white py-1 shadow-xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800"
           >
-            {items.map(({ label, icon: Icon, run, danger }) => (
+            {items.map(({ label, icon: Icon, run, danger, className = '' }) => (
               <button
                 key={label}
                 role="menuitem"
                 onClick={() => { setOpen(false); run() }}
-                className={`${itemCls} ${danger ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'}`}
+                className={`${itemCls} ${className} ${danger ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'}`}
               >
                 <Icon className={`size-4 ${label.startsWith('Unpin') ? '-rotate-45' : ''}`} />
                 {label}
@@ -97,6 +100,29 @@ const useLastSeen = (userId) => {
     return () => { alive = false }
   }, [userId])
   return userId && state.id === String(userId) ? state.at : null
+}
+
+// Short form for phones: "5 min ago", "11:56 AM" (today), "yesterday", "3 Nov"
+const lastSeenShort = (date) => {
+  const d = new Date(date)
+  const mins = Math.round((Date.now() - d.getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  if (d.toDateString() === new Date().toDateString()) return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  if (d.toDateString() === new Date(Date.now() - 86_400_000).toDateString()) return 'yesterday'
+  return d.toLocaleDateString([], { day: 'numeric', month: 'short' })
+}
+
+// Online / last seen: short on phones, full on bigger screens
+const Presence = ({ online, lastSeen }) => {
+  if (online) return <span className="text-emerald-600 dark:text-emerald-400">Online</span>
+  if (!lastSeen) return <span>Offline</span>
+  return (
+    <>
+      <span className="sm:hidden">Active {lastSeenShort(lastSeen)}</span>
+      <span className="hidden sm:inline">Active {lastSeenLabel(lastSeen)}</span>
+    </>
+  )
 }
 
 const lastSeenLabel = (date) => {
@@ -176,10 +202,24 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
           ) : typing ? (
             <p className="truncate text-xs font-medium text-indigo-600 dark:text-indigo-400">{typing === 'Nexa' ? 'Nexa is thinking…' : typeof typing === 'string' ? `${typing} is typing…` : 'typing…'}</p>
           ) : isBusiness(selectedConversation) ? (
-            <p className="truncate text-xs"><OpenStatus business={selectedConversation.business} /></p>
+            // A business, on one line: when they were last around, and whether they're open.
+            // Phones: "Active 11:56 AM · ● Closed"; bigger screens add "opens tomorrow 9 AM".
+            <p className="flex min-w-0 items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+              <span className="truncate"><Presence online={isOnline} lastSeen={lastSeen} /></span>
+              {hoursState(selectedConversation.business) && (
+                <>
+                  <span className="shrink-0 text-slate-300 dark:text-slate-600">·</span>
+                  <span className="flex shrink-0 items-center gap-1 sm:hidden">
+                    <span className={`size-1.5 rounded-full ${hoursState(selectedConversation.business).open ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                    <span className={hoursState(selectedConversation.business).open ? 'text-emerald-600 dark:text-emerald-400' : ''}>{hoursState(selectedConversation.business).open ? 'Open' : 'Closed'}</span>
+                  </span>
+                  <OpenStatus business={selectedConversation.business} className="hidden truncate sm:inline" />
+                </>
+              )}
+            </p>
           ) : (
-            <p className={`truncate text-xs ${isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
-              {isOnline ? 'Online' : lastSeen ? `Active ${lastSeenLabel(lastSeen)}` : 'Offline'}
+            <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+              <Presence online={isOnline} lastSeen={lastSeen} />
             </p>
           )}
         </div>
@@ -198,7 +238,7 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
         {pinCount > 0 && (
           <button
             onClick={() => setPinsOpen(!pinsOpen)}
-            className={`${iconBtn} relative ${pinsOpen ? 'bg-indigo-50 text-indigo-600! dark:bg-indigo-500/15 dark:text-indigo-300!' : ''}`}
+            className={`${iconBtn} relative hidden sm:flex ${pinsOpen ? 'bg-indigo-50 text-indigo-600! dark:bg-indigo-500/15 dark:text-indigo-300!' : ''}`}
             title={pinsOpen ? 'Hide pinned messages' : 'Pinned messages'}
             aria-label={`Pinned messages (${pinCount})`}
             aria-expanded={pinsOpen}
@@ -258,6 +298,9 @@ const ChatUser = ({ onBack, onToggleInfo, infoOpen, onClear, onSearch, searchOpe
           onPin={async () => { const r = await togglePinChat(selectedConversation._id); if (!r.ok) window.alert(r.error) }}
           onInfo={onToggleInfo}
           onClear={onClear}
+          onClose={onBack}
+          pinCount={pinCount}
+          onPins={() => setPinsOpen(!pinsOpen)}
           locked={lockedChats.includes(String(selectedConversation._id))}
           hidden={hiddenChats.includes(String(selectedConversation._id))}
           onHide={selectedConversation.isAi ? null : () => setHideRequest({ ids: [String(selectedConversation._id)], hidden: !hiddenChats.includes(String(selectedConversation._id)) })}

@@ -10,6 +10,7 @@ import { MAX_SNOOZE_MIN, dayBounds, refreshUpcoming, snoozeReminder } from "./ag
 import { AiMessage } from "../models/aiMessage.model.js"
 import { createPollMessage } from "../controller/messageExtras.controller.js"
 import { APP_TOOL_NAMES, runAppTool } from "./nexaApp.js"
+import { editInstruction } from "./imageGen.js"
 
 // What Nexa can do. The server checks every action against the user's own permissions.
 export const NEXA_TOOLS = [
@@ -105,6 +106,7 @@ export const NEXA_TOOLS = [
         properties: {
           prompt: { type: "string", description: "Vivid English description: subject, setting, style, lighting" },
           shape: { type: "string", enum: ["square", "portrait", "landscape"], description: "Image shape. Default square." },
+          edit_previous: { type: "boolean", description: "true when they want a change to the last picture or to their photo in this chat (keeps the same person and scene)" },
         },
         required: ["prompt"],
       },
@@ -374,9 +376,13 @@ export const runNexaTool = async (name, args, ctx) => {
       const prompt = String(args.prompt || "").trim().slice(0, 1000)
       if (!prompt) return { result: { error: "Describe the image" } }
       const shape = ["square", "portrait", "landscape"].includes(args.shape) ? args.shape : "square"
+      // A change to the last picture: edit that picture, so the person and scene stay the same
+      // (also when the model forgets the flag but the request clearly points at that picture)
+      const pointsAtIt = /\b(this|that|it|me|my|him|her|photo|pic|picture|image|iamge|same|again|more|less|natural|clean|better|edit|change|fix|make it|make me)\b/i.test(ctx.question || "")
+      const edit = ctx.lastPicture && (args.edit_previous || pointsAtIt) ? { ref: ctx.lastPicture, editPrompt: editInstruction(ctx.question || prompt) } : {}
       return {
         result: { ok: true, note: "The image is being drawn in the chat now. Reply with one short line, don't describe the prompt." },
-        action: { type: "image", id: randomUUID(), prompt, shape },
+        action: { type: "image", id: randomUUID(), prompt, shape, ...edit },
       }
     }
 

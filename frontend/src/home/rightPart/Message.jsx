@@ -16,7 +16,8 @@ import ReactMarkdown from 'react-markdown'
 import { remarkHtmlBreaks, remarkLineBreaks } from '../../utils/markdown'
 import PollCard from './PollCard'
 import LocationCard from '../location/LocationCard'
-import { LinkPreviewCard, LinkifiedText } from './LinkPreview'
+import { LinkPreviewCard, LinkifiedText, YouTubeFromText } from './LinkPreview'
+import { playIfYoutube } from '../../utils/youtube'
 import { setKept, setMessagePinned, toggleStar } from '../../utils/chatExtras'
 import ChatCard from '../../business/ChatCard'
 import { TaskDialog } from '../../business/Tasks'
@@ -28,7 +29,7 @@ const botMd = {
   ol: (props) => <ol className="my-1 list-decimal space-y-0.5 pl-4 first:mt-0 last:mb-0" {...props} />,
   strong: (props) => <strong className="font-semibold" {...props} />,
   blockquote: (props) => <blockquote className="my-1 border-l-2 border-violet-300 pl-2 dark:border-violet-500/50" {...props} />,
-  a: (props) => <a className="break-all underline underline-offset-2" target="_blank" rel="noreferrer" {...props} />,
+  a: (props) => <a className="break-all underline underline-offset-2" target="_blank" rel="noreferrer" {...props} onClick={(e) => { e.stopPropagation(); playIfYoutube(e, props.href) }} />,
   // Wide code and tables scroll inside the bubble instead of widening the chat
   pre: (props) => <pre className="my-1 max-w-full overflow-x-auto rounded-lg bg-black/20 p-2 text-[12.5px]" {...props} />,
   table: (props) => <div className="my-1 max-w-full overflow-x-auto"><table className="text-[13px]" {...props} /></div>,
@@ -377,6 +378,8 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
             </span>
           ))}
           {message.linkPreview && !message.poll && !message.card && <LinkPreviewCard preview={message.linkPreview} itsMe={itsMe} />}
+          {/* A YouTube link without a preview card yet: still a playable video */}
+          {message.message && !message.linkPreview?.title && !message.poll && !message.card && <YouTubeFromText text={message.message} itsMe={itsMe} />}
           <Translation translation={translation} itsMe={itsMe} onHide={hideTranslation} />
           <GoToMessage message={message} itsMe={itsMe} />
         </div>
