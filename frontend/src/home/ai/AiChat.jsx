@@ -4,7 +4,7 @@ import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AnimatePresence, motion } from 'motion/react'
-import { LuArrowLeft, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuEllipsisVertical, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImages, LuMessageCircle, LuSendHorizontal, LuSmile, LuLoaderCircle, LuSquare, LuTrash2, LuVolume2, LuX, LuLightbulb, LuReply, LuRefreshCw, LuPencil, LuPenLine, LuUndo2, LuMic, LuUpload, LuWandSparkles } from 'react-icons/lu'
+import { LuArrowLeft, LuBookmark, LuBookmarkCheck, LuCalendarDays, LuCheck, LuEllipsisVertical, LuTimer, LuFileText, LuPaperclip, LuRepeat, LuCircleAlert, LuClock, LuCopy, LuGlobe, LuImages, LuMessageCircle, LuSendHorizontal, LuSmile, LuLoaderCircle, LuSquare, LuTrash2, LuVolume2, LuX, LuLightbulb, LuReply, LuRefreshCw, LuPencil, LuPenLine, LuUndo2, LuMic, LuUpload, LuWandSparkles, LuSettings2 } from 'react-icons/lu'
 import { canSpeak, speak, useSpeech } from '../../utils/speak'
 import { selfContact } from '../../utils/conversations'
 import useConversation from '../../Zustand/UserConversation'
@@ -28,6 +28,7 @@ import useWallpaper from '../../hooks/useWallpaper'
 import { AI_CHAT } from '../../utils/ai'
 import RewriteMenu from '../rightPart/RewriteMenu'
 import useVoiceRecorder, { MAX_VOICE_SECONDS } from '../../hooks/useVoiceRecorder'
+import { useNavigate } from 'react-router-dom'
 
 const REMARK = [remarkGfm, remarkHtmlBreaks, remarkLineBreaks]
 
@@ -48,6 +49,10 @@ const CAPABILITIES = [
   { title: 'Read photos & PDFs', example: 'Summarize this PDF in 5 bullets' },
   { title: 'Write and rewrite', example: 'Make this more professional: ' },
   { title: 'Translate', example: "Translate 'see you soon' to Hindi" },
+  { title: 'Set up a business', example: 'Create a business account for my bakery, open 9am to 8pm, closed Sunday', starter: true },
+  { title: 'Run your business', example: 'Add chocolate cake for ₹650 to my catalog and make a 10% code WELCOME10' },
+  { title: 'Groups & communities', example: 'Make a group called Goa Trip with Priya and Rahul', starter: true },
+  { title: 'Profile & privacy', example: "Hide my last seen and set my about to 'Busy building'" },
   { title: 'Kova help', example: 'How do communities work?' },
 ]
 
@@ -72,6 +77,13 @@ const CapabilitiesCard = ({ onPick, all = false }) => (
     )}
   </div>
 )
+
+// Put the stored question and Nexa's answer in place of the temporary bubble (the answer may
+// already have arrived live over the socket)
+const withAnswer = (prev, tempId, { question, answer }) => {
+  const ids = new Set([tempId, question?._id, answer?._id].filter(Boolean))
+  return [...prev.filter((m) => !ids.has(m._id)), question, answer].filter(Boolean)
+}
 
 const timeZone = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch { return 'UTC' } })()
 const formatWhen = (date) => new Date(date).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
@@ -229,6 +241,36 @@ const ActionCard = ({ action, status, onCancel, onOpen }) => {
   )
 }
 
+// Something Nexa changed in the app for the user: business, group, profile, privacy…
+const AppCard = ({ action, onOpen }) => {
+  const navigate = useNavigate()
+  const details = (action.details || []).filter(Boolean)
+  return (
+    <div className="mt-1.5 w-full max-w-sm rounded-xl bg-white px-3 py-2.5 text-sm shadow-xs ring-1 ring-slate-200/80 dark:bg-slate-800/70 dark:ring-slate-700/60">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400"><LuSettings2 className="size-3.5 shrink-0" /> {action.title}</p>
+      {details.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5 text-xs text-slate-600 dark:text-slate-300">
+          {details.map((d, i) => <li key={i} className="break-words">{d}</li>)}
+        </ul>
+      )}
+      {(action.link || action.chatId) && (
+        <div className="mt-2 flex gap-1.5">
+          {action.chatId && (
+            <button onClick={() => onOpen(action)} className="inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800">
+              <LuMessageCircle className="size-3.5" /> Open chat
+            </button>
+          )}
+          {action.link && (
+            <button onClick={() => navigate(action.link)} className="inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800">
+              {action.linkLabel || 'Open'}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Web pages Nexa searched, as small link chips
 const hostOf = (url) => { try { return new URL(url).hostname.replace(/^www\./, '') } catch { return url } }
 const Sources = ({ items }) => (
@@ -293,6 +335,7 @@ const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved, 
                   : a.type === 'reminder' ? <ReminderCard key={i} action={a} status={statuses[a.id]} onStop={onCancel} />
                     : a.type === 'task' ? <TaskCard key={i} action={a} />
                       : a.type === 'draft' ? <DraftCard key={i} action={a} />
+                        : a.type === 'app' ? <AppCard key={i} action={a} onOpen={onOpen} />
                         : <ActionCard key={i} action={a} status={a.id ? statuses[a.id] : null} onCancel={onCancel} onOpen={onOpen} />
         ))}
         <p className="mt-1 flex items-center gap-2 px-1 text-[11px] text-slate-400">
@@ -453,7 +496,7 @@ const AiChat = () => {
 
   useEffect(() => {
     axios.get('/api/ai/messages', api)
-      .then((res) => setMessages(res.data.messages))
+      .then((res) => { setMessages(res.data.messages); if (res.data.busy) setThinking(true) })
       .catch(() => setError('Could not load your chat with Nexa.'))
       .finally(() => setLoading(false))
     inputRef.current?.focus()
@@ -469,10 +512,15 @@ const AiChat = () => {
   const [timer, setTimer] = useState(86400)
   const [timerOpen, setTimerOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  // Which image model Nexa uses (the others are kept as backups)
+  // Which image model Nexa draws with (Auto = every model in turn)
   const [imageModel, setImageModel] = useState('auto')
   const [imageModels, setImageModels] = useState([])
   const [modelOpen, setModelOpen] = useState(false)
+  // Re-check which models work each time the menu opens (e.g. one ran out of free quota)
+  useEffect(() => {
+    if (!modelOpen) return
+    axios.get('/api/ai/settings', api).then((res) => { if (res.data.imageModels) setImageModels(res.data.imageModels) }).catch(() => { })
+  }, [modelOpen])
   useEffect(() => {
     axios.get('/api/ai/settings', api).then((res) => {
       setTimer(res.data.disappearAfter)
@@ -484,15 +532,15 @@ const AiChat = () => {
     setModelOpen(false)
     const before = imageModel
     setImageModel(id)
-    try { await axios.put('/api/ai/settings/image-model', { imageModel: id }, api) } catch { setImageModel(before); setError("Couldn't change the image model.") }
+    try { await axios.put('/api/ai/settings/image-model', { imageModel: id }, api) } catch (err) { setImageModel(before); setError(err.response?.data?.error || "Couldn't change the image model.") }
   }
   const modelLabel = imageModels.find((m) => m.id === imageModel)?.label || 'Auto'
   const modelMenu = (
     <>
       <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Image model</p>
-      <p className="px-3 pb-2 text-xs text-slate-500 dark:text-slate-400">Nexa draws with this one first. If it's busy, it uses another so you still get your picture.</p>
+      <p className="px-3 pb-2 text-xs text-slate-500 dark:text-slate-400">Nexa only draws with the model you pick. Auto tries them in turn, so you always get a picture.</p>
       {imageModels.map((m) => (
-        <button key={m.id} role="menuitemradio" aria-checked={imageModel === m.id} onClick={() => changeImageModel(m.id)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800">
+        <button key={m.id} role="menuitemradio" aria-checked={imageModel === m.id} disabled={m.available === false && imageModel !== m.id} onClick={() => changeImageModel(m.id)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent dark:hover:bg-slate-800">
           <span className="min-w-0 flex-1">
             <span className="block text-sm text-slate-700 dark:text-slate-200">{m.label}</span>
             <span className="block truncate text-xs text-slate-400">{m.note}</span>
@@ -529,11 +577,14 @@ const AiChat = () => {
   useEffect(() => {
     if (!socket) return
     const onNexa = (msg) => setMessages((prev) => (prev.some((m) => m._id === msg._id) ? prev : [...prev, msg]))
+    // Nexa still working on a question (e.g. you left the chat and came back)
+    const onBusy = ({ busy }) => setThinking(!!busy)
     // Old messages disappearing (the 24-hour timer)
     const onGone = (ids) => { const gone = new Set(ids); setMessages((prev) => prev.filter((m) => !gone.has(String(m._id)))) }
     socket.on('nexaMessage', onNexa)
     socket.on('nexaMessagesDeleted', onGone)
-    return () => { socket.off('nexaMessage', onNexa); socket.off('nexaMessagesDeleted', onGone) }
+    socket.on('nexaBusy', onBusy)
+    return () => { socket.off('nexaMessage', onNexa); socket.off('nexaMessagesDeleted', onGone); socket.off('nexaBusy', onBusy) }
   }, [socket])
 
   // Keep scheduled cards up to date (sent, cancelled…)
@@ -622,7 +673,7 @@ const AiChat = () => {
     setThinking(true)
     try {
       const res = await axios.post('/api/ai/messages', { message: value, timeZone, media }, api)
-      setMessages((prev) => [...prev.filter((m) => m._id !== temp._id), res.data.question, res.data.answer])
+      setMessages((prev) => withAnswer(prev, temp._id, res.data))
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m._id !== temp._id))
       setText(value)
@@ -659,7 +710,7 @@ const AiChat = () => {
         body.append('file', file, file.name)
       }
       const res = await axios.post('/api/ai/messages', body, api)
-      setMessages((prev) => [...prev.filter((m) => m._id !== temp._id), res.data.question, res.data.answer])
+      setMessages((prev) => withAnswer(prev, temp._id, res.data))
       if (temp.attachment?.url?.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(temp.attachment.url), 5000)
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m._id !== temp._id))

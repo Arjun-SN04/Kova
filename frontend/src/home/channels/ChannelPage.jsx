@@ -8,6 +8,7 @@ import Sheet from '../groups/Sheet'
 import { LinkifiedText, LinkPreviewCard } from '../rightPart/LinkPreview'
 import { CHANNEL_EVENT, channelsApi, errorOf, loadChannels } from '../../utils/channels'
 import { QUICK_REACTIONS } from '../../utils/messages'
+import { compressImage } from '../../utils/attachments'
 
 const time = (d) => new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 const day = (d) => {
@@ -194,8 +195,8 @@ const ChannelPage = ({ channel: summary }) => {
     setSending(true); setError('')
     const form = new FormData()
     form.append('text', text.trim())
-    if (file) form.append('file', file)
     try {
+      if (file) { const small = await compressImage(file); form.append('file', small, small.name) }
       const res = await channelsApi.post(id, form)
       setPosts((p) => (p.some((x) => x._id === res.data._id) ? p : [...p, res.data]))
       setText(''); setFile(null); scrollDown(); loadChannels()

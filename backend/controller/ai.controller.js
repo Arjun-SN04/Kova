@@ -4,6 +4,7 @@ import { GoogleAccount } from "../models/googleAccount.model.js"
 import { ScheduledMessage } from "../models/scheduledMessage.model.js"
 import { askGroq, groqChat } from "../utils/groq.js"
 import { CALENDAR_TOOLS, GMAIL_TOOLS, NEXA_TOOLS, describeContext, formatWhen, loadNexaContext, runNexaTool } from "../utils/nexaTools.js"
+import { ACCOUNT_TOOLS, BUSINESS_TOOLS, SOCIAL_TOOLS } from "../utils/nexaApp.js"
 import { emitToUsers } from "../utils/notify.js"
 import { deleteFromCloudinary, uploadToCloudinary } from "../config/cloudinary.js"
 import { hasGmail } from "../utils/google.js"
@@ -11,7 +12,7 @@ import { TIMER_CHOICES, nexaFiles } from "../utils/disappear.js"
 import { wantsCreative, writeCreative } from "../utils/creative.js"
 import { speakText } from "../utils/tts.js"
 import { parseMedia } from "./gif.controller.js"
-import { IMAGE_MODELS, generateImage, isImageModel } from "../utils/imageGen.js"
+import { IMAGE_MODELS, canPickImageModel, generateImage, isImageModel } from "../utils/imageGen.js"
 import { CLAIMED_IMAGE_RE, LOOSE_IMAGE_RE, REFUSED_IMAGE_RE, asksForImage } from "../utils/imageIntent.js"
 import { VISION_MODEL, excerptFor, extractDocText, imageForModel, isDoc, isImage } from "../utils/aiFiles.js"
 import { Message } from "../models/message.model.js"
@@ -26,8 +27,10 @@ const MAX_INPUT = 4000        // characters per question
 const HISTORY = 6             // earlier messages sent as context (kept short: Groq free tier is ~8k tokens per request)
 const LIMIT_PER_MINUTE = 12   // per user, to protect the free API quota
 
-// What Nexa knows about the app, so it can help people use it
 const MAX_TOOL_ROUNDS = 5
+const NO_RE = /^\s*(no|nope|nah|not now|don'?t|do not|cancel|stop|wait|hold on|never ?mind|leave it|keep it|nahi|mat)\b/i
+const YES_RE = /^\s*(yes|yeah|yep|yup|y|ok|okay|sure|confirm(ed)?|do it|go ahead|please do|proceed|haan?|ha|ji|correct|right|of course)\b/i
+const MAX_APP_ROUNDS = 8      // "set up my business with these 5 products" takes several steps
 
 // The browser sends its time zone; fall back to UTC if it's missing or invalid
 const safeTimeZone = (tz) => {
@@ -55,6 +58,10 @@ const INTENT = {
   image: /\b(draw|paint|sketch|images?|pictures?|pics?|photos?|logo|wallpaper|illustration|poster|artwork)\b/i,
   visual: /\b(table|chart|diagram|flow ?chart|graph|compare|comparison|vs\.?|versus|steps|process|timeline|pros|cons|plan)\b/i,
   code: /\b(code|function|script|program|bug|error|api|class|component|html|css|javascript|typescript|python|java|c\+\+|c#|sql|regex|react|node|unity|json)\b/i,
+  // Running the app for the user (utils/nexaApp.js)
+  business: /\b(business|shop|store|catalog(ue)?|products?|menu items?|prices?|orders?|bookings?|appointments?|services?|coupons?|discount|promo ?code|quick ?repl(y|ies)|faq|greeting|away message|opening hours|working hours|upi|staff|broadcast|customers?|insights|sales|revenue|verif(y|ied|ication)|auto-?reply)\b/i,
+  social: /\b(groups?|communit(y|ies)|channels?|members?|admins?|invite link|leave|kick|follow|unfollow)\b/i,
+  account: /\b(profile|bio|about|username|my name|display name|privacy|last seen|online status|read receipts?|blue ticks?|block|unblock|contacts?|contact requests?|add @\w+|status|story|disappear(ing)?|pin|unpin)\b|@\w{3,}/i,
 }
 export const intentsFor = (text, prev, ctx) => {
   const first = new Set([...ctx.people.values()].map((c) => c.fullName.split(" ")[0].toLowerCase()).filter((n) => n.length > 2))
@@ -70,6 +77,9 @@ export const intentsFor = (text, prev, ctx) => {
     image: has(INTENT.image, text),
     visual: has(INTENT.visual, text),
     code: has(INTENT.code, text, prev),
+    business: has(INTENT.business, text, prev),
+    social: has(INTENT.social, text, prev),
+    account: has(INTENT.account, text, prev),
   }
 }
 
@@ -84,7 +94,9 @@ const APP_FACTS = `Kova facts (only describe these; if something isn't listed, s
 - Nexa reads photos and documents (📎 in the Nexa chat: PDFs, Word, text).
 - Groups: pen icon > New group. Admins rename, change the group photo, add/remove people, make admins.
 - Communities: pen icon > New community. It has an Announcements group (only admins post). Admins add people from their contacts; members press Join on its groups.
-- Left rail: Chats, Status, Calls, Communities, Starred. Profile (gear): name, @username, photo, password. Light/dark toggle in the left rail.`
+- Left rail: Chats, Status, Calls, Communities, Starred. Profile (gear): name, @username, photo, password. Light/dark toggle in the left rail.
+- Business account (Profile > Business): catalog, orders, bookings, quick replies, FAQ, greeting/away messages, coupons, team, broadcasts, insights.
+You can do most of these yourself (see App control); offer to do it instead of only explaining.`
 
 // How Nexa shapes an answer: poems as verse, stories as paragraphs, lists as bullets
 const FORMAT_RULES = `Keep answers SHORT and easy to read on a phone. Answer first, in plain everyday words.
@@ -112,10 +124,36 @@ Reminders ("remind me to call mom at 6", "every day at 9") go on the calendar as
   `Rules: only send or schedule when clearly asked; if the person, group or time is unclear, ask one short question. Send the user's own words unless they ask for rewording. After acting, confirm in one short sentence. Never claim something worked unless the tool said ok.
 Style: warm and friendly, like a helpful friend texting. ${FORMAT_RULES} Text to send goes in a quote ("> ..."). No headings, intro lines or sign-offs. At most one emoji. Never use em or en dashes.`,
   intents.visual ? `When it helps, use a Markdown table (2 to 5 columns) or a Mermaid diagram in a \`\`\`mermaid block ("flowchart TD", node ids A, B, C with labels in double quotes, under 12 nodes, no styling), then at most 2 bullets. Never use HTML tags like <br>; in a table cell separate items with "; ".` : "",
+  appControl(intents),
   intents.code ? `Code: complete and working. Each file in its own fenced block with language and file name, e.g. \`\`\`js server.js. Keep the explanation to a few bullets.` : "",
 ].filter(Boolean).join("\n\n")
 
+// Nexa sets things up herself: business, groups, communities, channels, contacts, profile
+const appControl = (intents) => {
+  if (!intents.business && !intents.social && !intents.account) return ""
+  return `App control: you can run Kova for the user. When they ask to set up, create, change or turn on something, DO it with your tools instead of explaining where the buttons are.
+${intents.business ? "- Business: business_info, business_setup (creates/turns on the business account and edits its profile and hours), business_settings, business_list (quick replies, FAQ, services, coupons, labels, templates), business_products, business_orders, business_bookings, business_team, business_broadcast, business_insights.\n" : ""}${intents.social ? "- Groups/communities/channels: manage_group, manage_community, manage_channel. Use contacts' names; people must be contacts.\n" : ""}${intents.account ? "- Account: update_profile, update_privacy, manage_contacts, chat_settings, post_status.\n" : ""}How to act:
+- Act first: "create a business account" means call business_setup now (category from their words, or "Other"), then ask for details like the name, hours or products. Never invent a business name.
+- Use what the user gave; fill optional details with sensible defaults instead of asking. Ask one short question only when something required is missing (a business account needs nothing; a group needs a name and at least one contact; a product needs a name and price; a channel needs a name).
+- For a request with many parts ("create my business, add these products, set hours"), call the tools one after another until everything is done, then sum up what you did in 2 to 4 short bullets and offer one useful next step.
+- If a tool returns needs_confirmation, ask the user "Shall I ...?" in one line. Call again with confirmed: true only after they clearly say yes.
+- If a tool returns an error, say what went wrong in plain words and how to fix it.
+- You can't change passwords, upload photos, delete the account or pay; tell them where to do it in Profile.`
+}
+
 const recent = {} // userId -> timestamps of recent questions
+
+// Questions Nexa is still working on, per user. Answers are pushed live ("nexaMessage"), so
+// leaving the Nexa chat (or reloading) doesn't lose the task: it finishes on the server and
+// shows up when you come back. GET /api/ai/messages says whether one is still running.
+const busy = new Map() // userId -> number of questions in progress
+const setBusy = (userId, delta) => {
+  const id = String(userId)
+  const n = Math.max(0, (busy.get(id) || 0) + delta)
+  if (n) busy.set(id, n)
+  else busy.delete(id)
+  emitToUsers([id], "nexaBusy", { busy: n > 0 })
+}
 
 // Groq's free tier allows ~8,000 tokens per request (prompt + reply room), so earlier
 // messages are sent within a budget: newest first, long ones (code) shortened.
@@ -154,6 +192,9 @@ export const toolsFor = (ctx, intents) => [
     || t.function.name === "generate_image"),
   ...(intents.calendar ? CALENDAR_TOOLS : []),
   ...(intents.mail ? GMAIL_TOOLS : []),
+  ...(intents.business ? BUSINESS_TOOLS : []),
+  ...(intents.social ? SOCIAL_TOOLS : []),
+  ...(intents.account ? ACCOUNT_TOOLS : []),
   { type: "browser_search" },
 ]
 
@@ -224,13 +265,14 @@ const CAPABILITIES_TEXT = `Here's what I can do:
 - **Read photos and documents**: send a screenshot, receipt, PDF or Word file (📎) and ask about it
 - **Polls**: "make a poll in Team: lunch at 1 or 2?"
 - **Google Calendar, Tasks & Gmail**: meetings, Meet links, tasks, unread mail, reply drafts and a morning brief (connect with the 📅 button above)
+- **Run Kova for you**: "create a business account for my bakery", add products, coupons, FAQ and opening hours, update orders, make groups, communities and channels, add contacts, change your profile and privacy
 - **Kova help**: contacts, groups, calls, communities
 - In any chat: ✨ rewrite, smart replies, Catch me up, Translate, Transcribe, Remind me, and **@Nexa** in groups`
 
 export const getAiMessages = async (req, res) => {
   try {
     const messages = await AiMessage.find({ user: req.user._id }).select("-doc.text").sort({ createdAt: 1 }).limit(500)
-    res.status(200).json({ messages })
+    res.status(200).json({ messages, busy: busy.has(String(req.user._id)) })
   } catch (error) {
     console.log("getAiMessages error:", error)
     res.status(500).json({ error: "Internal server error" })
@@ -265,12 +307,36 @@ export const sendAiMessage = async (req, res) => {
     }
 
     const ctx = await loadNexaContext(me, safeTimeZone(req.body.timeZone))
+    // Any answer but "no" to Nexa's "Shall I …?" lets it go ahead with that step (delete, remove, block, broadcast)
+    const lastAsk = (await AiMessage.findOne({ user: me._id, role: "assistant" }).sort({ createdAt: -1 }).select("content"))?.content || ""
+    const answeredAsk = /\b(shall|should) i\b|do you want me to/i.test(lastAsk)
+    ctx.userConfirmed = !media && (YES_RE.test(text) || (answeredAsk && !NO_RE.test(text)))
+    ctx.answeredAsk = answeredAsk
     // Keep the brief on the user's current local time
     if (ctx.google && ctx.google.timeZone !== ctx.timeZone) GoogleAccount.updateOne({ _id: ctx.google._id }, { timeZone: ctx.timeZone }).catch(() => {})
     const history = (await AiMessage.find({ user: me._id }).sort({ createdAt: -1 }).limit(HISTORY)).reverse()
+    // What the user wrote now and just before (tools check names against it)
+    ctx.userText = [text, ...history.filter((m) => m.role === "user").slice(-2).map((m) => m.content || "")].join(" ")
     // Replying to one of Nexa's earlier answers: it sees which part they mean
     const quote = String(req.body.quote || "").replace(/\s+/g, " ").trim().slice(0, 600) || null
     const question = await AiMessage.create({ user: me._id, role: "user", content: text, attachment: media, quote })
+    setBusy(me._id, 1)
+    try {
+      const out = await answerQuestion({ req, me, text, media, quote, question, ctx, history })
+      if (out.answer) emitToUsers([me._id], "nexaMessage", out.answer)
+      return res.status(out.status).json(out.body)
+    } finally {
+      setBusy(me._id, -1)
+    }
+  } catch (error) {
+    console.log("sendAiMessage error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// The model and tool loop for one question (runs to the end even if the person leaves the chat)
+const answerQuestion = async ({ req, me, text, media, quote, question, ctx, history }) => {
+  {
     // A GIF or sticker: Nexa sees its title and replies in kind (short and friendly)
     const asked = media
       ? `${text ? `${text}\n` : ""}[I ${attachmentNote(media)}. Reply naturally and briefly to it, matching its mood.]`
@@ -285,6 +351,8 @@ export const sendAiMessage = async (req, res) => {
     const lastWasImage = !!history.slice(-2).some((m) => m.role === "assistant" && m.actions?.some((a) => a?.type === "image"))
     const imageAsked = !media && await asksForImage(text, { recent: historyFor(history.slice(-4), 1200).map((m) => `${m.role}: ${m.content}`).join("\n"), lastWasImage })
     if (imageAsked) intents.image = true
+    // "yes" to "Shall I remove Rahul from Goa Trip?": keep the app tools so Nexa can finish it
+    if (ctx.userConfirmed && ctx.answeredAsk) Object.assign(intents, { business: true, social: true, account: true, people: true })
     let trimmed = false
     // A document from the last few messages: give Nexa the parts that matter for this question
     const recentDoc = [...history].reverse().find((m) => m.doc?.text)?.doc
@@ -300,13 +368,16 @@ export const sendAiMessage = async (req, res) => {
     const actions = []
     const sources = []
     const searched = [] // every URL the web search returned (links in the reply must be one of these)
+    const started = Date.now()
+    const questions = [] // steps waiting for the user's yes (delete, remove, block, broadcast)
     let reply = ""
     // Poems, songs, shayari: their own careful path (draft + rhyme check)
     if (!media && !req.file && !imageAsked && wantsCreative(text)) {
       try { reply = await writeCreative(text, `Asked by ${me.fullName}.`) } catch (err) { console.log("creative error:", err.message) }
     }
     try {
-      for (let round = 0; round < MAX_TOOL_ROUNDS && !reply; round++) {
+      const rounds = intents.business || intents.social || intents.account ? MAX_APP_ROUNDS : MAX_TOOL_ROUNDS
+      for (let round = 0; round < rounds && !reply; round++) {
         // An image request: the first turn must call generate_image (the model sometimes refuses otherwise)
         const forceImage = round === 0 && imageAsked
         const options = { tools: toolsFor(ctx, intents), maxTokens: 2500, ...(forceImage ? { toolChoice: FORCE_IMAGE } : {}) }
@@ -319,23 +390,30 @@ export const sendAiMessage = async (req, res) => {
           if (!trimmed) { convo.splice(1, earlier.length); trimmed = true }
           msg = await groqChat(convo, { ...options, maxTokens: 1800 })
         }
+        if (process.env.NEXA_DEBUG) console.log(`[nexa] round ${round} ${Date.now() - started}ms tools=${(msg.tool_calls || []).map((c) => `${c.function.name}(${c.function.arguments})`).join(" ") || "-"} text=${JSON.stringify(String(msg.content || "").slice(0, 80))}`)
         sources.push(...sourcesOf(msg.executed_tools))
         searched.push(...searchedUrls(msg.executed_tools))
         if (!msg.tool_calls?.length) { reply = msg.content?.trim() || ""; break }
         convo.push({ role: "assistant", content: msg.content || "", tool_calls: msg.tool_calls })
+        const before = actions.length
+        const asked = questions.length
         for (const callItem of msg.tool_calls) {
           let args = {}
           try { args = JSON.parse(callItem.function.arguments || "{}") } catch { /* bad JSON: tool reports it */ }
-          const { result, action } = await runNexaTool(callItem.function.name, args, ctx)
+          const { result, action, question: confirm } = await runNexaTool(callItem.function.name, args, ctx)
           if (action) actions.push(action)
+          if (confirm && !questions.includes(confirm)) questions.push(confirm)
           convo.push({ role: "tool", tool_call_id: callItem.id, content: JSON.stringify(result) })
         }
+        // Waiting for the user's yes: stop here instead of letting the model try again
+        if (questions.length > asked && actions.length === before) break
       }
     } catch (err) {
       // Nothing happened and no answer: keep the question out of the history
       if (!actions.length) {
         await AiMessage.deleteOne({ _id: question._id })
-        return res.status(503).json({ error: err.message })
+        emitToUsers([me._id], "nexaMessagesDeleted", [String(question._id)])
+        return { status: 503, body: { error: err.message } }
       }
     }
     // Nexa can always draw: if it said it can't (or claimed a picture it never made), make the picture anyway
@@ -366,6 +444,8 @@ export const sendAiMessage = async (req, res) => {
       // Not a picture request, but never leave "I can't create images" in an answer
       reply = reply.split(/(?<=[.!?])\s+|\n/).filter((line) => !REFUSED_IMAGE_RE.test(line)).join(" ").trim()
     }
+    // Something needs a yes first: ask exactly that (the model sometimes adds "Done!" after asking)
+    if (questions.length) reply = actions.length ? `Done with the rest. ${questions.join(" ")}` : questions.join("\n")
     if (!reply) reply = actions.length ? "Done." : "Sorry, I couldn't finish that. Could you rephrase?"
     reply = linkServices(keepRealLinks(reply, searched), searched)
     // Replies to a GIF or sticker sometimes come back as a quote
@@ -374,10 +454,7 @@ export const sendAiMessage = async (req, res) => {
     if (links.length) actions.push({ type: "sources", items: links })
 
     const answer = await AiMessage.create({ user: me._id, role: "assistant", content: reply, actions })
-    res.status(201).json({ question, answer })
-  } catch (error) {
-    console.log("sendAiMessage error:", error)
-    res.status(500).json({ error: "Internal server error" })
+    return { status: 201, body: { question, answer }, answer }
   }
 }
 
@@ -397,7 +474,7 @@ const answerAboutFile = async (req, res, { me, file, text }) => {
       if (!doc?.text) return res.status(400).json({ error: "I couldn't find any text in that file. If it's a scan, send it as a photo instead." })
     }
     stored = await uploadToCloudinary(file, { subfolder: "ai-uploads" })
-    const attachment = { kind: image ? "image" : "file", url: stored.url, publicId: stored.publicId, resourceType: stored.resourceType, name: file.originalname, size: stored.size, mimeType: file.mimetype, width: stored.width, height: stored.height }
+    const attachment = { kind: image ? "image" : "file", url: stored.url, publicId: stored.publicId, resourceType: stored.resourceType, name: stored.name, size: stored.size, mimeType: stored.mimeType, width: stored.width, height: stored.height }
 
     const history = (await AiMessage.find({ user: me._id }).sort({ createdAt: -1 }).limit(4)).reverse()
     const question = await AiMessage.create({ user: me._id, role: "user", content: text, attachment, doc: doc ? { name: file.originalname, pages: doc.pages, text: doc.text, truncated: doc.truncated } : null })
@@ -515,7 +592,7 @@ export const getAiSettings = (req, res) => res.json({
 // Which image model Nexa tries first (falls back to the others if it fails)
 export const setImageModel = async (req, res) => {
   const id = String(req.body.imageModel || "")
-  if (!isImageModel(id)) return res.status(400).json({ error: "That image model isn't available" })
+  if (!canPickImageModel(id)) return res.status(400).json({ error: "That image model isn't available right now" })
   await User.updateOne({ _id: req.user._id }, { nexaImageModel: id })
   res.json({ imageModel: id })
 }

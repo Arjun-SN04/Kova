@@ -9,6 +9,7 @@ import { addTask, completeTask, createDraft, createEvent, deleteEvent, getAccoun
 import { MAX_SNOOZE_MIN, dayBounds, refreshUpcoming, snoozeReminder } from "./agenda.js"
 import { AiMessage } from "../models/aiMessage.model.js"
 import { createPollMessage } from "../controller/messageExtras.controller.js"
+import { APP_TOOL_NAMES, runAppTool } from "./nexaApp.js"
 
 // What Nexa can do. The server checks every action against the user's own permissions.
 export const NEXA_TOOLS = [
@@ -379,10 +380,7 @@ export const runNexaTool = async (name, args, ctx) => {
       }
     }
 
-    // ── Google Calendar / Tasks ──
-    case "get_calendar_events":
-    case "create_calendar_event":
-    case "delete_calendar_event":
+    // ── Gmail ──
     case "search_emails":
     case "read_email":
     case "draft_email": {
@@ -393,6 +391,10 @@ export const runNexaTool = async (name, args, ctx) => {
         return { result: { error: err.message } }
       }
     }
+    // ── Google Calendar / Tasks ──
+    case "get_calendar_events":
+    case "create_calendar_event":
+    case "delete_calendar_event":
     case "snooze_reminder":
     case "get_tasks":
     case "add_task":
@@ -406,6 +408,8 @@ export const runNexaTool = async (name, args, ctx) => {
     }
 
     default:
+      // Running the app: business, groups, communities, channels, contacts, profile (utils/nexaApp.js)
+      if (APP_TOOL_NAMES.has(name)) return runAppTool(name, args, ctx)
       return { result: { error: `Unknown tool ${name}` } }
   }
 }

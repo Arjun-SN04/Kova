@@ -9,6 +9,7 @@ import { AI_CHAT } from '../utils/ai'
 import { loadStatusFeed } from '../utils/status'
 import { CHANNEL_EVENT, loadChannels } from '../utils/channels'
 import { notifyLocally } from '../utils/localNotify'
+import { refreshAfterNexa } from '../utils/nexaRefresh'
 
 // Typing indicators clear themselves if no "stopTyping" arrives in time
 const TYPING_TIMEOUT_MS = 4000
@@ -18,7 +19,7 @@ const typingTimers = {}
 // Mounted once by the chat layout so it works even when no chat is open.
 const useListenMessages = () => {
   const { socket } = useSocket()
-  const [AuthUser] = useAuth()
+  const [AuthUser, setAuthUser] = useAuth()
   const myId = String(AuthUser?._id)
 
   useEffect(() => {
@@ -71,8 +72,10 @@ const useListenMessages = () => {
     }
 
     // Nexa wrote by itself (morning brief, meeting reminder): unread dot unless its chat is open
-    const handleNexaMessage = () => {
+    // A Nexa answer or reminder (also answers finished while you were on another screen)
+    const handleNexaMessage = (msg) => {
       if (!store().selectedConversation?.isAi) store().addUnread(AI_CHAT._id)
+      if (msg?.role === 'assistant') refreshAfterNexa(msg, setAuthUser)
     }
 
     const handleMessageDeleted = (messageId) => {
@@ -181,7 +184,7 @@ const useListenMessages = () => {
       socket.off('typing', handleTyping)
       socket.off('stopTyping', handleStopTyping)
     }
-  }, [socket, myId])
+  }, [socket, myId, setAuthUser])
 }
 
 export default useListenMessages

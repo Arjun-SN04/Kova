@@ -53,21 +53,15 @@ export const tidy = (text) =>
 // toolChoice: "auto" (default), or { type: "function", function: { name } } to require that tool
 // only: use just `model` (e.g. the vision model; the others can't see images)
 export const groqChat = async (messages, { tools = null, toolChoice = null, maxTokens = 2500, temperature = 0.6, model: preferred = null, only = false, reasoning = "low" } = {}) => {
-  // Nexa's chat runs on Gemini (GEMINI_MODEL, Flash-Lite by default). Groq is the backup, and
-  // still handles calls pinned to one of its models (photos: the vision model).
-  if (geminiConfigured() && !(only && preferred)) {
-    try {
-      const msg = await geminiChat(messages, { tools, toolChoice, maxTokens, temperature, reasoning })
-      if (msg.content?.trim() || msg.tool_calls?.length) return { ...msg, content: tidy(String(msg.content || "")) }
-    } catch (err) {
-      console.log("Gemini failed, using Groq:", err.status || "", err.message)
-    }
-  }
+  // Nexa's chat runs on Groq (fast: about half a second a turn). Gemini is kept for images
+  // (utils/imageGen.js); its free chat tier queues for 8-60 s, so here it's only a last resort
+  // when every Groq key is busy, and only before any tool calls (Gemini can't continue Groq's).
   const all = keys()
-  if (!all.length) throw new Error("Nexa isn't set up on this server yet.")
+  if (!all.length && !geminiConfigured()) throw new Error("Nexa isn't set up on this server yet.")
   const models = only && preferred ? [preferred] : [preferred, process.env.GROQ_MODEL || "openai/gpt-oss-120b", FALLBACK_MODEL].filter((m, i, a) => m && a.indexOf(m) === i)
 
-  for (const model of models) {
+  let tooLarge = null
+  for (const model of all.length ? models : []) {
     for (let attempt = 0; attempt < all.length; attempt++) {
       const key = all[next++ % all.length]
       try {
@@ -82,7 +76,8 @@ export const groqChat = async (messages, { tools = null, toolChoice = null, maxT
         if (data.error?.code === "tool_use_failed") continue
         // Request bigger than the plan allows (tokens per minute): the caller can shrink it
         if (status === 413 || /request too large|reduce your message size/i.test(data.error?.message || "")) {
-          throw Object.assign(new Error("That conversation got too long for Nexa. Try a shorter message, or clear the chat."), { code: "too_large" })
+          tooLarge = Object.assign(new Error("That conversation got too long for Nexa. Try a shorter message, or clear the chat."), { code: "too_large" })
+          break
         }
         console.log("Groq error:", status, data.error?.message)
         throw new Error("Nexa couldn't answer that. Please try again.")
@@ -90,6 +85,18 @@ export const groqChat = async (messages, { tools = null, toolChoice = null, maxT
         if (["TimeoutError", "AbortError"].includes(err.name) || err.message?.startsWith("fetch failed")) continue
         throw err
       }
+    }
+    if (tooLarge) break
+  }
+  if (tooLarge) throw tooLarge
+  // Every Groq key busy: Gemini as a last resort (not for calls pinned to a Groq model)
+  const midTools = messages.some((m) => m.tool_calls?.length || m.role === "tool")
+  if (geminiConfigured() && !(only && preferred) && !midTools) {
+    try {
+      const msg = await geminiChat(messages, { tools, toolChoice, maxTokens, temperature, reasoning })
+      if (msg.content?.trim() || msg.tool_calls?.length) return { ...msg, content: tidy(String(msg.content || "")) }
+    } catch (err) {
+      console.log("Gemini backup failed:", err.status || "", err.message)
     }
   }
   throw new Error("Nexa is busy right now. Please try again in a minute.")

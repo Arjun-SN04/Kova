@@ -181,7 +181,7 @@ ${chat?.lines.slice(-25).join("\n") || "(none)"}`,
   return {
     reply: plan.caption || "Here you go",
     refs: photos.map(photoRef),
-    attachment: { url: stored.url, publicId: stored.publicId, resourceType: "image", kind: "image", name: "nexa-image.jpg", size: stored.size, mimeType: stored.mimeType || "image/jpeg", width: stored.width, height: stored.height },
+    attachment: { url: stored.url, publicId: stored.publicId, resourceType: "image", kind: "image", name: stored.name, size: stored.size, mimeType: stored.mimeType || "image/jpeg", width: stored.width, height: stored.height },
   }
 }
 

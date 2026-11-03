@@ -113,25 +113,42 @@ const providers = (prompt, shape) => [
   ...SUBNP_MODELS.map((m) => ({ id: `subnp:${m}`, label: m === "magic" ? "Magic (SubNP)" : `SubNP ${m}`, note: "Free backup, softer style", run: () => subnp(prompt, shape, m) })),
 ]
 
-// What the model picker shows: [{ id, label, note }], best first
+// What the model picker shows: [{ id, label, note, available }], best first
 export const IMAGE_MODELS = () => [
-  { id: "auto", label: "Auto", note: "Best available, with backups" },
-  ...providers("", "square").map(({ id, label, note }) => ({ id, label, note })),
+  { id: "auto", label: "Auto", note: "Best available, with backups", available: true },
+  ...providers("", "square").map(({ id, label, note, available }) => ({ id, label, note, available: available !== false })),
 ]
 export const isImageModel = (id) => IMAGE_MODELS().some((m) => m.id === id)
+export const canPickImageModel = (id) => IMAGE_MODELS().some((m) => m.id === id && m.available)
 
-// ── Try each provider in turn (the chosen one first, the rest as backups) ──
+const reasonOf = (e) => e?.error?.message || e?.message || String(e)
+
+// A model the person picked is the only one used: one retry for a hiccup, then a clear
+// error (never a picture from another model). Auto tries every model in turn.
 // Returns { buffer, mimetype, transformation?, model: { id, label } }
 export const generateImage = async (prompt, shape = "square", preferred = "auto") => {
   const all = providers(prompt, shape)
-  const chosen = all.find((p) => p.id === preferred)
-  const attempts = chosen ? [chosen, ...all.filter((p) => p !== chosen)] : all
+  const chosen = preferred && preferred !== "auto" ? all.find((p) => p.id === preferred) : null
+  if (chosen) {
+    let last
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return { ...(await chosen.run()), model: { id: chosen.id, label: chosen.label } }
+      } catch (e) {
+        last = e
+        if (e?.status === 429) break // a limit won't clear in a second
+      }
+    }
+    const why = last?.status === 429 ? ` ${reasonOf(last).replace(/\.?$/, ".")}` : ""
+    throw err(`${chosen.label} couldn't make this picture right now.${why} Try again, or pick Auto with the wand button at the top of the Nexa chat.`, last?.status === 429 ? 429 : 502, `${chosen.id}: ${reasonOf(last)}`)
+  }
+  const attempts = all.filter((p) => p.available !== false)
   const failures = []
   for (const { id, label, run } of attempts) {
     try {
       return { ...(await run()), model: { id, label } }
     } catch (e) {
-      failures.push(`${id}: ${e?.error?.message || e?.message || e}`)
+      failures.push(`${id}: ${reasonOf(e)}`)
     }
   }
   throw err("Couldn't create the image right now. Try again in a bit.", 502, failures.join(" | "))

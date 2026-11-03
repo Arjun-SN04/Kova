@@ -1,5 +1,6 @@
 import { v2 as cloudinary } from "cloudinary"
 import multer from "multer"
+import { compressMedia } from "../utils/compress.js"
 
 // Free plan limits: 10 MB per image/raw file. We keep everything under that.
 export const MAX_FILE_BYTES = 10 * 1024 * 1024
@@ -54,11 +55,15 @@ const kindOf = (mimetype) =>
     : mimetype.startsWith("audio/") ? "audio"
     : "file"
 
-// Upload a file buffer. Images arrive already compressed by the browser, so we
-// store them as-is: no transformations, which keeps Cloudinary credit use low.
-// `transformation` (optional) is applied once on upload, e.g. to crop an image
-export const uploadToCloudinary = (file, { subfolder: forcedSubfolder, transformation } = {}) => {
+// Upload a file buffer. Photos, videos and audio are compressed here first (utils/compress.js),
+// so nothing large reaches Cloudinary even when the browser didn't shrink it (AI images,
+// channel posts, videos). No Cloudinary transformations, which keeps credit use low.
+// `transformation` (optional) is applied once on upload, e.g. to crop an image.
+// Returns the stored file's details; `name` and `mimeType` follow the compressed file.
+export const uploadToCloudinary = async (original, { subfolder: forcedSubfolder, transformation, compress = true } = {}) => {
   ensureConfig()
+  // QR codes stay pixel-perfect (lossless WebP)
+  const file = compress ? await compressMedia(original, { lossless: forcedSubfolder === "payment-qr" }) : original
   const kind = kindOf(file.mimetype)
   // Cloudinary stores audio under the "video" resource type
   const resourceType = kind === "file" ? "raw" : kind === "audio" ? "video" : kind
