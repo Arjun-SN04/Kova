@@ -1,5 +1,5 @@
 import React from 'react'
-import { LuChevronRight, LuFileText, LuImage, LuMic, LuPin, LuVideo } from 'react-icons/lu'
+import { LuChevronRight, LuFileText, LuImage, LuMic, LuPin, LuVideo, LuBellOff } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import { GroupAvatar } from '../Avatar'
 import { shortTime } from '../../utils/conversations'
@@ -11,10 +11,11 @@ const AttachmentIcon = ({ kind }) => {
 }
 
 // One group in the chat list. `compact` is used for groups listed under a community.
-export const GroupRow = ({ group, unread, preview, typing, myId, compact = false, pinned = false, locked = false }) => {
+export const GroupRow = ({ group, unread, preview, typing, myId, compact = false, pinned = false, muted = false, locked = false }) => {
   const { selectedConversation, setSelectedConversation, clearUnread, setCatchUp } = useConversation()
   const id = String(group._id)
   const isSelected = String(selectedConversation?._id) === id
+  const draft = useConversation((s) => s.drafts[id])
 
   const open = () => {
     setSelectedConversation(group)
@@ -42,6 +43,7 @@ export const GroupRow = ({ group, unread, preview, typing, myId, compact = false
             {group.name}
           </p>
           {pinned && <LuPin className="ml-auto size-3 shrink-0 -rotate-45 text-slate-400" title="Pinned" aria-label="Pinned" />}
+          {muted && <LuBellOff className="size-3 shrink-0 text-slate-400" title="Muted" aria-label="Muted" />}
           {preview && !locked && (
             <span className={`shrink-0 text-[11px] ${unread && !isSelected && !locked ? 'font-semibold text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>
               {shortTime(preview.createdAt)}
@@ -54,6 +56,8 @@ export const GroupRow = ({ group, unread, preview, typing, myId, compact = false
               <span aria-hidden>&nbsp;</span>
             ) : typing ? (
               <span className="font-medium text-indigo-600 dark:text-indigo-400">{typing === 'Nexa' ? 'Nexa is thinking…' : typeof typing === 'string' ? `${typing.split(' ')[0]} is typing…` : 'typing…'}</span>
+            ) : draft && !isSelected ? (
+              <span><span className="font-medium text-emerald-600 dark:text-emerald-400">Draft: </span>{draft}</span>
             ) : preview ? (
               <>
                 {sender && <span className="text-slate-400">{sender}: </span>}
@@ -67,7 +71,7 @@ export const GroupRow = ({ group, unread, preview, typing, myId, compact = false
             )}
           </p>
           {unread > 0 && !isSelected && !locked && (
-            <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[11px] font-semibold text-white">
+            <span className={`flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold text-white ${muted ? 'bg-slate-400 dark:bg-slate-600' : 'bg-indigo-600'}`}>
               {unread > 99 ? '99+' : unread}
             </span>
           )}

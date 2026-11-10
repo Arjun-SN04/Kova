@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
 import { downloadFile } from '../../utils/attachments'
-import { LuDownload, LuImage, LuRefreshCw } from 'react-icons/lu'
+import { LuDownload, LuImage, LuRefreshCw, LuWandSparkles } from 'react-icons/lu'
 
 // Nexa's pictures are drawn on our server (Puter FLUX) and kept on Cloudinary.
 const SIZES = { square: [1024, 1024], portrait: [768, 1024], landscape: [1024, 768] }
@@ -12,20 +12,25 @@ const NexaImage = ({ messageId, action, fresh, onSaved }) => {
   // New requests start by themselves; older unfinished ones wait for a click
   const [state, setState] = useState(() => (action.url ? 'done' : fresh && !started.has(action.id) ? 'drawing' : 'idle')) // idle | drawing | done | error
   const [error, setError] = useState('')
+  const [code, setCode] = useState('') // model_limit | model_failed | user_limit
   const [w, h] = action.width && action.height ? [action.width, action.height] : SIZES[action.shape] || SIZES.square
 
-  const run = useCallback(() => {
+  // model: 'auto' tries every model once, whatever is picked in the header
+  const run = useCallback((model) => {
     started.add(action.id)
-    axios.post(`/api/ai/messages/${messageId}/image`, { actionId: action.id }, { withCredentials: true })
+    axios.post(`/api/ai/messages/${messageId}/image`, { actionId: action.id, ...(model ? { model } : {}) }, { withCredentials: true })
       .then((res) => { onSaved(messageId, res.data.action); setState('done') })
-      .catch((err) => { setError(err.response?.data?.error || "Couldn't create the image."); setState('error') })
+      .catch((err) => { setError(err.response?.data?.error || "Couldn't create the image."); setCode(err.response?.data?.code || ''); setState('error') })
   }, [action.id, messageId, onSaved])
 
   useEffect(() => {
     if (state === 'drawing' && !started.has(action.id)) run()
   }, [state, action.id, run])
 
-  const draw = () => { setError(''); setState('drawing'); run() }
+  const draw = (model) => { setError(''); setCode(''); setState('drawing'); run(model) }
+  // A daily limit won't clear on a retry, so only offer what can work
+  const canRetry = code !== 'model_limit' && code !== 'user_limit'
+  const canSwitch = code === 'model_limit' || code === 'model_failed'
 
   const src = action.url
   const box = 'mt-1.5 w-full max-w-sm overflow-hidden rounded-xl bg-white shadow-xs ring-1 ring-slate-200/80 dark:bg-slate-800/70 dark:ring-slate-700/60'
@@ -62,9 +67,18 @@ const NexaImage = ({ messageId, action, fresh, onSaved }) => {
       <p className="flex items-center gap-1.5 text-xs font-medium text-violet-600 dark:text-violet-300"><LuImage className="size-3.5" /> Image</p>
       <p className="mt-1 line-clamp-3 border-l-2 border-slate-200 pl-2 text-sm text-slate-700 dark:border-slate-600 dark:text-slate-200">{action.prompt}</p>
       {error && <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
-      <button onClick={draw} className="mt-2 inline-flex h-7 items-center gap-1 rounded-md bg-violet-600 px-2.5 text-xs font-medium text-white transition hover:bg-violet-500">
-        {state === 'error' ? <><LuRefreshCw className="size-3.5" /> Try again</> : <><LuImage className="size-3.5" /> Create image</>}
-      </button>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {canSwitch && (
+          <button onClick={() => draw('auto')} className="inline-flex h-7 items-center gap-1 rounded-md bg-violet-600 px-2.5 text-xs font-medium text-white transition hover:bg-violet-500">
+            <LuWandSparkles className="size-3.5" /> Use another model
+          </button>
+        )}
+        {canRetry && (
+          <button onClick={() => draw()} className={`inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-xs font-medium transition ${canSwitch ? 'text-violet-700 ring-1 ring-violet-300 hover:bg-violet-50 dark:text-violet-200 dark:ring-violet-500/40 dark:hover:bg-violet-500/10' : 'bg-violet-600 text-white hover:bg-violet-500'}`}>
+            {state === 'error' ? <><LuRefreshCw className="size-3.5" /> Try again</> : <><LuImage className="size-3.5" /> Create image</>}
+          </button>
+        )}
+      </div>
     </div>
   )
 }

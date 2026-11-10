@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import axios from 'axios'
 import { LuChevronRight, LuFileText, LuLink, LuMic, LuPlay } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
@@ -21,7 +22,26 @@ const MediaSummary = ({ chat }) => {
       return p?.fullName?.split(' ')[0] || 'Member'
     }
   }, [chat, groupPeople])
-  const items = useMemo(() => chatMediaItems(messages, { myId, nameOf, nexaId, chat }), [messages, myId, nameOf, nexaId, chat])
+  // The chat loads page by page, so ask the server for all of its media, links and docs
+  const [saved, setSaved] = useState({ chatId: null, messages: [] })
+  useEffect(() => {
+    let stale = false
+    const params = chat.isGroup ? '?group=1' : ''
+    axios.get(`/api/message/media/${chat._id}${params}`, { withCredentials: true })
+      .then((res) => { if (!stale) setSaved({ chatId: String(chat._id), messages: res.data.messages }) })
+      .catch(() => {})
+    return () => { stale = true }
+  }, [chat._id, chat.isGroup])
+  // Loaded messages (newest changes, deletions) win over the server's list
+  const all = useMemo(() => {
+    const loaded = new Map(messages.map((m) => [String(m._id), m]))
+    const extra = saved.chatId === String(chat._id) ? saved.messages.filter((m) => !loaded.has(String(m._id))) : []
+    const oldestLoaded = messages[0] ? new Date(messages[0].createdAt) : null
+    // Server items newer than the oldest loaded one but not loaded were deleted meanwhile
+    return [...extra.filter((m) => !oldestLoaded || new Date(m.createdAt) < oldestLoaded), ...messages]
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+  }, [messages, saved, chat._id])
+  const items = useMemo(() => chatMediaItems(all, { myId, nameOf, nexaId, chat }), [all, myId, nameOf, nexaId, chat])
   const media = items.filter((i) => i.tab === 'media')
   const count = (tab) => items.filter((i) => i.tab === tab).length
 
@@ -30,6 +50,7 @@ const MediaSummary = ({ chat }) => {
     if (res.ok) {
       const gone = new Set(res.deletedMessages)
       setMessages((prev) => prev.filter((m) => !gone.has(String(m._id))))
+      setSaved((s) => ({ ...s, messages: s.messages.filter((m) => !gone.has(String(m._id))) }))
       loadConversations()
     }
     return res

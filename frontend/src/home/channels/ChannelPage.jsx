@@ -145,6 +145,8 @@ const ChannelPage = ({ channel: summary }) => {
       if (ch.data.following || ch.data.amAdmin) channelsApi.read(id).then(loadChannels).catch(() => {})
     } catch (err) { setError(errorOf(err)); setPosts([]) }
   }, [id])
+  // State is only set after the request / camera answers (async), not during the effect
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [load])
 
   // Live: new / changed / deleted posts

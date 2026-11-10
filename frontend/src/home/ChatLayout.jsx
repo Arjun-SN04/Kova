@@ -23,6 +23,10 @@ import { NavRail } from './leftpart/NavRail'
 import { resumeLiveShares } from '../utils/liveLocation'
 import { channelsApi, loadChannels } from '../utils/channels'
 import { HideChatsHost } from './leftpart/HiddenChats'
+import useBackButton from '../hooks/useBackButton'
+import useOutbox from '../hooks/useOutbox'
+import ConnectionBanner from './ConnectionBanner'
+import ErrorBoundary from '../components/ErrorBoundary'
 
 // Minimum sidebar width on desktop (64px rail + 296px chats list = 360px)
 export const getMinSidebarWidth = (windowWidth) => {
@@ -92,8 +96,12 @@ const ChatLayout = () => {
   // Listen for socket events for the whole chat screen, so unread badges
   // update even when no conversation is open.
   useListenMessages()
+  // Phone back button closes the open chat instead of leaving Kova
+  useBackButton()
   // Business: customer labels, waiting alerts, settings
   useBusinessSocket()
+  // Messages waiting to be sent go out when the connection is back
+  useOutbox()
 
   // Sidebar previews + unread counts from the server
   useEffect(() => {
@@ -114,7 +122,7 @@ const ChatLayout = () => {
     loadStatusFeed()
     // Pinned chats + starred messages
     axios.get('/api/message/prefs', { withCredentials: true })
-      .then((res) => { const s = useConversation.getState(); s.setPinnedChats(res.data.pinnedChats); s.setStarredIds(res.data.starred); s.setLockedPrefs(res.data); s.setHiddenPrefs(res.data); if (res.data.wallpapers) s.setWallpapers(res.data.wallpapers) })
+      .then((res) => { const s = useConversation.getState(); s.setPinnedChats(res.data.pinnedChats); s.setArchivedChats(res.data.archivedChats || []); s.setMutedChats(res.data.mutedChats || {}); s.setStarredIds(res.data.starred); s.setLockedPrefs(res.data); s.setHiddenPrefs(res.data); if (res.data.wallpapers) s.setWallpapers(res.data.wallpapers) })
       .catch(() => {})
     // Back from connecting Google: open Nexa (it shows the result)
     if (readGoogleResult()) useConversation.getState().setSelectedConversation(AI_CHAT)
@@ -212,6 +220,7 @@ const ChatLayout = () => {
       <HideChatsHost />
       <WallpaperPickerHost />
       <div className="flex h-dvh flex-col overflow-hidden bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <ConnectionBanner />
       <MiniPlayer />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Chat list hidden (Ctrl/Cmd+B): the section rail stays, with all its icons */}
@@ -237,7 +246,10 @@ const ChatLayout = () => {
         </div>
 
         <main className={`${selectedConversation ? 'flex' : 'hidden md:flex'} min-w-0 flex-1`}>
-          <Right />
+          {/* A crash in the open chat doesn't take the chat list down with it */}
+          <ErrorBoundary compact resetKey={selectedConversation?._id}>
+            <Right />
+          </ErrorBoundary>
         </main>
       </div>
       </div>

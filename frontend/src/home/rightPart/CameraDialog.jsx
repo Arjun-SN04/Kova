@@ -35,6 +35,8 @@ const CameraDialog = ({ onClose, onCapture }) => {
   }, [facing])
 
   useEffect(() => {
+    // State is only set after the request / camera answers (async), not during the effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!shot) start()
     return stop
   }, [start, shot])

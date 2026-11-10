@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { LuBriefcase, LuLayers, LuRadioTower, LuMessageSquareText, LuMoon, LuPhone, LuSettings, LuSun, LuUser, LuStar, LuCircleDashed, LuEllipsis, LuPanelLeftClose, LuPanelLeftOpen } from 'react-icons/lu'
 import useSidebar from '../../Zustand/useSidebar'
 import useConversation from '../../Zustand/UserConversation'
+import { isMuted } from '../../utils/localNotify'
 import { useAuth } from '../../context/AuthProvider'
 import { useTheme } from '../../context/ThemeProvider'
 import Avatar from '../Avatar'
@@ -14,12 +15,13 @@ import useBusiness from '../../business/store'
 // Unread chats, missed calls since I last opened Calls, unread community messages
 export const useNavBadges = () => {
   const [AuthUser] = useAuth()
-  const { unreadCounts, calls, callsSeenAt, groups, statusFeed, lockedChats, hiddenChats, channels } = useConversation()
+  const { unreadCounts, calls, callsSeenAt, groups, statusFeed, lockedChats, hiddenChats, channels, mutedChats, archivedChats } = useConversation()
   const communityGroups = new Set(groups.filter((g) => g.community).map((g) => String(g._id)))
   const total = (filter) => Object.entries(unreadCounts).filter(([id]) => filter(id)).reduce((n, [, c]) => n + c, 0)
   return {
     // Locked chats don't count, so the badge doesn't give them away
-    chats: total((id) => !lockedChats.includes(id) && !hiddenChats.includes(id)),
+    // Muted and archived chats don't count either (they still show their own unread count)
+    chats: total((id) => !lockedChats.includes(id) && !hiddenChats.includes(id) && !isMuted(mutedChats, id) && !archivedChats.includes(id)),
     calls: calls.filter((c) =>
       String(c.callee?._id) === String(AuthUser?._id) && c.status === 'missed' && new Date(c.startedAt).getTime() > callsSeenAt).length,
     communities: total((id) => communityGroups.has(id)),

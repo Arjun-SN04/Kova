@@ -14,6 +14,13 @@ export const ACCENTS = [
   { id: 'rose', name: 'Rose', swatch: '#e11d48' },
   { id: 'graphite', name: 'Graphite', swatch: '#3a3d43' },
 ]
+// Text size for the whole app (everything is sized in rem, so it all scales together)
+export const TEXT_SIZES = [
+  { id: 'small', name: 'Small', percent: 90 },
+  { id: 'default', name: 'Default', percent: 100 },
+  { id: 'large', name: 'Large', percent: 112.5 },
+  { id: 'xlarge', name: 'Extra large', percent: 125 },
+]
 export const MODES = [
   { id: 'light', name: 'Light' },
   { id: 'dark', name: 'Dark' },
@@ -34,6 +41,11 @@ const ThemeProvider = ({ children }) => {
   const [mode, setModeState] = useState(() => read('chatTheme', 'dark', MODES.map((m) => m.id)))
   const [accent, setAccentState] = useState(() => read('chatAccent', 'ocean', ACCENTS.map((a) => a.id)))
   const [osDark, setOsDark] = useState(systemDark)
+  const [textSize, setTextSizeState] = useState(() => read('chatTextSize', 'default', TEXT_SIZES.map((t) => t.id)))
+  useEffect(() => {
+    const percent = TEXT_SIZES.find((t) => t.id === textSize)?.percent || 100
+    document.documentElement.style.fontSize = percent === 100 ? '' : `${percent}%`
+  }, [textSize])
 
   // Follow the device setting while "System" is picked
   useEffect(() => {
@@ -62,9 +74,10 @@ const ThemeProvider = ({ children }) => {
   const setMode = (m) => { save('chatTheme', m); setOsDark(systemDark()); setModeState(m) }
   const setAccent = (a) => { save('chatAccent', a); setAccentState(a) }
   const toggle = () => setMode(dark ? 'light' : 'dark')
+  const setTextSize = (t) => { save('chatTextSize', t); setTextSizeState(t) }
 
   return (
-    <ThemeContext.Provider value={{ dark, toggle, mode, setMode, accent, setAccent }}>
+    <ThemeContext.Provider value={{ dark, toggle, mode, setMode, accent, setAccent, textSize, setTextSize }}>
       {children}
     </ThemeContext.Provider>
   )

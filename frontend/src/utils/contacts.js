@@ -2,7 +2,7 @@ import axios from 'axios'
 import useConversation from '../Zustand/UserConversation'
 
 export const USERNAME_RE = /^[a-z0-9_.]{3,20}$/
-export const USERNAME_RULES = '3–20 characters: lowercase letters, numbers, _ or .'
+export const USERNAME_RULES = '3–20 lowercase letters, numbers, underscores (_) or dots (.)'
 export const normalizeUsername = (v) => String(v || '').trim().replace(/^@/, '').toLowerCase()
 
 export const inviteUrl = (token) => `${window.location.origin}/invite/${token}`

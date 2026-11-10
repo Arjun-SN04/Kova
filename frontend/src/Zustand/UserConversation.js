@@ -11,7 +11,26 @@ const saveCallsSeenAt = (time) => {
 }
 
 
+// Unsent text per chat, kept in this browser (shown as "Draft: …" in the chat list)
+const DRAFTS_KEY = 'kova-drafts'
+const readDrafts = () => {
+  try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) || '{}') || {} } catch { return {} }
+}
+
 const useConversation = create((set) => ({
+  drafts: readDrafts(),
+  setDraft: (chatId, text) =>
+    set((s) => {
+      const key = String(chatId)
+      const value = String(text || '')
+      if ((s.drafts[key] || '') === value) return {}
+      const drafts = { ...s.drafts }
+      if (value.trim()) drafts[key] = value.slice(0, 5000)
+      else delete drafts[key]
+      try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts)) } catch { /* private mode */ }
+      return { drafts }
+    }),
+
   selectedConversation: null,
   chatOpenedAt: 0,
   // Switching chats also cancels any reply/edit in progress
@@ -62,6 +81,14 @@ const useConversation = create((set) => ({
           ? messagesOrUpdater(state.messages)
           : messagesOrUpdater,
     })),
+
+  // Paging of the open chat: older messages exist / are loading (context/useGetMessages.js)
+  hasOlder: false,
+  // Open group: when each member last read it ({ userId: date }), for "Seen by"
+  groupReads: {},
+  setGroupReads: (next) => set((s) => ({ groupReads: typeof next === 'function' ? next(s.groupReads) : next })),
+  loadingOlder: false,
+  setHistory: (patch) => set(patch),
 
   // My contacts (people who accepted a request or used an invite link)
   contacts: [],
@@ -117,6 +144,11 @@ const useConversation = create((set) => ({
   // Chats pinned to the top of my list (ids in pin order) and messages I starred
   pinnedChats: [],
   setPinnedChats: (pinnedChats) => set({ pinnedChats }),
+  // Chats in Archived, and muted chats ({ chatId: until | null })
+  archivedChats: [],
+  setArchivedChats: (archivedChats) => set({ archivedChats }),
+  mutedChats: {},
+  setMutedChats: (mutedChats) => set({ mutedChats }),
   // Chat wallpapers ({ global, chats }) and the open wallpaper picker ({ chatId?, name? } or null)
   wallpapers: { global: null, chats: {} },
   setWallpapers: (wallpapers) => set({ wallpapers: { global: wallpapers?.global || null, chats: wallpapers?.chats || {} } }),

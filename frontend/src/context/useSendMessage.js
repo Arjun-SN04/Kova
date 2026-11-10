@@ -2,24 +2,45 @@ import { useState } from "react";
 import axios from "axios";
 import useConversation from "../Zustand/UserConversation";
 import { sendUrl } from "../utils/groups";
+import { sendQueued } from "../utils/outbox";
+import { useAuth } from "./AuthProvider";
 
 // Sends a text message, optionally with a reply target, a file, or a GIF / sticker.
 // Returns null on success, or an error message.
 const useSendMessage = () => {
   const [loading, setLoading] = useState(false);
   const { selectedConversation, setMessages, upsertPreview } = useConversation();
+  const [AuthUser] = useAuth();
 
   // `media`: a GIF or sticker { kind, url, title, width, height }
   // `askNexa`: Nexa mode is on, so Nexa answers this message without "@Nexa"
-  const sendMessage = async (messageText, replyTo = null, file = null, onProgress, media = null, { askNexa = false } = {}) => {
+  const sendMessage = async (messageText, replyTo = null, file = null, onProgress, media = null, { askNexa = false, viewOnce = false } = {}) => {
     if (!selectedConversation?._id || (!messageText.trim() && !file && !media)) return null;
 
+    const nexaAsked = askNexa || /(^|[^\w@])@nexa\b/i.test(messageText);
+    const markNexaThinking = () => {
+      if (!nexaAsked) return;
+      const chatId = selectedConversation._id;
+      useConversation.getState().setNexaThinking(chatId, true);
+      setTimeout(() => {
+        const started = useConversation.getState().nexaThinking[String(chatId)];
+        if (started && Date.now() - started >= 44_000) useConversation.getState().setNexaThinking(chatId, false);
+      }, 45_000);
+    };
+
     let body = { message: messageText, replyTo, ...(media ? { media } : {}), ...(askNexa ? { askNexa: true } : {}) };
+    // Text, GIFs and stickers show at once and are retried if they fail (utils/outbox.js)
+    if (!file) {
+      markNexaThinking();
+      sendQueued(selectedConversation, body, AuthUser?._id);
+      return null;
+    }
     if (file) {
       body = new FormData();
       body.append("message", messageText);
       if (replyTo) body.append("replyTo", replyTo);
       if (askNexa) body.append("askNexa", "true");
+      if (viewOnce) body.append("viewOnce", "true");
       body.append("file", file);
     }
 
@@ -31,14 +52,7 @@ const useSendMessage = () => {
       });
       setMessages((prev) => [...prev, res.data]);
       upsertPreview(selectedConversation._id, res.data);
-      if (askNexa || /(^|[^\w@])@nexa\b/i.test(messageText)) {
-        const chatId = selectedConversation._id;
-        useConversation.getState().setNexaThinking(chatId, true);
-        setTimeout(() => {
-          const started = useConversation.getState().nexaThinking[String(chatId)];
-          if (started && Date.now() - started >= 44_000) useConversation.getState().setNexaThinking(chatId, false);
-        }, 45_000);
-      }
+      markNexaThinking();
       return null;
     } catch (error) {
       console.log("sendMessage error:", error);

@@ -1,18 +1,7 @@
-import React, { useEffect } from 'react'
+import React, { Suspense, lazy, useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, MotionConfig } from 'motion/react'
-import ChatLayout from './home/ChatLayout'
-import Signup from './components/Signup'
-import Login from './components/Login'
-import ForgotPassword from './components/ForgotPassword'
-import FaqPage from './components/FaqPage'
-import HomePage from './components/HomePage'
-import Profile from './components/Profile'
-import InvitePage from './components/InvitePage'
-import GroupLinkPage from './components/GroupLinkPage'
-import BusinessPage from './business/BusinessPage'
-import PublicPage from './business/PublicPage'
-import OrderPage from './business/OrderPage'
+import Loading from './components/Loading'
 import { takeReturnTo } from './business/utils'
 import { takePendingInvite } from './utils/contacts'
 import { useAuth } from './context/AuthProvider'
@@ -20,8 +9,22 @@ import { PageTransition } from './components/ui'
 import AppLockGate from './components/AppLock'
 import VideoPlayer from './components/VideoPlayer'
 
+// Each page is downloaded the first time it's opened, so the app starts faster
+const ChatLayout = lazy(() => import('./home/ChatLayout'))
+const Signup = lazy(() => import('./components/Signup'))
+const Login = lazy(() => import('./components/Login'))
+const ForgotPassword = lazy(() => import('./components/ForgotPassword'))
+const FaqPage = lazy(() => import('./components/FaqPage'))
+const HomePage = lazy(() => import('./components/HomePage'))
+const Profile = lazy(() => import('./components/Profile'))
+const InvitePage = lazy(() => import('./components/InvitePage'))
+const GroupLinkPage = lazy(() => import('./components/GroupLinkPage'))
+const BusinessPage = lazy(() => import('./business/BusinessPage'))
+const PublicPage = lazy(() => import('./business/PublicPage'))
+const OrderPage = lazy(() => import('./business/OrderPage'))
+
 // ── App ─────────────────────────────────────────────────────
-const page = (el) => <PageTransition>{el}</PageTransition>
+const page = (el) => <PageTransition><Suspense fallback={<div className="flex min-h-dvh items-center justify-center"><Loading /></div>}>{el}</Suspense></PageTransition>
 
 const App = () => {
   const [AuthUser] = useAuth()

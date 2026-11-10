@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
-import { LuAlarmClock, LuBot, LuClipboardList, LuCheck, LuCheckCheck, LuEllipsis, LuFileText, LuLanguages, LuCopy, LuDownload, LuForward, LuSave, LuPencil, LuBookmark, LuBookmarkX, LuPin, LuPinOff, LuReply, LuSmilePlus, LuSquareCheck, LuStar, LuStarOff, LuTimer, LuTrash2, LuVolume2, LuSquare, LuSticker, LuBookmarkPlus, LuMessageCircleQuestion } from 'react-icons/lu'
+import { LuInfo, LuClock3, LuCircleAlert, LuAlarmClock, LuBot, LuClipboardList, LuCheck, LuCheckCheck, LuEllipsis, LuFileText, LuLanguages, LuCopy, LuDownload, LuForward, LuSave, LuPencil, LuBookmark, LuBookmarkX, LuPin, LuPinOff, LuReply, LuSmilePlus, LuSquareCheck, LuStar, LuStarOff, LuTimer, LuTrash2, LuVolume2, LuSquare, LuSticker, LuBookmarkPlus, LuMessageCircleQuestion } from 'react-icons/lu'
 import { canSpeak, speak, useSpeech } from '../../utils/speak'
 import useConversation from '../../Zustand/UserConversation'
 import Avatar from '../Avatar'
@@ -9,10 +9,13 @@ import DeleteChoiceDialog from '../DeleteChoiceDialog'
 import { deleteMessagesFor } from '../../utils/deleteMessages'
 import { attachmentLabel, canSaveAs, downloadFile } from '../../utils/attachments'
 import { canEdit, groupReactions, jumpToMessage, toggleReaction } from '../../utils/messages'
+import { discard as discardSend, retry as retrySend } from '../../utils/outbox'
+import MessageInfoDialog from '../groups/MessageInfoDialog'
+import { ViewOnceBubble } from './ViewOnce'
 import ReactionPicker from './ReactionPicker'
 import { GoToMessage, RemindMenu, Transcript, Translation, useTranslation } from './NexaExtras'
 import { AiAvatar } from '../Avatar'
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown from '../../components/Markdown'
 import { remarkHtmlBreaks, remarkLineBreaks } from '../../utils/markdown'
 import PollCard from './PollCard'
 import LocationCard from '../location/LocationCard'
@@ -94,6 +97,16 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
   const kept = !!message.kept
   const expiring = !!message.expiresAt && !kept
   const [deleting, setDeleting] = useState(false)
+  const [infoOpen, setInfoOpen] = useState(false)
+  // Groups: how many others have opened the group since I sent this (seen indicators allowing)
+  const groupReads = useConversation((st) => st.groupReads)
+  const groupSeen = (() => {
+    if (!itsMe || !message.groupId) return { count: 0, all: false }
+    const sent = new Date(message.createdAt)
+    const count = Object.values(groupReads).filter((at) => new Date(at) >= sent).length
+    const others = Math.max(0, (openChat?.members?.length || 1) - 1)
+    return { count, all: others > 0 && count >= others }
+  })()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showActions, setShowActions] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -179,12 +192,13 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
 
   // Touch: press and hold a message to start selecting
   const onTouchStart = () => {
-    if (selectionMode) return
+    if (selectionMode || message.sendState) return
     pressTimer.current = setTimeout(() => startSelection(id), LONG_PRESS_MS)
   }
   const cancelPress = () => clearTimeout(pressTimer.current)
 
   const onBubbleClick = () => {
+    if (message.sendState) return
     if (selectionMode) toggleSelected(id)
     else if (!canHover()) { if (rowRef.current) placeFrom(rowRef.current); setShowActions((v) => !v) }
   }
@@ -215,7 +229,8 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
   }
 
   // Hover bar: React, Reply and a More menu for everything else
-  const actions = !selectionMode && (
+  // Not on the server yet (sending or failed): no reply / react / delete menu
+  const actions = !selectionMode && !message.sendState && (
     <div
       className={`relative flex shrink-0 items-center rounded-lg bg-white p-0.5 shadow-sm ring-1 ring-slate-200 transition-opacity sm:mb-5 dark:bg-slate-800 dark:ring-slate-700 ${
         // Phones: float over the chat instead of taking width from the bubble
@@ -240,7 +255,8 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           } ${itsMe ? 'right-0' : 'left-0'}`}
         >
           <MenuItem icon={copied ? LuCheck : LuCopy} label={copied ? 'Copied' : 'Copy'} onClick={() => { copyText(); setTimeout(() => setMoreOpen(false), 400) }} />
-          <MenuItem icon={LuForward} label="Forward" onClick={close(() => setForwardIds([id]))} />
+          {!message.viewOnce && <MenuItem icon={LuForward} label="Forward" onClick={close(() => setForwardIds([id]))} />}
+          {itsMe && message.groupId && <MenuItem icon={LuInfo} label="Message info" onClick={close(() => setInfoOpen(true))} />}
           {fileUrl && <MenuItem icon={LuDownload} label="Download" onClick={close(() => saveFile(false))} />}
           {fileUrl && canSaveAs() && <MenuItem icon={LuSave} label="Save as…" onClick={close(() => saveFile(true))} />}
           {(message.attachment?.kind === 'image' || /^(application\/pdf|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|text\/plain|text\/csv)$/.test(message.attachment?.mimeType || '')) && !isBot && <MenuItem icon={LuMessageCircleQuestion} label="Ask Nexa about this" onClick={close(() => { setReplyingTo(message); window.dispatchEvent(new CustomEvent('nexchat:compose', { detail: '@Nexa ' })) })} />}
@@ -365,7 +381,8 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           )}
           {quote}
           {refs}
-          {message.attachment && <Attachment attachment={message.attachment} itsMe={itsMe} messageId={message._id} label={itsMe ? 'You' : isBot ? 'Nexa' : senderLabel || contactName || 'Voice message'} />}
+          {message.viewOnce && <ViewOnceBubble message={message} itsMe={itsMe} myId={myId} />}
+          {message.attachment && !message.viewOnce && <Attachment attachment={message.attachment} itsMe={itsMe} messageId={message._id} label={itsMe ? 'You' : isBot ? 'Nexa' : senderLabel || contactName || 'Voice message'} />}
           <Transcript message={message} itsMe={itsMe} />
           {message.location && <LocationCard message={message} itsMe={itsMe} />}
           {message.poll && <PollCard message={message} itsMe={itsMe} myId={myId} nameOf={nameOf} />}
@@ -410,7 +427,23 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
           </div>
         )}
 
-        {(last || starred || pinned || kept || message.auto || message.toNexa) && (
+        {message.sendState === 'failed' && (
+          <p className="mt-1 flex items-center justify-end gap-2 px-1 text-[11px]" role="alert">
+            <button type="button" onClick={(e) => { e.stopPropagation(); retrySend(message.clientId, myId) }} className="inline-flex items-center gap-1 font-medium text-red-600 hover:underline dark:text-red-400" title={message.sendError || ''}>
+              <LuCircleAlert className="size-3.5" /> Not sent · Tap to retry
+            </button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); discardSend(message.clientId) }} className="text-slate-400 hover:text-slate-600 hover:underline dark:hover:text-slate-200">Delete</button>
+          </p>
+        )}
+        {message.sendState === 'failed' && message.sendError && (
+          <p className="px-1 text-right text-[11px] text-slate-400">{message.sendError}</p>
+        )}
+        {message.sendState === 'sending' && (
+          <p className="mt-1 flex items-center justify-end gap-1 px-1 text-[11px] text-slate-400">
+            {formatTime(message.createdAt)} <LuClock3 className="size-3" title="Sending" aria-label="Sending" />
+          </p>
+        )}
+        {!message.sendState && (last || starred || pinned || kept || message.auto || message.toNexa) && (
           <p className={`flex items-center gap-1 px-1 text-[11px] text-slate-400 ${last ? 'mt-1' : 'mt-0.5'}`}>
             {pinned && <LuPin className="size-3 -rotate-45 text-indigo-500" title="Pinned" aria-label="Pinned" />}
             {starred && <LuStar className="size-3 fill-amber-400 text-amber-400" title="Starred" aria-label="Starred" />}
@@ -420,7 +453,12 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
             {message.auto && <span className="inline-flex items-center gap-0.5" title="Sent automatically"><LuBot className="size-3" />{message.auto === 'nexa' ? 'Nexa auto-reply' : 'Automatic'} ·</span>}
             {last && formatTime(message.createdAt)}
             {last && message.edited && ' · edited'}
-            {last && itsMe && String(message.receiverId) !== String(myId) && (message.seen && showSeen
+            {last && itsMe && message.groupId && (
+              <button type="button" onClick={(e) => { e.stopPropagation(); setInfoOpen(true) }} className={`inline-flex items-center gap-0.5 hover:underline ${groupSeen.all ? 'text-indigo-500' : ''}`} title="Message info">
+                {groupSeen.count > 0 ? <><LuCheckCheck className="size-3.5" />{groupSeen.all ? 'Seen by all' : `Seen by ${groupSeen.count}`}</> : <LuCheck className="size-3.5" aria-label="Sent" />}
+              </button>
+            )}
+            {last && itsMe && !message.groupId && String(message.receiverId) !== String(myId) && (message.seen && showSeen
               ? <LuCheckCheck className="size-3.5 text-indigo-500" title="Seen" aria-label="Seen" />
               : <LuCheck className="size-3.5" title="Sent" aria-label="Sent" />)}
           </p>
@@ -429,6 +467,7 @@ const Message = ({ message, itsMe, first, last, contactName, contactAvatar, myId
 
       {!itsMe && actions}
 
+      {infoOpen && <MessageInfoDialog groupId={message.groupId} messageId={id} onClose={() => setInfoOpen(false)} />}
       {taskOpen && <TaskDialog groupId={message.groupId} message={message} onClose={() => setTaskOpen(false)} />}
       <DeleteChoiceDialog
         open={confirmDelete}

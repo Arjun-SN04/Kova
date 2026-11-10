@@ -1,11 +1,14 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import React, { Suspense, createContext, lazy, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useSocket } from './SocketProvider'
 import { useCall } from './CallProvider'
 import { useAuth } from './AuthProvider'
 import useConversation from '../Zustand/UserConversation'
-import GroupCallScreen, { GroupCallRing } from '../home/call/GroupCallScreen'
+// Downloaded when a group call starts or rings
+const GroupCallScreen = lazy(() => import('../home/call/GroupCallScreen'))
+const GroupCallRing = lazy(() => import('../home/call/GroupCallScreen').then((m) => ({ default: m.GroupCallRing })))
 import { playEndTone, startRingtone } from '../utils/callTones'
 import { cameraTrack, replaceVideoTrack, screenTrack } from '../utils/callMedia'
+import { currentIceServers, getIceServers } from '../utils/iceServers'
 
 // Group voice/video calls: one WebRTC connection to each other person (up to 8 people).
 // The socket server rings people and relays connection details; media goes browser to browser.
@@ -15,12 +18,6 @@ import { cameraTrack, replaceVideoTrack, screenTrack } from '../utils/callMedia'
 const GroupCallContext = createContext(null)
 export const useGroupCall = () => useContext(GroupCallContext)
 
-const ICE_SERVERS = [
-  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-  ...(import.meta.env.VITE_TURN_URL
-    ? [{ urls: import.meta.env.VITE_TURN_URL, username: import.meta.env.VITE_TURN_USERNAME, credential: import.meta.env.VITE_TURN_CREDENTIAL }]
-    : []),
-]
 const RING_MS = 30_000
 const isRoom = (key) => String(key || '').startsWith('room:')
 
@@ -38,6 +35,7 @@ const GroupCallProvider = ({ children }) => {
   const [facing, setFacing] = useState('user')
   const [minimized, setMinimized] = useState(false)
   const [ringing, setRinging] = useState(null)        // { groupId, groupName, type, from, room }
+  const [rejoin, setRejoin] = useState(null)          // a call I left or dropped out of: { groupId, groupName, type, room }
   const [active, setActive] = useState({})            // groupId -> { callId, type, participants }
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -86,7 +84,7 @@ const GroupCallProvider = ({ children }) => {
 
   const peerFor = (userId) => {
     if (pcs.current[userId]) return pcs.current[userId]
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+    const pc = new RTCPeerConnection({ iceServers: currentIceServers() })
     pcs.current[userId] = pc
     localRef.current?.getTracks().forEach((t) => pc.addTrack(t, localRef.current))
     pc.onicecandidate = (e) => e.candidate && signal(userId, { candidate: e.candidate })
@@ -106,9 +104,9 @@ const GroupCallProvider = ({ children }) => {
   // Join (or start) a call. target: { key, name, type, room }
   const enter = useCallback(async ({ key, name, type, room = false }, { force = false } = {}) => {
     if (!socket || gcallRef.current || (oneToOneRef.current && !force)) return
-    setError(''); setRinging(null); stopTone.current()
+    setError(''); setRinging(null); setRejoin(null); stopTone.current()
     setCall({ groupId: String(key), groupName: name, type, startedAt: null, room })
-    try { await getMedia(type) } catch { cleanup(); return setError('Allow the microphone (and camera) to join the call') }
+    try { await Promise.all([getMedia(type), getIceServers()]) } catch { cleanup(); return setError('Allow the microphone (and camera) to join the call') }
     socket.emit(room || activeRef.current[String(key)]?.callId ? 'gcall:join' : 'gcall:start', { groupId: String(key), type })
   }, [socket, cleanup]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -116,13 +114,13 @@ const GroupCallProvider = ({ children }) => {
 
   const join = useCallback((groupId) => {
     const info = active[String(groupId)]
-    if (isRoom(groupId)) {
-      const name = ringing?.groupId === groupId ? ringing.groupName : info?.name || 'Call'
-      return enter({ key: groupId, name, type: info?.type || ringing?.type || 'voice', room: true })
-    }
+    const hint = [ringing, rejoin].find((r) => r?.groupId === groupId)
+    const type = info?.type || hint?.type || 'voice'
+    if (isRoom(groupId)) return enter({ key: groupId, name: hint?.groupName || info?.name || 'Call', type, room: true })
     const g = groupOf(groupId)
-    if (g) enter({ key: g._id, name: g.name, type: info?.type || ringing?.type || 'voice' })
-  }, [active, ringing, enter]) // eslint-disable-line react-hooks/exhaustive-deps
+    const name = g?.name || hint?.groupName || info?.name
+    if (name) enter({ key: groupId, name, type })
+  }, [active, ringing, rejoin, enter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const leave = useCallback(() => {
     const c = gcallRef.current
@@ -130,6 +128,8 @@ const GroupCallProvider = ({ children }) => {
     socket?.emit('gcall:leave', { groupId: c.groupId })
     playEndTone()
     cleanup()
+    // Shown while the others are still in the call, so I can go back in
+    setRejoin({ groupId: c.groupId, groupName: c.groupName, type: c.type, room: !!c.room })
   }, [socket, cleanup])
 
   const toggleMute = () => {
@@ -206,8 +206,9 @@ const GroupCallProvider = ({ children }) => {
       if (c?.groupId !== groupId) return
       setCall({ ...c, type, startedAt, groupName: name || c.groupName })
       if (list) setProfiles(list)
-      // I'm new: call everyone already there
+      // I'm new: call everyone already there (fresh connections, also when rejoining)
       for (const p of participants) {
+        dropPeer(p)
         const pc = peerFor(p)
         const offer = await pc.createOffer()
         await pc.setLocalDescription(offer)
@@ -217,6 +218,8 @@ const GroupCallProvider = ({ children }) => {
     }
     const onPeerJoined = ({ groupId, userId, profile }) => {
       if (gcallRef.current?.groupId !== groupId) return
+      // Someone rejoining: forget the old connection, they'll offer a new one
+      dropPeer(userId)
       if (profile) setProfiles((p) => ({ ...p, [userId]: profile }))
       setNotice(`${profile?.fullName?.split(' ')[0] || 'Someone'} joined`)
       // Let the newcomer see if I'm muted / sharing
@@ -250,9 +253,29 @@ const GroupCallProvider = ({ children }) => {
       dropPeer(userId)
       setProfiles((p) => { if (p[userId]) setNotice(`${p[userId].fullName?.split(' ')[0] || 'Someone'} left`); return p })
     }
+    // Their app closed or lost its connection; shown only if the media stopped too
+    const onPeerAway = ({ groupId, userId }) => {
+      if (gcallRef.current?.groupId !== groupId || pcs.current[userId]?.connectionState === 'connected') return
+      setPeers((p) => (p[userId] ? { ...p, [userId]: { ...p[userId], state: 'disconnected' } } : p))
+    }
+    // I dropped out of a call that's keeping my place
+    const onRejoin = (info) => {
+      const c = gcallRef.current
+      if (c?.groupId === info.groupId) {
+        // Same tab, back after a short drop: keep going if the media still works, otherwise reconnect
+        const pcList = Object.values(pcs.current)
+        const working = pcList.length > 0 && pcList.every((pc) => pc.connectionState === 'connected')
+        socket.emit(working ? 'gcall:resume' : 'gcall:join', { groupId: info.groupId })
+        return
+      }
+      if (!c) setRejoin(info)
+    }
     const onState = (s) => {
       setActive((a) => { const next = { ...a }; if (s.callId) next[s.groupId] = s; else delete next[s.groupId]; return next })
-      if (!s.callId) setRinging((r) => { if (r?.groupId === s.groupId) { stopTone.current(); return null } return r })
+      const meIn = s.participants?.map(String).includes(String(AuthUser?._id))
+      // Call over, or I joined it from another tab: stop ringing here
+      if (!s.callId || meIn) setRinging((r) => { if (r?.groupId === s.groupId && !gcallRef.current) { stopTone.current(); return null } return r })
+      if (!s.callId) setRejoin((r) => (r?.groupId === s.groupId ? null : r))
       if (s.profiles && gcallRef.current?.groupId === s.groupId) setProfiles((p) => ({ ...s.profiles, ...p }))
     }
     const onRinging = (r) => {
@@ -283,7 +306,10 @@ const GroupCallProvider = ({ children }) => {
     socket.on('gcall:moved', onMoved)
     socket.on('gcall:added', onAdded)
     socket.on('gcall:error', onError)
+    socket.on('gcall:peer-away', onPeerAway)
+    socket.on('gcall:rejoin', onRejoin)
     return () => {
+      socket.off('gcall:peer-away', onPeerAway); socket.off('gcall:rejoin', onRejoin)
       socket.off('gcall:joined', onJoined); socket.off('gcall:peer-joined', onPeerJoined); socket.off('gcall:signal', onSignal)
       socket.off('gcall:media', onMedia); socket.off('gcall:peer-left', onPeerLeft); socket.off('gcall:state', onState)
       socket.off('gcall:ringing', onRinging); socket.off('gcall:moved', onMoved); socket.off('gcall:added', onAdded); socket.off('gcall:error', onError)
@@ -297,12 +323,14 @@ const GroupCallProvider = ({ children }) => {
     return () => clearTimeout(t)
   }, [notice])
 
-  // Leave the call if the page closes
+  // Closing the page by mistake doesn't leave the call: the server keeps my place for a
+  // couple of minutes and offers to rejoin when the app opens again. Still, warn first.
   useEffect(() => {
-    const onUnload = () => gcallRef.current && socket?.emit('gcall:leave', { groupId: gcallRef.current.groupId })
+    if (!gcall) return
+    const onUnload = (e) => { e.preventDefault(); e.returnValue = '' }
     window.addEventListener('beforeunload', onUnload)
     return () => window.removeEventListener('beforeunload', onUnload)
-  }, [socket])
+  }, [gcall])
 
   // Ask the server which of my groups have a call going (e.g. after a reload)
   const queryGroup = useCallback((groupId) => socket?.emit('gcall:query', { groupId }), [socket])
@@ -320,8 +348,12 @@ const GroupCallProvider = ({ children }) => {
   return (
     <GroupCallContext.Provider value={value}>
       {children}
+<Suspense fallback={null}>
       {ringing && !gcall && (
         <GroupCallRing ring={ringing} onJoin={() => { stopTone.current(); join(ringing.groupId) }} onDismiss={() => { stopTone.current(); setRinging(null) }} />
+      )}
+      {rejoin && !ringing && !gcall && !oneToOne && active[rejoin.groupId] && (
+        <GroupCallRing rejoin ring={rejoin} count={active[rejoin.groupId].participants?.length || 0} onJoin={() => join(rejoin.groupId)} onDismiss={() => setRejoin(null)} />
       )}
       {gcall && (
         <GroupCallScreen
@@ -346,6 +378,7 @@ const GroupCallProvider = ({ children }) => {
           onLeave={leave}
         />
       )}
+</Suspense>
       {error && !gcall && (
         <div className="fixed bottom-4 left-1/2 z-[80] -translate-x-1/2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white shadow-xl" role="alert" onClick={() => setError('')}>{error}</div>
       )}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import axios from 'axios'
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown from '../../components/Markdown'
 import { remarkHtmlBreaks } from '../../utils/markdown'
 import { motion } from 'motion/react'
 import { LuLoaderCircle, LuX } from 'react-icons/lu'

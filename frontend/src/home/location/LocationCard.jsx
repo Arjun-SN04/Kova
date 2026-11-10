@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { Suspense, lazy, useEffect, useState } from 'react'
 import { LuExternalLink, LuRadio } from 'react-icons/lu'
-import MapView from './MapView'
+// The map library (Leaflet) is only downloaded when a map is shown
+const MapView = lazy(() => import('./MapView'))
 import { stopSharing } from '../../utils/liveLocation'
 
 const time = (d) => new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -22,7 +23,7 @@ const LocationCard = ({ message, itsMe }) => {
   return (
     <div className="w-[260px] max-w-full sm:w-[300px]" onClick={(e) => e.stopPropagation()}>
       <div className="overflow-hidden rounded-xl">
-        <MapView lat={loc.lat} lng={loc.lng} accuracy={loc.accuracy} live={running} className="h-40 w-full" />
+        <Suspense fallback={<div className="h-40 w-full animate-pulse bg-slate-100 dark:bg-slate-800" />}><MapView lat={loc.lat} lng={loc.lng} accuracy={loc.accuracy} live={running} className="h-40 w-full" /></Suspense>
       </div>
       <div className="flex items-center gap-2 px-1.5 pb-0.5 pt-2">
         {loc.live ? (

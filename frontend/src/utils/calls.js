@@ -23,6 +23,9 @@ export const formatCallDuration = (seconds = 0) => {
 export const describeCall = (call, outgoing) => {
   const kind = call.type === 'video' ? 'video' : 'voice'
   const Kind = kind === 'video' ? 'Video' : 'Voice'
+  // Group calls: "ongoing" while it lasts, then "ended" with how long it went on
+  if (call.status === 'ongoing') return { title: `${Kind} call · ongoing`, detail: 'Tap Join to go in', missed: false }
+  if (call.status === 'ended') return { title: `Group ${kind} call`, detail: formatCallDuration(call.duration), missed: false }
   if (call.status === 'answered') return { title: `${Kind} call`, detail: formatCallDuration(call.duration), missed: false }
   if (outgoing) return { title: `${Kind} call`, detail: call.status === 'declined' ? 'Declined' : 'No answer', missed: false }
   return { title: call.status === 'declined' ? `Declined ${kind} call` : `Missed ${kind} call`, detail: 'Call back', missed: call.status === 'missed' }

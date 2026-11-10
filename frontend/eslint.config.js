@@ -23,7 +23,10 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // ESLint doesn't see <motion.div> as a use of `motion`, so it's allowed here
+      'no-unused-vars': ['error', { varsIgnorePattern: '^([A-Z_]|motion$)', argsIgnorePattern: '^[A-Z_]' }],
+      // Only affects hot reload in development (files that export hooks next to components)
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
 ])

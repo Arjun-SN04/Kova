@@ -19,16 +19,18 @@ import ChatLockSettings from './ChatLockSettings'
 import AccountDataSettings from './AccountDataSettings'
 import EmailDigestSetting from './EmailDigestSetting'
 import AppLockSettings from './AppLockSettings'
+import DevicesSettings from './DevicesSettings'
 import { BlockedAccounts, BusinessCard } from '../business/AccountExtras'
 import { checkUsernameFree, normalizeUsername, USERNAME_RULES } from '../utils/contacts'
 import { initialsOf } from '../home/Avatar'
 import { ViewablePhoto } from './PhotoViewer'
 import PhotoEditor from './PhotoEditor'
+import { EncryptionNote } from './security/SettingsRows'
 
 // The settings menu (left) and what each section shows (right)
 const SECTIONS = [
   { id: 'profile', label: 'Profile', hint: 'Name, profile picture, username', Icon: LuCircleUser, keywords: 'name photo picture avatar about username email' },
-  { id: 'account', label: 'Account', hint: 'Password, your data, business tools', Icon: LuKeyRound, keywords: 'password export download delete business data' },
+  { id: 'account', label: 'Account', hint: 'Password, your data, business, delete account', Icon: LuKeyRound, keywords: 'password export download delete business data' },
   { id: 'privacy', label: 'Privacy', hint: 'Who sees your info, blocked contacts', Icon: LuShieldCheck, keywords: 'last seen online activity photo about groups read receipts blocked block' },
   { id: 'security', label: 'Security & locks', hint: 'App lock, locked chats, hidden chats', Icon: LuLock, keywords: 'pin app lock chat lock code secret word hidden fingerprint security question' },
   { id: 'chats', label: 'Chats', hint: 'Theme, colours, wallpaper', Icon: LuMessageSquareText, keywords: 'appearance dark light theme wallpaper colour color mode' },
@@ -202,9 +204,9 @@ const Profile = () => {
         type="password"
         icon={LuLock}
         autoComplete="new-password"
-        hint="At least 6 characters."
+        hint="At least 8 characters."
         error={passErrors.newPassword?.message}
-        {...regPass('newPassword', { required: 'New password is required', minLength: { value: 6, message: 'Minimum 6 characters' } })}
+        {...regPass('newPassword', { required: 'New password is required', minLength: { value: 8, message: 'Minimum 8 characters' } })}
       />
       <Input
         label="Confirm new password"
@@ -275,7 +277,7 @@ const Profile = () => {
     profile: <>{identity}{titled('About you', profileForm)}</>,
     account: <>{titled('Change password', passwordForm)}<Card className="overflow-hidden"><AccountDataSettings /></Card><Card className="overflow-hidden"><BusinessCard /></Card></>,
     privacy: <><Card className="overflow-hidden"><PrivacySettings /></Card><Card className="overflow-hidden"><BlockedAccounts /></Card></>,
-    security: <><Card className="overflow-hidden"><AppLockSettings /></Card><Card className="overflow-hidden"><ChatLockSettings /></Card><Card className="overflow-hidden"><HiddenChatsSettings /></Card></>,
+    security: <><Card className="overflow-hidden"><EncryptionNote icon={LuShieldCheck} /></Card><Card className="overflow-hidden"><DevicesSettings /></Card><Card className="overflow-hidden"><AppLockSettings /></Card><Card className="overflow-hidden"><ChatLockSettings /></Card><Card className="overflow-hidden"><HiddenChatsSettings /></Card></>,
     chats: <Card className="overflow-hidden"><AppearanceSettings /></Card>,
     notifications: <Card className="overflow-hidden"><NotificationSettings /><EmailDigestSetting /></Card>,
   }

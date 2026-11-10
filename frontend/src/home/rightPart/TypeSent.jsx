@@ -18,6 +18,7 @@ import { canPost } from '../../utils/groups'
 import useInputHistory from '../../hooks/useInputHistory'
 import useVoiceRecorder, { MAX_VOICE_SECONDS } from '../../hooks/useVoiceRecorder'
 import CameraDialog from './CameraDialog'
+import { ViewOnceToggle } from './ViewOnce'
 import useBusiness from '../../business/store'
 import { PaymentDialog, ProductPicker, useQuickReplies } from '../../business/Compose'
 import AttachMenu from './AttachMenu'
@@ -191,8 +192,18 @@ const TypeSent = () => {
   }
   useEffect(resize, [text])
 
-  // Focus the box when opening a chat; drop any draft from the previous one
-  useEffect(() => { setText(''); setError(''); setEmojiOpen(false); setUndoText(null); inputRef.current?.focus() }, [selectedConversation?._id])
+  // Opening a chat: bring back what I'd typed there before (drafts are kept per chat)
+  const chatIdForDraft = selectedConversation?._id ? String(selectedConversation._id) : null
+  useEffect(() => {
+    setText(chatIdForDraft ? useConversation.getState().drafts[chatIdForDraft] || '' : '')
+    setError(''); setEmojiOpen(false); setUndoText(null); inputRef.current?.focus()
+  }, [chatIdForDraft])
+  // Save the draft as I type (not while editing a sent message)
+  useEffect(() => {
+    if (!chatIdForDraft || editingMessage) return
+    const t = setTimeout(() => useConversation.getState().setDraft(chatIdForDraft, text), 300)
+    return () => clearTimeout(t)
+  }, [text, chatIdForDraft, editingMessage])
 
   const rewrite = async (style, instruction) => {
     setNexaOpen(false)
@@ -294,7 +305,7 @@ const TypeSent = () => {
     for (let i = 0; i < queue.length; i++) {
       setSendingIndex(i)
       const item = queue[i]
-      const sendError = await sendMessage(i === 0 ? value : '', i === 0 ? replyId : null, item.file, (p) => setProgress((i + p) / queue.length), null, { askNexa: askNexa && i === 0 })
+      const sendError = await sendMessage(i === 0 ? value : '', i === 0 ? replyId : null, item.file, (p) => setProgress((i + p) / queue.length), null, { askNexa: askNexa && i === 0, viewOnce: !!item.viewOnce })
       if (sendError) {
         setError(queue.length > 1 ? `${item.file.name}: ${sendError}` : sendError)
         if (i === 0) setText(value)
@@ -505,7 +516,10 @@ const TypeSent = () => {
                       <span className="w-full truncate text-center text-[10px]">{f.file.name.split('.').pop()?.toUpperCase()}</span>
                     </span>
                   )}
-                  <p className="mt-1 truncate text-[10px] text-slate-500 dark:text-slate-400" title={f.file.name}>{formatBytes(f.file.size)}</p>
+                  <p className="mt-1 truncate text-[10px] text-slate-500 dark:text-slate-400" title={f.file.name}>{f.viewOnce ? 'View once' : formatBytes(f.file.size)}</p>
+                  {progress === null && (f.kind === 'image' || f.kind === 'video') && !selectedConversation?.isSelf && (
+                    <ViewOnceToggle on={!!f.viewOnce} onToggle={() => setPendingFiles((list) => list.map((x) => (x.id === f.id ? { ...x, viewOnce: !x.viewOnce } : x)))} />
+                  )}
                   {progress === null && (
                     <button type="button" onClick={() => removePending(f.id)} aria-label={`Remove ${f.file.name}`} className="absolute -right-1.5 -top-1.5 flex size-6 items-center justify-center rounded-full bg-slate-900 text-white shadow ring-2 ring-white transition hover:bg-red-600 dark:bg-slate-700 dark:ring-slate-900">
                       <LuX className="size-3.5" />
@@ -612,7 +626,7 @@ const TypeSent = () => {
               onChange={handleChange}
               onKeyDown={onKeyDown}
               onPaste={onPaste}
-              placeholder={editingMessage ? 'Edit your message' : nexaMode ? 'Ask Nexa anything… (exit to stop)' : selectedConversation?.isGroup ? `Message ${selectedConversation.name}` : firstName ? `Message ${firstName}` : 'Write a message'}
+              placeholder={editingMessage ? 'Edit your message' : nexaMode ? 'Ask Nexa anything… (exit to stop)' : selectedConversation?.isGroup ? `Message ${selectedConversation.name}` : selectedConversation?.isSelf ? 'Note to yourself' : firstName ? `Message ${firstName}` : 'Write a message'}
               className="min-h-10 flex-1 resize-none bg-transparent py-2.5 pl-1 text-sm leading-5 text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100"
               style={{ maxHeight: MAX_HEIGHT }}
             />

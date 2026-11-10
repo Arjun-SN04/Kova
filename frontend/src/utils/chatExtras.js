@@ -19,6 +19,30 @@ export const togglePinChat = async (chatId) => {
   }
 }
 
+// Notifications off for a chat: duration "8h" | "1w" | "always" | "off"
+export const muteChat = async (chatId, duration) => {
+  try {
+    const res = await axios.put(`/api/message/mute-chat/${chatId}`, { duration }, api)
+    store().setMutedChats(res.data.mutedChats)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err.response?.data?.error || "Couldn't change notifications for that chat" }
+  }
+}
+
+// Move chats to / out of Archived
+export const setArchived = async (chatIds, archived) => {
+  const ids = (Array.isArray(chatIds) ? chatIds : [chatIds]).map(String)
+  try {
+    const res = await axios.put(`/api/message/archive-chat/${ids[0]}`, { ids, archived }, api)
+    store().setArchivedChats(res.data.archivedChats)
+    store().setPinnedChats(res.data.pinnedChats)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err.response?.data?.error || "Couldn't archive that chat" }
+  }
+}
+
 export const toggleStar = async (messageId) => {
   const id = String(messageId)
   const on = !store().starredIds.includes(id)

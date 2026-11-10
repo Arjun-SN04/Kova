@@ -66,6 +66,8 @@ const useListenMessages = () => {
     // Pinned chats changed (maybe in another tab)
     const handlePrefs = (prefs) => {
       if (prefs.pinnedChats) store().setPinnedChats(prefs.pinnedChats)
+      if (prefs.archivedChats) store().setArchivedChats(prefs.archivedChats)
+      if (prefs.mutedChats) store().setMutedChats(prefs.mutedChats)
       if (prefs.lockedChats || prefs.securityQuestion !== undefined) store().setLockedPrefs(prefs)
       if (prefs.wallpapers) store().setWallpapers(prefs.wallpapers)
       if (prefs.hiddenChats) store().setHiddenPrefs(prefs)
@@ -147,6 +149,11 @@ const useListenMessages = () => {
     }])
     channelHandlers.forEach(([type, fn]) => socket.on(type, fn))
     socket.on('nexaMessage', handleNexaMessage)
+    // Someone opened a group: "Seen by" on my messages there
+    const handleGroupRead = ({ groupId, userId, at }) => {
+      if (String(store().selectedConversation?._id) === String(groupId)) store().setGroupReads((r) => ({ ...r, [String(userId)]: at }))
+    }
+    socket.on('groupRead', handleGroupRead)
     socket.on('prefsUpdated', handlePrefs)
     socket.on('chatTimer', handleChatTimer)
     socket.on('statusUpdated', handleStatus)
@@ -163,6 +170,7 @@ const useListenMessages = () => {
     return () => {
       socket.off('groupAdded', handleGroupAdded)
       socket.off('nexaMessage', handleNexaMessage)
+      socket.off('groupRead', handleGroupRead)
       socket.off('prefsUpdated', handlePrefs)
       socket.off('chatTimer', handleChatTimer)
       socket.off('statusUpdated', handleStatus)

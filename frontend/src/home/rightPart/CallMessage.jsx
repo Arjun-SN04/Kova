@@ -2,6 +2,7 @@ import React from 'react'
 import { LuPhone, LuPhoneIncoming, LuPhoneMissed, LuPhoneOutgoing, LuVideo } from 'react-icons/lu'
 import useConversation from '../../Zustand/UserConversation'
 import { useCall } from '../../context/CallProvider'
+import { useGroupCall } from '../../context/GroupCallProvider'
 import { describeCall } from '../../utils/calls'
 
 const formatTime = (date) => new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -10,7 +11,12 @@ const formatTime = (date) => new Date(date).toLocaleTimeString([], { hour: '2-di
 const CallMessage = ({ message, itsMe }) => {
   const { selectedConversation } = useConversation()
   const { call, startCall } = useCall()
+  const groupCall = useGroupCall()
   const info = message.call
+  // A group call: Join while it's going on (also after leaving it), otherwise start a new one
+  const groupId = message.groupId ? String(message.groupId) : null
+  const live = groupId && info.status === 'ongoing' && groupCall?.active[groupId]?.callId === info.callId
+  const inIt = live && groupCall?.gcall?.groupId === groupId
   const { title, detail, missed } = describeCall(info, itsMe)
   const Arrow = missed ? LuPhoneMissed : itsMe ? LuPhoneOutgoing : LuPhoneIncoming
   const KindIcon = info.type === 'video' ? LuVideo : LuPhone
@@ -31,12 +37,38 @@ const CallMessage = ({ message, itsMe }) => {
           <p className={`text-sm font-medium ${missed ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100'}`}>{title}</p>
           <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
             <Arrow className="size-3" />
-            {info.status === 'answered' ? detail : itsMe ? detail : formatTime(message.createdAt)}
-            {info.status === 'answered' && <span>· {formatTime(message.createdAt)}</span>}
-            {itsMe && info.status !== 'answered' && <span>· {formatTime(message.createdAt)}</span>}
+            {groupId ? (
+              <>{live ? 'Started' : detail} · {formatTime(message.createdAt)}</>
+            ) : (
+              <>
+                {info.status === 'answered' ? detail : itsMe ? detail : formatTime(message.createdAt)}
+                {info.status === 'answered' && <span>· {formatTime(message.createdAt)}</span>}
+                {itsMe && info.status !== 'answered' && <span>· {formatTime(message.createdAt)}</span>}
+              </>
+            )}
           </p>
         </div>
-        {!selectedConversation?.isSelf && (
+        {groupId ? (
+          live ? (
+            <button
+              onClick={() => groupCall.join(groupId)}
+              disabled={inIt || !!call}
+              className="h-8 shrink-0 rounded-full bg-emerald-600 px-3.5 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"
+            >
+              {inIt ? 'In call' : 'Join'}
+            </button>
+          ) : (
+            <button
+              onClick={() => groupCall?.start(selectedConversation, info.type)}
+              disabled={!!call || !!groupCall?.gcall || selectedConversation?.announcement}
+              title={`Start a group ${info.type} call`}
+              aria-label="Start a group call"
+              className="flex size-8 shrink-0 items-center justify-center rounded-full text-indigo-600 transition hover:bg-indigo-100 disabled:opacity-40 dark:text-indigo-400 dark:hover:bg-indigo-500/15"
+            >
+              <KindIcon className="size-4" />
+            </button>
+          )
+        ) : !selectedConversation?.isSelf && (
           <button
             onClick={() => startCall(selectedConversation, info.type)}
             disabled={!!call}

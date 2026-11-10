@@ -1,7 +1,7 @@
 import MessageSearchResults from './MessageSearchResults'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
-import { LuArrowLeft, LuCheck, LuCheckCheck, LuEye, LuEyeOff, LuChevronRight, LuClock, LuLock, LuLockOpen, LuInbox, LuLayers, LuListChecks, LuPin, LuPinOff, LuQrCode, LuSearch, LuSearchX, LuTrash2, LuUserPlus, LuUsers, LuX } from 'react-icons/lu'
+import { LuArchive, LuArchiveRestore, LuArrowLeft, LuCheck, LuCheckCheck, LuEye, LuEyeOff, LuChevronRight, LuClock, LuLock, LuLockOpen, LuInbox, LuLayers, LuListChecks, LuPin, LuPinOff, LuQrCode, LuSearch, LuSearchX, LuTrash2, LuUserPlus, LuUsers, LuX } from 'react-icons/lu'
 import User from './User'
 import AiRow from './AiRow'
 import GroupInvites from './GroupInvites'
@@ -12,7 +12,8 @@ import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
 import { loadConversations, selfContact } from '../../utils/conversations'
 import { hashHiddenWord } from '../../utils/chatExtras'
-import { togglePinChat } from '../../utils/chatExtras'
+import { setArchived, togglePinChat } from '../../utils/chatExtras'
+import { isMuted } from '../../utils/localNotify'
 import ConfirmDialog from '../ConfirmDialog'
 import useBusiness from '../../business/store'
 import { isBusiness } from '../../business/utils'
@@ -37,7 +38,10 @@ const RowSkeleton = () => (
 const Users = () => {
   const [everyone, loading] = useGetAllUsers()
   const { onlineUsers } = useSocket()
-  const { unreadCounts, previews, typingUsers, requests, setContactsDialog, groups: allGroups, communities, setCreateDialog, pinnedChats, lockedChats, setLockRequest, hiddenChats, hiddenWordHash, setHideRequest } = useConversation()
+  const { unreadCounts, previews, typingUsers, requests, setContactsDialog, groups: allGroups, communities, setCreateDialog, pinnedChats, lockedChats, setLockRequest, hiddenChats, hiddenWordHash, setHideRequest, archivedChats, mutedChats } = useConversation()
+  // Archived chats leave the main list; "Archived" opens them (searching finds them too)
+  const archivedSet = useMemo(() => new Set(archivedChats), [archivedChats])
+  const [showArchived, setShowArchived] = useState(false)
   // Locked chats stay in the list; opening one asks for the code (see Right.jsx)
   const lockedSet = useMemo(() => new Set(lockedChats), [lockedChats])
   const [AuthUser] = useAuth()
@@ -132,14 +136,18 @@ const Users = () => {
   // "Message yourself" row: shown first in the All tab, and when the search matches me
   const self = useMemo(() => selfContact(AuthUser), [AuthUser])
   const q = query.trim().toLowerCase()
-  const showSelf = !!self && tab === 'all' && !revealHidden && !hiddenSet.has(String(self?._id)) &&
+  const showSelf = !!self && tab === 'all' && !revealHidden && !showArchived && !hiddenSet.has(String(self?._id)) && (!archivedSet.has(String(self?._id)) || !!q) &&
     (!q || self.fullName.toLowerCase().includes(q) || self.username?.includes(q.replace(/^@/, '')) || 'message yourself'.includes(q))
 
   // Nexa (the AI assistant) is pinned under "Message yourself" in the All tab
-  const showAi = tab === 'all' && !revealHidden && (!q || 'nexa ai assistant'.includes(q))
+  const showAi = tab === 'all' && !revealHidden && !showArchived && (!q || 'nexa ai assistant'.includes(q))
+  // Archived chats that have a chat (for the "Archived" row and its unread count)
+  const archivedList = [...allUser, ...groups].filter((c) => archivedSet.has(String(c._id)) && hasChat(c))
+  const archivedUnread = archivedList.filter((c) => unreadOf(c) > 0 && !isMuted(mutedChats, c._id)).length
 
   const counts = {
-    all: allUser.filter(hasChat).length + groups.length + (self ? 1 : 0),
+    // Matches the rows in All: chats, groups, Message yourself and Nexa
+    all: allUser.filter(hasChat).length + groups.length + (self ? 1 : 0) + 1,
     online: allUser.filter((u) => onlineSet.has(String(u._id))).length,
     unread: [...allUser, ...groups].filter((u) => unreadOf(u) > 0).length,
     groups: groups.length,
@@ -156,10 +164,12 @@ const Users = () => {
       .filter((c) => tab === 'all' || tab === 'groups' || (tab === 'online' ? onlineSet.has(String(c._id)) : unreadOf(c) > 0))
       .filter((c) => tab === 'online' || !!q || revealHidden || hasChat(c))
       .filter((c) => !bizFilter || (!c.isGroup && passesBizFilter(c)))
+      // Archived ones only in Archived (or when searching)
+      .filter((c) => !!q || revealHidden || (showArchived ? archivedSet.has(String(c._id)) : !archivedSet.has(String(c._id))))
       // Pinned chats first (in pin order), then the most recent
       .sort((a, b) => pinRank(a) - pinRank(b) || lastTime(b) - lastTime(a) || a.fullName.localeCompare(b.fullName))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allUser, groups, query, tab, onlineSet, unreadCounts, previews, pinnedChats, bizFilter, records, openId, revealHidden])
+  }, [allUser, groups, query, tab, onlineSet, unreadCounts, previews, pinnedChats, bizFilter, records, openId, revealHidden, archivedSet, showArchived])
 
   const rowFor = (chat, compact = false) => selectable(chat, rowNode(chat, compact))
   const rowNode = (chat, compact = false) =>
@@ -174,6 +184,7 @@ const Users = () => {
         compact={compact}
         pinned={pinnedChats.includes(String(chat._id))}
         locked={lockedChats.includes(String(chat._id))}
+        muted={isMuted(mutedChats, chat._id)}
       />
     ) : (
       <User
@@ -186,6 +197,7 @@ const Users = () => {
         myId={myId}
         pinned={pinnedChats.includes(String(chat._id))}
         locked={lockedChats.includes(String(chat._id))}
+        muted={isMuted(mutedChats, chat._id)}
         labels={bizMode ? (recordOf(chat)?.labels || []).map((id) => bizLabels.find((l) => String(l._id) === String(id))).filter(Boolean) : []}
         lead={bizMode && !!recordOf(chat)?.lead}
         waiting={bizMode && !!recordOf(chat)?.waitingSince && !!previews[String(chat._id)]}
@@ -239,6 +251,11 @@ const Users = () => {
   const allPinned = picked.length > 0 && picked.every((id) => pinnedChats.includes(id))
   const allLocked = picked.length > 0 && picked.every((id) => lockedSet.has(id))
   const allHidden = picked.length > 0 && picked.every((id) => hiddenSet.has(id))
+  const allArchived = picked.length > 0 && picked.every((id) => archivedSet.has(id))
+  const archiveSelected = () => bulk(async () => {
+    const res = await setArchived(picked, !allArchived)
+    if (!res.ok) throw new Error(res.error)
+  })
 
   const bulk = async (run) => {
     setBulkBusy(true); setBulkError('')
@@ -318,10 +335,11 @@ const Users = () => {
             <span className="min-w-0 flex-1 truncate px-1 text-xs sm:text-sm font-medium">{picked.length ? `${picked.length} selected` : 'Select chats'}</span>
             <button onClick={() => setSelected(new Set(selectableIds()))} className="h-7 sm:h-8 rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">Select all</button>
           </div>
-          <div className="mt-2 grid grid-cols-5 gap-1">
+          <div className="mt-2 grid grid-cols-6 gap-1">
             {[
               { label: allPinned ? 'Unpin' : 'Pin', Icon: allPinned ? LuPinOff : LuPin, run: pinSelected },
               { label: 'Mark read', Icon: LuCheckCheck, run: readSelected },
+              { label: allArchived ? 'Unarchive' : 'Archive', Icon: allArchived ? LuArchiveRestore : LuArchive, run: archiveSelected },
               { label: allLocked ? 'Unlock' : 'Lock', Icon: allLocked ? LuLockOpen : LuLock, run: () => { setLockRequest({ action: allLocked ? 'unlock' : 'lock', ids: picked, chats: picked.map(chatById).filter(Boolean) }); stopSel() } },
               { label: allHidden ? 'Unhide' : 'Hide', Icon: allHidden ? LuEye : LuEyeOff, run: () => { setHideRequest({ ids: picked, hidden: !allHidden }); stopSel() } },
               { label: 'Delete', Icon: LuTrash2, run: () => (pickedDirect.length ? setConfirmDelete(true) : setBulkError('Groups can’t be deleted from here. Open a group’s info to leave it.')), danger: true },
@@ -498,6 +516,18 @@ const Users = () => {
           </div>
         ) : (
           <>
+            {showArchived ? (
+              <button onClick={() => setShowArchived(false)} className="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-900">
+                <LuArrowLeft className="size-4" /> Archived chats
+                <span className="ml-auto text-xs font-normal text-slate-400">They stay here when new messages arrive</span>
+              </button>
+            ) : (tab === 'all' && !q && !revealHidden && archivedList.length > 0 && (
+              <button onClick={() => setShowArchived(true)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-100 dark:hover:bg-slate-900">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"><LuArchive className="size-5" /></span>
+                <span className="flex-1 text-sm font-medium">Archived</span>
+                <span className={`text-xs ${archivedUnread ? 'font-semibold text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>{archivedUnread || archivedList.length}</span>
+              </button>
+            ))}
             {showSelf && rowFor(self)}
             {showAi && <AiRow />}
             {list.map((chat) => rowFor(chat))}

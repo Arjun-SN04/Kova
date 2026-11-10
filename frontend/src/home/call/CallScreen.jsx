@@ -56,7 +56,7 @@ const Pill = ({ children }) => (
 const CallScreen = () => {
   const {
     call, localStream, remoteStream, muted, cameraOff, sharing, peerMedia, minimized, setMinimized,
-    acceptCall, declineCall, hangUp, toggleMute, toggleCamera, flipCamera, toggleShare, addPeople,
+    acceptCall, declineCall, hangUp, rejoinCall, toggleMute, toggleCamera, flipCamera, toggleShare, addPeople,
   } = useCall()
   const contacts = useConversation((st) => st.contacts)
   const localVideo = useStream(localStream)
@@ -102,12 +102,14 @@ const CallScreen = () => {
   } else if (incomingRinging) statusText = `Incoming ${isVideo ? 'video' : 'voice'} call…`
   else if (status === 'ringing') statusText = 'Calling…'
   else if (status === 'connecting') statusText = 'Connecting…'
+  else if (status === 'reconnecting') statusText = 'Reconnecting…'
+  else if (status === 'interrupted') statusText = 'Call interrupted · still going'
   else statusText = formatDuration(now - (call.startedAt || now))
 
   const candidates = contacts.filter((c) => String(c._id) !== String(peer._id) && !c.isGroup && !c.isSelf && !c.isAi)
 
   // ── Minimised: a small card in the corner, the call keeps going ──
-  if (minimized && status !== 'ended' && !incomingRinging) {
+  if (minimized && status !== 'ended' && status !== 'interrupted' && !incomingRinging) {
     return createPortal(
       <motion.div
         drag
@@ -221,6 +223,13 @@ const CallScreen = () => {
               <>
                 <CallButton onClick={declineCall} label="Decline" tone="danger" size="lg"><LuPhoneOff className="size-6" /></CallButton>
                 <CallButton onClick={acceptCall} label="Accept" tone="success" size="lg">
+                  {isVideo ? <LuVideo className="size-6" /> : <LuPhone className="size-6" />}
+                </CallButton>
+              </>
+            ) : status === 'interrupted' ? (
+              <>
+                <CallButton onClick={hangUp} label="End call" tone="danger" size="lg"><LuPhoneOff className="size-6" /></CallButton>
+                <CallButton onClick={rejoinCall} label="Rejoin" tone="success" size="lg">
                   {isVideo ? <LuVideo className="size-6" /> : <LuPhone className="size-6" />}
                 </CallButton>
               </>

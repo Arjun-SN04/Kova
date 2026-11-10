@@ -82,10 +82,10 @@ const ForgotPassword = () => {
             <p className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">6-digit code</p>
             <OtpInput value={otp} onChange={setOtp} />
           </div>
-          <Input label="New password" type="password" icon={LuLock} placeholder="At least 6 characters" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Input label="New password" type="password" icon={LuLock} placeholder="At least 8 characters" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           <Input label="Confirm new password" type="password" icon={LuLock} placeholder="Type it again" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.target.value)}
             error={again && again !== password ? "Doesn't match" : undefined} />
-          <Button type="submit" size="lg" fullWidth loading={busy} disabled={otp.length !== 6 || password.length < 6 || password !== again} className="rounded-full">
+          <Button type="submit" size="lg" fullWidth loading={busy} disabled={otp.length !== 6 || password.length < 8 || password !== again} className="rounded-full">
             {busy ? "Saving..." : "Set new password"}
           </Button>
           <p className="text-center text-sm text-slate-500 dark:text-slate-400">

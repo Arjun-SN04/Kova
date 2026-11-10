@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { LuChevronDown, LuChevronUp, LuSearch, LuX } from 'react-icons/lu'
+import axios from 'axios'
 import useConversation from '../../Zustand/UserConversation'
 import { jumpToMessage } from '../../utils/messages'
 
 // Find words in the open chat. Matches are newest first; ↑/↓ (or Enter / Shift+Enter) move between them.
+// Loaded messages are matched right away; the server also searches the older part of the chat.
 const ChatSearch = ({ onClose }) => {
-  const { messages, setHighlightedId } = useConversation()
+  const { messages, setHighlightedId, selectedConversation: chat } = useConversation()
+  const [older, setOlder] = useState({ q: '', items: [] }) // server matches: [{ _id, createdAt }]
   const [query, setQuery] = useState('')
   const [index, setIndex] = useState(0)
   const inputRef = useRef(null)
@@ -17,8 +20,24 @@ const ChatSearch = ({ onClose }) => {
     if (q.length < 2) return []
     const hit = (m) => [m.message, m.transcript, m.attachment?.name, m.poll?.question, ...(m.poll?.options || []).map((o) => o.text)]
       .some((t) => t?.toLowerCase().includes(q))
-    return messages.filter((m) => !m.call && hit(m)).reverse()
-  }, [messages, query])
+    const local = messages.filter((m) => !m.call && hit(m))
+    const seen = new Set(local.map((m) => String(m._id)))
+    const fromServer = older.q === q ? older.items.filter((m) => !seen.has(m._id)) : []
+    return [...local, ...fromServer].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+  }, [messages, query, older])
+
+  // Ask the server too (debounced), for matches in messages that aren't loaded
+  useEffect(() => {
+    const q = query.trim().toLowerCase()
+    if (q.length < 2 || !chat?._id) return
+    const t = setTimeout(() => {
+      const params = new URLSearchParams({ q, chat: chat._id, ...(chat.isGroup ? { group: '1' } : {}) })
+      axios.get(`/api/message/search?${params}`, { withCredentials: true })
+        .then((res) => setOlder({ q, items: res.data.items.map((i) => ({ _id: i.messageId, createdAt: i.createdAt })) }))
+        .catch(() => {})
+    }, 300)
+    return () => clearTimeout(t)
+  }, [query, chat?._id, chat?.isGroup])
 
   // Jump to the current match
   useEffect(() => {

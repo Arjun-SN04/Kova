@@ -1,14 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Message from './Message'
 import CallMessage from './CallMessage'
 import Avatar, { AiAvatar, GroupAvatar } from '../Avatar'
-import useGetMessages from '../../context/useGetMessages.js'
+import useGetMessages, { loadMessagesFrom, loadOlderMessages } from '../../context/useGetMessages.js'
 import useSendMessage from '../../context/useSendMessage'
 import useConversation from '../../Zustand/UserConversation'
 import { useAuth } from '../../context/AuthProvider'
 import { AnimatePresence, motion } from 'motion/react'
 import { jumpToMessage } from '../../utils/messages'
-import { LuArrowDown, LuBookmark, LuFileText, LuImage, LuLink } from 'react-icons/lu'
+import { LuArrowDown, LuBookmark, LuFileText, LuImage, LuLink, LuLoaderCircle } from 'react-icons/lu'
 import useWallpaper from '../../hooks/useWallpaper'
 
 const GROUP_GAP_MS = 5 * 60 * 1000 // messages within 5 minutes are grouped
@@ -171,10 +171,11 @@ const TypingBubble = ({ name, src }) => (
 )
 
 const NEAR_BOTTOM_PX = 150
+const NEAR_TOP_PX = 400 // start loading older messages this close to the top
 
 const Messages = () => {
   const { loading, messages } = useGetMessages()
-  const { selectedConversation, typingUsers, groupPeople, nexaId, pendingJump, setPendingJump, setHighlightedId, nexaThinking, chatOpenedAt } = useConversation()
+  const { selectedConversation, typingUsers, groupPeople, nexaId, pendingJump, setPendingJump, setHighlightedId, nexaThinking, chatOpenedAt, hasOlder, loadingOlder } = useConversation()
   const wallpaper = useWallpaper(selectedConversation?._id)
   const [AuthUser] = useAuth()
   const scrollRef = useRef(null)
@@ -182,7 +183,8 @@ const Messages = () => {
   const currentChatId = selectedConversation?._id ? String(selectedConversation._id) : null
   const scrolledChatId = useRef(null)
   const lastChatOpenedAt = useRef(0)
-  const lastCount = useRef(0)
+  const lastId = useRef(null)       // newest message seen, to tell new messages from older pages
+  const keepFromBottom = useRef(null) // distance from the bottom to restore after older messages load
   const [atBottom, setAtBottom] = useState(true)
   const [newCount, setNewCount] = useState(0)
 
@@ -217,9 +219,27 @@ const Messages = () => {
     setAtBottom(true)
   }
 
+  const loadOlder = () => {
+    const el = scrollRef.current
+    const st = useConversation.getState()
+    if (!el || !st.hasOlder || st.loadingOlder || st.pendingJump) return
+    keepFromBottom.current = el.scrollHeight - el.scrollTop
+    loadOlderMessages()
+  }
+
+  // Older messages were added above: keep what was on screen in the same place
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el || keepFromBottom.current == null) return
+    el.scrollTop = el.scrollHeight - keepFromBottom.current
+    keepFromBottom.current = null
+  }, [messages])
+  useEffect(() => { if (!loadingOlder) keepFromBottom.current = null }, [loadingOlder])
+
   const onScroll = () => {
     const el = scrollRef.current
     if (!el) return
+    if (el.scrollTop < NEAR_TOP_PX) loadOlder()
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX
     setAtBottom(near)
     if (near) {
@@ -241,15 +261,17 @@ const Messages = () => {
     if (chatChanged || reOpened) {
       scrolledChatId.current = currentChatId
       lastChatOpenedAt.current = chatOpenedAt
-      lastCount.current = messages.length
+      lastId.current = messages.length ? String(messages[messages.length - 1]._id) : null
       userScrolledAway.current = false
       scrollToBottom('auto')
       requestAnimationFrame(() => scrollToBottom('auto'))
       return
     }
 
-    const added = messages.length - lastCount.current
-    lastCount.current = messages.length
+    // New messages are the ones after the newest I had (older pages are added at the top)
+    const prevIndex = lastId.current ? messages.findIndex((m) => String(m._id) === lastId.current) : -1
+    const added = prevIndex === -1 ? (lastId.current ? 0 : messages.length) : messages.length - 1 - prevIndex
+    lastId.current = messages.length ? String(messages[messages.length - 1]._id) : null
     if (added <= 0) return
 
     const last = messages[messages.length - 1]
@@ -296,13 +318,31 @@ const Messages = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTyping, nexaBusy])
 
-  // Coming from a reminder's "Go to message": scroll to it once it's loaded
+  // Going to a message (reply, search, pin, starred, reminder): scroll to it once it's loaded.
+  // If it's in an older part of the chat, load the chat from that message first.
+  const triedJump = useRef(null)
   useEffect(() => {
-    if (!pendingJump || loading || !messages.some((m) => String(m._id) === String(pendingJump))) return
-    const id = pendingJump
-    setPendingJump(null)
-    setTimeout(() => jumpToMessage(id, setHighlightedId), 150)
+    if (!pendingJump || loading) return
+    const id = String(pendingJump)
+    if (messages.some((m) => String(m._id) === id)) {
+      setPendingJump(null)
+      triedJump.current = null
+      userScrolledAway.current = true // don't snap back to the bottom as photos load
+      setTimeout(() => jumpToMessage(id, setHighlightedId), 150)
+      return
+    }
+    if (triedJump.current === id) return
+    triedJump.current = id
+    // Not found at all (deleted, or another chat): give up quietly
+    loadMessagesFrom(id).then((found) => { if (!found) { triedJump.current = null; setPendingJump(null) } })
   }, [pendingJump, loading, messages, setPendingJump, setHighlightedId])
+
+  // A short first page that doesn't fill the screen: load more right away
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!loading && hasOlder && el && el.scrollHeight <= el.clientHeight + NEAR_TOP_PX) loadOlder()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, hasOlder, messages.length])
 
   const byId = useMemo(() => new Map(messages.map((m) => [String(m._id), m])), [messages])
 
@@ -348,12 +388,17 @@ const Messages = () => {
 
   return (
     <div className="chat-bg relative flex min-h-0 flex-1 flex-col" style={wallpaper || undefined}>
-      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto [overflow-anchor:none]">
         <div ref={contentRef} className="h-full px-4 sm:px-6 lg:px-8">
           {loading ? (
             <LoadingSkeleton />
           ) : messages.length > 0 ? (
             <div className="pb-2 pt-2">
+              {loadingOlder && (
+                <div className="flex justify-center py-3" role="status" aria-label="Loading older messages">
+                  <LuLoaderCircle className="size-5 animate-spin text-slate-400" />
+                </div>
+              )}
               {items}
               <AnimatePresence>
                 {nexaBusy

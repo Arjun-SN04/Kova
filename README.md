@@ -34,6 +34,11 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 
 ### Messaging
 - **Real-time delivery** over WebSockets (Socket.IO). Messages appear instantly for both people.
+- **Instant sending, with retry**: text, GIFs and stickers show in the chat the moment you send them, with a clock until the server has them. If sending fails the bubble says **Not sent · Tap to retry** (or Delete). Messages typed while offline wait and go out by themselves when you're back (also after a reload); a `clientId` on each one means a retry can never make a copy. Files keep their upload progress bar. Code: `utils/outbox.js`, `hooks/useOutbox.js`, `clientIdOf` in `backend/utils/directChat.js`.
+- **"Connecting…" bar**: when you're offline or the realtime connection is reconnecting (for more than a moment), a thin bar at the top says so. Code: `home/ConnectionBanner.jsx`.
+- **Drafts**: what you type stays in that chat when you switch to another one (and after a reload), and the chat list shows it as **Draft: …**. Drafts are kept in this browser and cleared when you sign out.
+- **View once**: tap the **1** on a photo or video before sending. The person you sent it to can open it one time (full screen, no download); after that it shows **Opened**, and in one-to-one chats the file is deleted. The file's link is never sent with the message: opening it asks the server for a link that works for 5 minutes (`POST /message/view-once/:id`). View-once messages can't be forwarded. Code: `home/rightPart/ViewOnce.jsx`.
+- **Export a chat**: chat info → **Export chat** downloads the whole chat as a text file (`[date, time] Name: message`, with photos and files as links). `GET /message/export/:chatId`.
 - **Replies** to a specific message, shown as a quote. Clicking the quote scrolls to the original and highlights it.
 - **Editing** in the main input box (the message is highlighted while you edit). Allowed for **10 minutes** after sending, enforced on the server.
 - **Deleting** a single message, several at once, or a whole conversation. Every delete asks for confirmation.
@@ -45,6 +50,7 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Copy** message text from the ⋯ More menu.
 - **Message grouping**: consecutive messages from the same person within 5 minutes are grouped, with date dividers ("Today", "Yesterday", or the date).
 - **Link previews**: the first link in a message gets a card with the page's title, description, image and site name (Open Graph tags), fetched by the server after sending. Only public web pages are fetched; links to private or local addresses are skipped. Links in messages are clickable. Code: `backend/utils/linkPreview.js`, `rightPart/LinkPreview.jsx`.
+- **Search inside a chat** (header → Search) also finds messages that aren't loaded yet (it asks the server with `?chat=<id>`), and jumping to one loads that part of the chat.
 - **Search all chats**: typing in the chat-list search also shows a **Messages** section with matches from every chat (text, voice-note transcripts, file names); tapping one opens the chat at that message. Locked and hidden chats are left out. `GET /message/search?q=`.
 - **Location**: + → Location sends where you are now, or **live location** for 15 minutes, 1 hour or 8 hours. The map (OpenStreetMap via Leaflet) moves as the sender's position updates every ~10 s; the sender can stop any time, and live shares carry on after a page refresh. Code: `home/location/`, `utils/liveLocation.js`, `backend/controller/location.controller.js`.
 
@@ -72,13 +78,13 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Poems, songs and shayari**: Nexa writes them through a separate path (`utils/creative.js`). It writes three drafts at once, built around one specific moment, with planned rhymes and short lines. A checker scores each one for missing rhymes, repeated end words, overused words and long lines, and an editor pass fixes those exact problems on the best draft (up to two rounds). It answers in the script you typed in (Roman Hindi stays Roman) and only writes original pieces, never existing lyrics. Other answers pick their own format: verses, paragraphs, bullets or a short sentence.
 - **Listen**: **Listen** under any Nexa answer, and in the ⋯ menu of any message with text or a transcript, reads it aloud with an expressive voice: Groq's Orpheus model (`utils/tts.js`, `POST /api/ai/speak`). A quick plan picks a female or male voice and a mood for each line (warm, tender, longing, cheerful…). The text is spoken in pieces under 200 characters that are joined with natural pauses, and recent audio is cached. Limit: 40 per person per hour. Hindi in Devanagari, or a server without Orpheus enabled, falls back to the device's own voices (`utils/speak.js`). Orpheus must be enabled once on the Groq account: open https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english and accept the terms.
 - **Pinned messages**: up to 10 per chat. Pinning an 11th unpins the oldest. A pin button with a count sits next to the call buttons in the chat header. It opens a compact bar (tap to jump through the pins), and the chevron expands it into a list of every pin, each with jump and unpin. It closes when you switch chats.
-- **Image model picker**: the magic-wand button at the top of the Nexa chat (or ⋯ on phones) chooses which model Nexa draws with: **Auto**, **FLUX.2 Klein** (best detail, any shape), **FLUX.1 Schnell** (fastest) or the free **Magic** backup. Only models this server can use are listed. The choice applies to the Nexa chat and @Nexa, and each picture shows which model made it. **A picked model is the only one used**: if it fails (busy, daily limit), Nexa retries it once and then says why, with a Try again button, instead of quietly drawing with another model. **Auto** tries the models in order so you always get a picture. (Gemini isn't used for images: free Gemini keys have no image quota.)
+- **Image model picker**: the **Image: Auto** button at the top of the Nexa chat (a magic-wand icon on smaller screens, or ⋯ on phones) chooses which model Nexa draws with: **Auto**, **FLUX.2 Klein** (best detail, any shape), **FLUX.1 Schnell** (fastest), **FLUX Schnell (Puter)** when `PUTER_AUTH_TOKEN` is set (`npm run puter:login`), or the free **Magic** backup. Only models this server can use are listed. The choice applies to the Nexa chat and @Nexa, and each picture shows which model made it. **A picked model is the only one used**: if it fails, Nexa retries it once and then says why instead of quietly drawing with another model. The picture card offers what can work: after a hiccup, **Try again** and **Use another model**; after the model's daily limit, only **Use another model** (a retry can't help). **Use another model** draws that one picture with Auto, without changing the picked model. The server sends `code: model_limit | model_failed | user_limit` with the error so the card knows which buttons to show. **Auto** tries the models in order so you always get a picture. (Gemini isn't used for images: free Gemini keys have no image quota.)
 - **Nexa never refuses a picture**: if a reply says it can't make images, the server draws it anyway (from Nexa's prompt, or your own words), and that line never reaches the chat. Send a photo with "make this a cartoon" or "make this more natural and clean" and Nexa **edits that photo**: the photo itself goes to FLUX.2 Klein as a reference (`input_image_0`, up to 1024 px, same proportions as the photo) with an instruction to keep the same person (face, features, skin tone, hair, expression), pose, clothes and background unless asked otherwise. Follow-ups like "make it brighter" edit the last picture (the model sets `edit_previous`), and `@Nexa make this a cartoon` on a photo in any chat works the same way. Photo edits always use **FLUX.2 Klein 9B** (`CLOUDFLARE_EDIT_MODEL`), whichever model is picked: in a side-by-side test it kept the face closest to the photo and was the quickest (about 3.5 s), while Klein 4B smoothed and changed the face and FLUX.2 Dev reshaped it. FLUX.2 Klein 4B is the backup; if it fails, Nexa says so instead of drawing a different person. Only when no editing model is set up does it fall back to describing the photo. Code: `generateImage(..., { referenceUrl, editPrompt })` and `editInstruction()` in `utils/imageGen.js`.
 - **Pictures on the first ask**: Nexa understands picture requests in any wording, with typos ("genrate an iamge"), and as follow-ups ("yes do it", "make it blue", "one more"), both in the Nexa chat and with @Nexa / Nexa mode. Clear requests go straight to the image tool; unclear ones get a quick yes/no check from the model with the recent chat as context. If Nexa still answers "I can't create images", the server makes the picture anyway. Earlier image prompts are kept in Nexa's memory, so changes build on the last picture. Code: `utils/imageIntent.js`.
 - **Message menu in the Nexa chat**: right-click a message (or long-press on a phone) for its actions, opened where you clicked: Nexa's answers have Reply, Copy, Listen, Regenerate, Keep and Delete; your questions have Copy, Edit, Keep and Delete (Delete asks first). Under each message there's only the time, plus Kept / Copied and a Stop button while it's being read aloud. Code: `home/ai/MessageMenu.jsx`, `hooks/useMessageMenu.js`.
 - **Nexa chat tools** (same as in normal chats): the pen button rewrites your question (with Undo), the mic does **voice typing** (your words land in the box to check before sending; `POST /api/ai/dictate`, Groq Whisper, audio isn't stored), **Reply** on an answer sends your question with a quote of it, **Regenerate** on the latest answer asks again, **Copy** and **Edit** under your own questions, and you can drop a photo or document anywhere on the chat.
 - **Message history like a terminal**: in the Nexa box, **↑** brings back your earlier questions (newest first) and **↓** goes forward, ending on what you were typing. Normal chats work the same way with the messages you sent in that chat (edit a message from its ⋯ menu). Shared hook: `hooks/useInputHistory.js`.
-- Opening Nexa with an empty chat shows a short greeting and eight starter suggestions (send, schedule, remind, catch up, search the web, create an image, set up a business, make a group). Ask **"What can you do?"** to see all sixteen, plus a note on what Nexa adds to every chat. Tapping an example puts it in the box to edit before sending. It remembers the conversation, so follow-up questions work. The chat is private to you and can be cleared.
+- Opening Nexa with an empty chat shows a short greeting and a **See what Nexa can do** button, which reveals eight starter suggestions (send, schedule, remind, catch up, search the web, create an image, set up a business, make a group); they stay hidden until asked for. Ask **"What can you do?"** to see all sixteen, plus a note on what Nexa adds to every chat. Tapping an example puts it in the box to edit before sending. It remembers the conversation, so follow-up questions work. The chat is private to you and can be cleared.
 - **Nexa can act for you** (ask in plain words):
   - *Send a message*: "tell Arjun I'm running 10 minutes late".
   - *Schedule a message*: "wish Priya happy birthday tomorrow at 9am". Times use your own time zone.
@@ -106,6 +112,11 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Scheduled bar**: a chat with scheduled messages shows "2 scheduled messages · next Fri 9:00 AM" above the message box, with the list and Cancel buttons.
 - Powered by **Groq**'s free API (`openai/gpt-oss-120b`, falling back to `openai/gpt-oss-20b`). The API keys stay on the server.
 
+### Mute, archive and "Seen by"
+- **Mute a chat** (chat info → Notifications): for 8 hours, 1 week or always. Muted chats send no notifications (calls still ring), show a muted bell and a grey unread count, and don't count toward the Chats badge. `PUT /message/mute-chat/:chatId`.
+- **Archive chats** (chat info, or select several in the list → Archive): they move out of the main list into **Archived** at the top, and stay there when new messages arrive. Searching still finds them. `PUT /message/archive-chat/:chatId`.
+- **Seen by in groups**: your latest message in a group shows **Seen by 3** (or **Seen by all**), live. Tap it, or ⋯ → **Message info**, to see who has seen it and when, and who hasn't yet. People with seen indicators off are only counted, and if yours are off you don't see anyone's (same as one-to-one chats). `GET /groups/:id/messages/:messageId/info`, live `groupRead` events.
+
 ### Groups and communities
 - **Groups**: create a group from your contacts with a name and description. Everything works in groups: replies, reactions, files, voice notes, edit/delete/forward, and typing ("Priya is typing…"). Each message shows who sent it.
 - **Admins** can rename the group, add contacts, remove people, and make others admin. Anyone can leave; the group always keeps at least one admin.
@@ -122,6 +133,10 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Full-screen call view**: incoming call with Accept / Decline and a ringtone, "Calling…" with a ringback tone, then a running timer.
 - **In-call controls**: mute, camera on/off, hang up. Video calls show the other person full screen and your camera in a corner.
 - **Clear outcomes**: declined, no answer (30 s), missed, offline, busy (already on a call), couldn't connect, or microphone/camera blocked.
+- **Calls survive closing the app by mistake**: when someone's app closes or loses its connection during a call, the call isn't ended. The other side sees "Reconnecting…" and the server keeps the call for **2 minutes**. Reopening Kova shows **Call interrupted** with **Rejoin** / End (one-to-one), or a **Rejoin** card (group calls); a short network drop in the same tab reconnects on its own. After 2 minutes away the call ends (one-to-one) or the person is removed (group). Code: `markAway` / `call:rejoin` in `socket/socket.js`, `gcall:resume` / `offerGroupRejoin` in `socket/groupCalls.js`, `rejoinCall` in `context/CallProvider.jsx`.
+- **Join a group call again**: after leaving a group call on purpose, a "call still going · Rejoin" card stays up while others are in it (and the group header keeps its **Join** button). Ad-hoc calls (people added to a one-to-one call) can be rejoined the same way.
+- **Group calls in the chat**: starting a group call posts a "Voice call · ongoing" bubble in the group with a **Join** button; when everyone has left it becomes "Group voice call · 12:34". `postCallMessage` / `closeCallMessage` in `socket/groupCalls.js`.
+- **Several tabs and devices**: every tab and device you have open gets messages and rings for calls; answering on one stops the others ringing.
 - Audio and video go **directly between the two browsers** (WebRTC); the server only rings and passes connection details.
 - **Add people to any call**: the **Add people** button (voice and video) rings more people, up to 8 in a call. In a one-to-one call you pick from your contacts and the call moves into a group call for everyone, with no hang-up. In a group call you ring members who aren't in it yet. People who are added get a "added you to a call" banner with Join / Decline. Server: `gcall:upgrade` and `gcall:add` in `socket/groupCalls.js` (ad-hoc calls are keyed `room:<id>` and only invited people can join).
 - **In-call tools** (one-to-one and group): **Minimise** the call into a small floating card you can drag around while you keep chatting; **Share screen** (video calls on desktop) and **Flip camera** (phones); tap the small video to **swap** it with the big one, or tap a tile in a group call to enlarge it. Everyone sees when someone is **muted**, has their camera off or is sharing, a green ring shows **who's talking**, and "Priya joined / left" notes pop up. Video-call controls fade after 5 s and come back on a tap. Code: `home/call/`, `utils/callMedia.js`.
@@ -133,6 +148,13 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 - **Typing indicator** in the chat header, the contact list, and as an animated bubble in the chat.
 - **Read receipts**: ✓ sent, ✓✓ seen (updates live when the other person opens the chat).
 - **Unread counts** per contact and in the browser tab title, stored on the server so they survive a reload.
+
+### Encrypted storage
+- **Chats are encrypted at rest**: message text, voice-note transcripts, Nexa chats (including text read from documents) and scheduled messages are stored in MongoDB encrypted with **AES-256-GCM** and the server key `MESSAGE_ENCRYPTION_KEY`. Anyone with a copy of the database (a leaked backup, a stolen dump) sees only `enc:v1:…` values. The server decrypts them for people allowed to see the chat, so this isn't end-to-end encryption: the server itself can read messages.
+- **How**: every value gets a new random IV, and GCM's authentication tag makes a changed value fail to open instead of turning into garbage. Each value is tied to its record and field (`Message.message:<id>` as GCM additional data), so ciphertext copied onto another message won't open. The VM gets the key with the rest of `backend/.env` through `./deploy.sh --env`. Values carry a key id, so keys can be rotated: put the new key in `MESSAGE_ENCRYPTION_KEY`, the old one in `MESSAGE_ENCRYPTION_OLD_KEYS`, and run the script below.
+- **In the code**: a Mongoose plugin (`utils/fieldCrypto.js`, added to the Message, AiMessage and ScheduledMessage models) encrypts on save / `insertMany` and decrypts when documents load, so controllers read and write plain text. Raw reads (`.lean()`, `aggregate`) skip it: wrap results in `Model.hydrate()`. Setting these fields with `updateMany` is refused (they're encrypted per record). Chat search can't match encrypted text in the database, so it decrypts your newest 5,000 messages and matches on the server.
+- **Existing data**: `npm run encrypt:messages -- --dry-run` counts plain-text values left from before encryption; `npm run encrypt:messages` encrypts them (and re-encrypts values under an old key). Plain-text values still read normally until then. The server won't start without the key.
+- **Settings → Security & locks** says how chats are stored, then App lock, Locked chats and Hidden chats, each with an On/Off badge and a list of rows (`components/security/SettingsRows.jsx`).
 
 ### Contacts and privacy
 - **Contacts only**: you only see, message and call people in your contacts. Nobody can browse everyone who signed up.
@@ -160,6 +182,7 @@ NexChat is a full-stack chat application with instant delivery, a built-in AI as
 
 ### Navigation
 - **Fewer header buttons**: the Chats header has two buttons: **✎ New** (New group, New community, Add contact) and **⋯ More** (Contacts, Contact requests with a count, and on phones Business and Light/Dark mode, which computers keep in the left rail); ⋯ shows a badge for new requests. In a chat on a phone, the pinned-messages button moves into the chat's ⋯ menu as "Pinned messages (N)"; computers keep the 📌 icon. Shared menu: `components/HeaderMenu.jsx`.
+- **Back button closes the chat** (phones and browsers): opening a chat or another tab (Status, Calls…) doesn't change the URL, so the app keeps one extra history entry while something is open. The phone's back button or back swipe closes the chat first, then returns to Chats, and only then leaves Kova. Code: `hooks/useBackButton.js`.
 - **Collapsible chat list** (computers): the panel button in the left rail, or **Ctrl/Cmd+B**, hides the chat list so the open chat gets more room; the section rail stays with all its icons and badges. Clicking any section in the rail (or the panel button / Ctrl+B again) brings the list back, and it stays until you collapse it again; opening chats never changes it. Remembered on this device (`Zustand/useSidebar.js`). Phones keep their usual layout.
 - **Close chat** in a chat's ⋯ menu closes it and goes back to the empty screen (on phones, back to the chat list). The header's status line stays on one clean line: on phones a short form ("Active 11:56 AM", and for a business "· ● Closed" with a green or grey dot), on bigger screens the full one ("Active today at 11:56 AM · Closed · opens tomorrow 9 AM").
 - **Settings page** (`/profile`): a menu on the left (search, your photo and name, then **Profile**, **Account**, **Privacy**, **Security & locks**, **Chats**, **Notifications**, and **Log out**) and the chosen section on the right. On phones the menu shows first and a section opens full screen with a back arrow. The open section is kept in the URL (`/profile?s=privacy`), so refresh and the browser's back button work. Code: `components/Profile.jsx`.
@@ -200,6 +223,8 @@ Any account can turn on **Business** (Profile → Business tools, or the briefca
 - **Username suggestions at sign-up**: as you type your name, free usernames appear under the Username field (e.g. `janecooper`, `jane.cooper`, `jane_cooper`, `jcooper`, `janecooper13`); tap one to use it, ↻ for more ideas. Accents are removed, non-Latin names fall back to the email, reserved names are skipped, and all candidates are checked in one database query. A live check shows ✓ available or ✗ taken for whatever you type. Code: `GET /api/user/username-suggestions?name=&email=`, `suggestUsernames` in `backend/utils/username.js`, `UsernameHelper` in `components/Signup.jsx`.
 - Sign up, sign in, sign out (JWT in an HTTP-only cookie).
 - **Stay signed in**: sessions last 30 days and renew automatically while you use the app. If a session does expire, the app returns to the sign-in page instead of showing empty data.
+- **Devices**: Settings → Security → **Devices** lists every browser / phone signed in ("Chrome on Windows · Active 5 min ago"), with **Sign out** for each and **Sign out other devices**. A signed-out device is cut off at once, including its realtime connection. Each login is a `Session` record named in the cookie (`sid`); logins from before this existed get one the first time they're used. Code: `components/DevicesSettings.jsx`, `GET/DELETE /user/sessions`, `backend/models/session.model.js`.
+- **Text size**: Settings → Chats → **Text size** (Small, Default, Large, Extra large) scales the whole app.
 - **Profile photo** upload, change and remove (cropped and compressed in the browser).
 - Change display name, username and password.
 - **Dark theme by default**, with a light theme toggle in the app and on the landing page (remembered per browser).
@@ -293,9 +318,9 @@ flowchart LR
         PROXY["/api/* rewrite"]
     end
 
-    subgraph Render
+    subgraph VM["Oracle Cloud VM (Docker)"]
         API[Express REST API]
-        IO[Socket.IO server<br/>userId → socketId map]
+        IO[Socket.IO server<br/>one room per user]
         JOBS[Scheduler + @Nexa<br/>background work]
     end
 
@@ -305,7 +330,7 @@ flowchart LR
 
     UI -- "HTTP /api/... (cookie)" --> PROXY --> API
     UI -. loads .-> STATIC
-    SC <-- "WebSocket (userId)" --> IO
+    SC <-- "WebSocket (short-lived token)" --> IO
     API --> DB
     API -- "upload / delete" --> CDN
     UI -- "view media (CDN URL)" --> CDN
@@ -322,7 +347,7 @@ flowchart LR
 - **HTTP (REST)** does every change: send, edit, delete, react, forward, mark as seen, upload. The server validates the request and writes to MongoDB.
 - **WebSockets** only push the result of those changes to the *other* person (and presence/typing signals). The sender updates its own screen from the HTTP response.
 - In production the browser calls `/api/...` on the Vercel domain and Vercel rewrites it to the backend on Oracle Cloud. That keeps the auth cookie **same-site**, so `SameSite=Strict` works. In development, Vite's proxy does the same thing (`/api` → `localhost:3000`).
-- The socket connects directly to the backend (`VITE_SOCKET_URL`), identifying itself with the user's id.
+- The socket connects directly to the backend (`VITE_SOCKET_URL`). The login cookie isn't sent there (it's `SameSite=Strict` on another site), so the app first asks the API for a **2-minute socket token** (`GET /api/user/socket-token`) and connects with it; the server refuses connections without a valid one. Each tab joins the room `user:<id>`, so every tab and device of a user gets their events.
 - **Nexa** runs on the server only: the browser asks the API, the API calls Groq (keys never reach the browser), and actions such as sending or scheduling go through the same permission checks as the app. Scheduled messages and @Nexa answers are produced in the background and delivered over the socket like any other message.
 - **Calls are the exception to "HTTP does every change"**: ringing and connection setup (WebRTC offer/answer/ICE) go over the socket, and the audio/video itself flows directly between the two browsers. The server never sees call media.
 
@@ -430,6 +455,8 @@ This section explains the approach behind each feature.
 - **Limits**: 4,000 characters per question and 12 questions per minute per user, to protect the free quota. The gpt-oss models run with `reasoning_effort: low` and hidden reasoning, so answers come back in about 1–2 seconds.
 
 ### Emoji
+- **Smaller startup download**: every page (chats, landing page, business, profile…), the Nexa chat, the call screens, maps (Leaflet) and the Markdown renderer load the first time they're needed (`React.lazy`), so opening the app downloads about half what it used to. An error boundary shows "Something went wrong · Reload" instead of a blank page if part of the app crashes (the open chat has its own, so the chat list keeps working), and "Kova was updated · Reload" when an old tab can't find a file from before a deploy. Code: `App.jsx`, `components/ErrorBoundary.jsx`.
+- **Opens offline**: the service worker (`public/sw.js`) keeps the app's files, and the last answers for the chat list, contacts and recent messages, so the installed app opens without a connection and shows the chats from last time. Nothing is served from that copy while online, and the saved answers are deleted when you sign out.
 - The composer's emoji button and the reaction picker's "All emojis" button share one picker (`FullEmojiPicker` in `EmojiPopover.jsx`). It is loaded with `React.lazy`, so its ~80 KB (gzipped) only downloads the first time someone opens it.
 
 ### Real-time connection and presence
@@ -439,8 +466,9 @@ This section explains the approach behind each feature.
 - All client listeners live in one hook, `useListenMessages`, mounted once by the chat layout. It reads the latest store state with `getState()`, so it never misses events and never registers twice.
 
 ### Conversations and messages
-- A **Conversation** document links two members and keeps an ordered list of message ids. It is created automatically on the first message.
-- Opening a chat loads all its messages (`GET /message/get/:id`).
+- A **Conversation** document links two members and holds the chat's settings (disappearing timer). It is created automatically on the first message. Messages aren't listed on it: a chat's messages are found by sender and receiver (plus Nexa's answers in it), with indexes for that (`utils/directChat.js`). The old id list could grow past MongoDB's 16 MB document limit; `npm run drop:conversation-lists` removes it from old documents.
+- **Chats load a page at a time**: opening a chat loads the newest 50 messages (`GET /message/get/:id` and `GET /groups/:id/messages` return `{ messages, more }`). Scrolling near the top loads the 50 before (`?before=<messageId>`) and keeps what's on screen in place. Going to an older message (a reply quote, search result, pin, starred message or reminder) loads the chat from that message on (`?from=<messageId>`). Code: `context/useGetMessages.js`, `pageOf` in `backend/utils/directChat.js`.
+- **Media, links and docs** in chat info come from `GET /message/media/:chatId`, so they include the whole chat, not just what's loaded.
 - **Grouping** is done in the browser. Messages from the same sender, on the same day and within 5 minutes, form a group. Bubble corners and spacing adapt, and the time is shown once per group.
 - **Sidebar previews** come from `GET /message/conversations`, which returns the last message and the unread count for each conversation. It is refreshed after edits, deletes and clears. New and sent messages update it instantly.
 - **Smart scrolling**: the list jumps to the bottom when you open a chat, follows new messages only if you are already near the bottom (or you sent it), and otherwise shows a "jump to latest" button with a count.
@@ -884,7 +912,6 @@ The socket connects with `?userId=<id>`.
 ```
 NexChat/
 ├── service.sh                     # Start/stop backend + frontend in the background (logs in ./logs)
-├── render.yaml                    # Render blueprint for the backend
 ├── backend/
 │   ├── index.js                   # Express app, CORS, routes, MongoDB connection
 │   ├── config/cloudinary.js       # Cloudinary config, Multer filters, upload/delete helpers
@@ -977,6 +1004,12 @@ MONGODB_URI=your_mongodb_connection_string
 token=a_long_random_jwt_secret
 FRONTEND_URL=http://localhost:5173
 
+# Required. Chat text is stored encrypted with this key (AES-256-GCM). Make one with
+#   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+# Back it up and use the same key on every server: without it stored messages can't be read.
+MESSAGE_ENCRYPTION_KEY=base64_32_byte_key
+# MESSAGE_ENCRYPTION_OLD_KEYS=old_key_1,old_key_2   # only while rotating keys
+
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
@@ -1021,6 +1054,12 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=http://localhost:5173/api/google/callback   # production: https://kova-im.vercel.app/api/google/callback
 
+# Optional: DNS servers for the MongoDB Atlas lookup, when the local router's DNS can't resolve it.
+# Leave unset on servers so they use their own DNS.
+# DNS_SERVERS=8.8.8.8,1.1.1.1
+# Behind Vercel's /api rewrite + nginx the visitor's address is 2 proxies back (rate limits use it)
+# TRUST_PROXY=2
+
 # Email for "Forgot password?" on the login page (any SMTP server; for Gmail use an App Password).
 # Without these, the codes are printed in the server console.
 SMTP_HOST=smtp.gmail.com
@@ -1035,7 +1074,7 @@ Lets each user connect their Google Calendar + Tasks in the Nexa chat (📅 butt
 1. [Google Cloud console](https://console.cloud.google.com/): create a project, then **APIs & Services → Library**: enable **Google Calendar API** and **Google Tasks API**.
 2. **OAuth consent screen**: External, add the scopes `calendar.events` and `tasks`. While the app is in *Testing*, add each person who will connect as a **test user** (max 100). Publishing for everyone needs Google's verification of these scopes.
 3. **Credentials → Create credentials → OAuth client ID → Web application**. Authorized redirect URIs: `http://localhost:5173/api/google/callback` and `https://<your-vercel-app>/api/google/callback`.
-4. Put the client ID, secret and redirect URI in `backend/.env` (and in Render for production).
+4. Put the client ID, secret and redirect URI in `backend/.env`, then upload it to the server with `./deploy.sh --env`.
 
 Refresh tokens are stored encrypted (AES-256-GCM, key from `GOOGLE_TOKEN_KEY` or the JWT secret).
 
@@ -1051,12 +1090,18 @@ Run both apps in the background with one command (ports 3000 and 5173 are freed 
 ```
 Or run them separately: `npm run dev` in `backend/` and in `frontend/`. Open http://localhost:5173.
 
-Optional `frontend/.env` for calls on strict networks:
+Backend tests (encryption layer and password rules, no database needed): `cd backend && npm test`.
+
+**Calls on strict networks (TURN, recommended).** Without a relay, some calls (strict office Wi-Fi, some mobile networks) never connect. Set one up in `backend/.env`; the server hands out short-lived credentials at `GET /api/calls/ice`, so the secret never reaches the browser:
 ```env
-VITE_TURN_URL=turn:your-turn-server:3478
-VITE_TURN_USERNAME=...
-VITE_TURN_CREDENTIAL=...
+# Cloudflare Calls TURN (free tier): dash.cloudflare.com → Calls → TURN → create a key
+CLOUDFLARE_TURN_KEY_ID=
+CLOUDFLARE_TURN_API_TOKEN=
+# …or your own coturn with `use-auth-secret` / `static-auth-secret`
+# TURN_URLS=turn:turn.example.com:3478,turns:turn.example.com:5349
+# TURN_SECRET=
 ```
+Old fixed credentials in `frontend/.env` (`VITE_TURN_URL`, `VITE_TURN_USERNAME`, `VITE_TURN_CREDENTIAL`) still work as a fallback when the server can't be reached.
 
 ### 4. Sample data (optional)
 ```bash
@@ -1094,12 +1139,7 @@ Deploy from your machine with `./deploy.sh` (it needs the SSH key in `~/Download
 
 - **Logs:** `ssh -i <key> ubuntu@137.23.46.155 'docker logs -f kova-backend'`
 - **Your own domain:** set `KOVA_DOMAIN`, point its DNS at the IP, and run `--setup` again.
-- **Run one backend at a time.** Only one backend should run against the database at a time, or scheduled messages, briefs and reminders get sent twice. Keep Render suspended.
-
-### Backend → Render (old)
-1. Create a Web Service (or use `render.yaml`). Root directory `backend`, build `npm install`, start `node index.js`.
-2. Set environment variables: `MONGODB_URI`, `token`, `PORT`, `FRONTEND_URL` (your Vercel URL; several can be listed comma-separated, and the first is used for links in emails and the Google redirect), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER`, `GROQ_API_KEYS`, `GROQ_MODEL`, `NEXA_IMAGES_PER_DAY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `ADMIN_EMAILS` (optional: `PUTER_AUTH_TOKEN`).
-3. If the production database predates contacts, run `node scripts/migrate-contacts.js` once against it.
+- **Run one backend at a time.** Only one backend should run against the database at a time, or scheduled messages, briefs and reminders get sent twice.
 
 ### Backend on another VM
 - Any Linux VM with Node 20+ works (WebSockets need a long-running process, so not a serverless function). Run `node index.js` behind a process manager (e.g. pm2 or systemd) and a reverse proxy with HTTPS (e.g. Caddy or Nginx).
@@ -1116,7 +1156,12 @@ Deploy from your machine with `./deploy.sh` (it needs the SSH key in `~/Download
 ## Security
 
 - Passwords are hashed with bcrypt and never returned by the API (older sessions that cached a hash in the browser are cleaned up on load).
-- The session JWT lives in an HTTP-only, `SameSite=Strict` cookie. Enable `secure: true` in `jwt/token.js` when serving over HTTPS end to end.
+- The session JWT lives in an HTTP-only, `SameSite=Strict` cookie, marked `Secure` in production (`NODE_ENV=production`).
+- **Changing or resetting the password signs out every other device**: logins made before `passwordChangedAt` are refused, and a reset also drops open socket connections. Passwords need at least 8 characters (`utils/password.js`).
+- **The realtime connection needs a token**: a short-lived socket token from the API, never a user id the browser could make up (`io.use` in `socket/socket.js`). Socket tokens can't be used as a login cookie.
+- **Rate limits** (`middleware/rateLimit.js`): 10 wrong passwords per account per 15 minutes, 50 sign-in / sign-up attempts per address per 15 minutes, 10 password-reset requests per email per 15 minutes, and a 60-per-minute backstop on the AI endpoints. Login answers "Invalid email or password" either way, so it doesn't reveal which emails have accounts.
+- `helmet` sets the usual security headers. The server only starts once MongoDB is connected, and on `SIGTERM` (Docker restart) it finishes requests and closes the database cleanly.
+- Link previews only fetch public web pages: the address is checked at the moment of connecting, so a domain can't switch to a private address after the check (DNS rebinding).
 - **Contacts only**: the server only lets you see, message, forward to and call your contacts. Usernames can only be looked up exactly, and strangers never see your email.
 - Invite tokens are random and can be reset; contact lists and tokens are never sent to other users.
 - Every message action checks ownership on the server: only the sender can edit (within 10 minutes) or delete, and only people in the chat (both people, or the group's members) can react, reply, forward, translate or transcribe it.

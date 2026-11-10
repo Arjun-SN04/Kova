@@ -1,3 +1,4 @@
+import useConversation from '../Zustand/UserConversation'
 // Must match EDIT_WINDOW_MS in backend/controller/message.controller.js
 export const EDIT_WINDOW_MS = 10 * 60 * 1000
 
@@ -5,8 +6,12 @@ export const canEdit = (message, now = Date.now()) =>
   now - new Date(message.createdAt).getTime() < EDIT_WINDOW_MS
 
 // Scroll to a message in the open chat and flash it briefly
+// Scroll to a message and flash it. If it isn't loaded yet (an older page of the chat),
+// the chat loads from that message first (see the pendingJump effect in Messages.jsx).
 export const jumpToMessage = (id, setHighlightedId) => {
-  document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  const el = document.getElementById(`msg-${id}`)
+  if (!el) return useConversation.getState().setPendingJump(String(id))
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
   setHighlightedId(id)
   setTimeout(() => setHighlightedId(null), 1600)
 }

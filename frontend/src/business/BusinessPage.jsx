@@ -251,6 +251,8 @@ const BusinessPage = () => {
     try { setCustomers((await axios.get(bizUrl(biz, '/customers'), api)).data.customers) } catch { /* keep the old list */ }
   }, [biz])
 
+  // State is only set after the request / camera answers (async), not during the effect
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadOverview(); loadCustomers() }, [loadOverview, loadCustomers])
   // While switching to another business, don't show the previous one's data
   const ready = overview && String(overview.business._id) === String(biz)

@@ -60,14 +60,33 @@ const CAPABILITIES = [
   { title: 'Kova help', example: 'How do communities work?' },
 ]
 
+// Empty Nexa chat: the example cards stay hidden until asked for
+const StarterIdeas = ({ onPick }) => {
+  const [open, setOpen] = useState(false)
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="mt-5 inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-medium text-violet-700 ring-1 ring-violet-200 transition hover:bg-violet-50 dark:text-violet-200 dark:ring-violet-500/30 dark:hover:bg-violet-500/10">
+        <LuLightbulb className="size-4" /> See what Nexa can do
+      </button>
+    )
+  }
+  return (
+    <div className="mt-8 flex w-full flex-col items-center">
+      <CapabilitiesCard onPick={onPick} />
+      <button type="button" onClick={() => setOpen(false)} className="mt-3 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">Hide ideas</button>
+    </div>
+  )
+}
+
 const CapabilitiesCard = ({ onPick, all = false }) => (
   <div className="w-full max-w-2xl text-left">
-    <div className="grid gap-2 sm:grid-cols-2">
+    {/* grid-cols-1 keeps the cards to the screen width (long examples are cut off with …) */}
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
       {CAPABILITIES.filter((c) => all || c.starter).map(({ title, example }) => (
         <button
           key={title}
           onClick={() => onPick(example)}
-          className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700 dark:hover:bg-slate-800/70"
+          className="min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700 dark:hover:bg-slate-800/70"
         >
           <span className="block text-sm font-medium text-slate-800 dark:text-slate-100">{title}</span>
           <span className="mt-0.5 block truncate text-[13px] text-slate-500 dark:text-slate-400">{example.trim()}</span>
@@ -134,7 +153,7 @@ const md = {
   h2: (props) => <p className="my-1.5 font-semibold first:mt-0" {...props} />,
   h3: (props) => <p className="my-1.5 font-semibold first:mt-0" {...props} />,
   strong: (props) => <strong className="font-semibold" {...props} />,
-  a: ({ node, ...props }) => <a className="font-medium text-indigo-600 underline underline-offset-2 dark:text-indigo-400" target="_blank" rel="noreferrer" {...props} onClick={(e) => playIfYoutube(e, props.href, textOf(node))} />,
+  a: ({ node, ...props }) => <a className="font-medium text-indigo-600 underline underline-offset-2 [overflow-wrap:anywhere] dark:text-indigo-400" target="_blank" rel="noreferrer" {...props} onClick={(e) => playIfYoutube(e, props.href, textOf(node))} />,
   blockquote: (props) => <blockquote className="my-1.5 border-l-2 border-slate-300 pl-2.5 text-slate-600 dark:border-slate-600 dark:text-slate-300" {...props} />,
   hr: () => <hr className="my-2 border-slate-200 dark:border-slate-700" />,
   pre: ({ node, ...props }) => {
@@ -166,7 +185,8 @@ const textOf = (node) => {
   return (node.children || []).map(textOf).join('')
 }
 
-// A list item with a "Know more" button that asks Nexa about that point
+// A list item with a "Know more" button that asks Nexa about that point.
+// It shows on hover; touch screens get one button under the whole answer instead.
 const listItem = (onAsk) => {
   const Item = ({ node, children, ...props }) => {
     const topic = textOf(node).replace(/\s+/g, ' ').trim()
@@ -178,7 +198,7 @@ const listItem = (onAsk) => {
         <button
           type="button"
           onClick={() => onAsk(`Tell me more about: "${topic}"`)}
-          className="ml-1.5 inline-flex -translate-y-px items-center gap-0.5 rounded-full px-1.5 py-px align-middle text-[11px] font-medium text-violet-600 opacity-0 ring-1 ring-violet-200 transition hover:bg-violet-50 focus:opacity-100 group-hover/li:opacity-100 pointer-coarse:opacity-100 dark:text-violet-300 dark:ring-violet-500/30 dark:hover:bg-violet-500/10"
+          className="ml-1.5 inline-flex -translate-y-px items-center gap-0.5 rounded-full px-1.5 py-px align-middle text-[11px] font-medium text-violet-600 opacity-0 ring-1 ring-violet-200 transition hover:bg-violet-50 focus:opacity-100 group-hover/li:opacity-100 pointer-coarse:hidden dark:text-violet-300 dark:ring-violet-500/30 dark:hover:bg-violet-500/10"
           title="Ask Nexa about this"
         >
           <LuLightbulb className="size-3" /> Know more
@@ -319,6 +339,7 @@ const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved, 
   // Reminders and the morning brief are shown as a card only (the text is kept for Copy)
   const cardOnly = message.actions?.some((a) => a.type === 'agenda' || a.type === 'reminder' || (a.type === 'event' && a.reminder))
   const greeting = (message.content || '').match(/\*\*(.+?)\*\*/)?.[1]
+  const hasList = /^\s*(?:[-*+]|\d+\.)\s/m.test(message.content || '')
   const copy = async () => {
     try { await navigator.clipboard.writeText(message.content); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { /* ignore */ }
   }
@@ -362,6 +383,12 @@ const NexaAnswer = ({ message, statuses, onCancel, onOpen, onAsk, onImageSaved, 
         <p className="mt-1 flex items-center gap-2 px-1 text-[11px] text-slate-400">
           {message.createdAt && formatTime(message.createdAt)}
           <MessageStatus message={message} copied={copied} speakId={`ai-${message._id}`} />
+          {/* Touch screens: one "Know more" for the whole list (hover shows one per point elsewhere) */}
+          {onAsk && hasList && !cardOnly && (
+            <button type="button" onClick={() => onAsk('Tell me more about that.')} className="hidden items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-medium text-violet-600 ring-1 ring-violet-200 transition hover:bg-violet-50 pointer-coarse:inline-flex dark:text-violet-300 dark:ring-violet-500/30 dark:hover:bg-violet-500/10">
+              <LuLightbulb className="size-3" /> Know more
+            </button>
+          )}
         </p>
       </div>
       <MessageMenu at={menu.at} onClose={menu.close} items={menuItems} />
@@ -882,7 +909,13 @@ const AiChat = () => {
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] font-semibold">Nexa</p>
           <p className={`truncate text-xs ${thinking ? 'font-medium text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
-            {thinking ? 'thinking…' : timer ? `AI assistant · messages disappear after ${timerLabel(timer)}` : 'AI assistant'}
+            {thinking ? 'thinking…' : timer ? (
+              <>
+                {/* Phones get a shorter line so it isn't cut off */}
+                <span className="sm:hidden">AI · clears after {timerLabel(timer).replace(' hours', 'h')}</span>
+                <span className="hidden sm:inline">AI assistant · messages disappear after {timerLabel(timer)}</span>
+              </>
+            ) : 'AI assistant'}
           </p>
         </div>
 
@@ -898,8 +931,10 @@ const AiChat = () => {
           </button>
 
           <div className="relative hidden sm:block">
-            <button onClick={() => setModelOpen((o) => !o)} className={`flex size-9 items-center justify-center rounded-lg transition hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-500/10 dark:hover:text-violet-300 ${imageModel !== 'auto' ? 'text-violet-600 dark:text-violet-300' : 'text-slate-500 dark:text-slate-400'}`} title={`Image model: ${modelLabel}`} aria-label="Image model" aria-expanded={modelOpen}>
+            <button onClick={() => setModelOpen((o) => !o)} className={`flex h-9 min-w-9 items-center justify-center gap-1.5 rounded-lg transition lg:px-2.5 hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-500/10 dark:hover:text-violet-300 ${imageModel !== 'auto' ? 'text-violet-600 dark:text-violet-300' : 'text-slate-500 dark:text-slate-400'}`} title={`Image model: ${modelLabel}`} aria-label={`Image model: ${modelLabel}`} aria-expanded={modelOpen}>
               <LuWandSparkles className="size-4.5" />
+              {/* Named on wide screens, so people can find where pictures are chosen */}
+              <span className="hidden max-w-32 truncate text-xs font-medium lg:inline">Image: {modelLabel}</span>
             </button>
             {modelOpen && (
               <>
@@ -1025,15 +1060,13 @@ const AiChat = () => {
         )}
       </header>
 
-      <div ref={scrollRef} className="chat-bg min-h-0 flex-1 overflow-y-auto" style={wallpaper || undefined}>
+      <div ref={scrollRef} className="chat-bg min-h-0 flex-1 overflow-x-hidden overflow-y-auto" style={wallpaper || undefined}>
         <div className="h-full px-3 sm:px-6 lg:px-8">
           {loading ? null : messages.length === 0 && !thinking ? (
             <div className="flex h-full flex-col items-center justify-center py-10 text-center">
               <AiAvatar size="md" />
               <h2 className="mt-4 text-xl font-semibold tracking-tight text-slate-900 dark:text-white">Hi {firstName}, how can I help?</h2>
-              <div className="mt-8 flex w-full justify-center">
-                <CapabilitiesCard onPick={fill} />
-              </div>
+              <StarterIdeas onPick={fill} />
             </div>
           ) : (
             <div className="pb-2 pt-4">

@@ -29,7 +29,7 @@ const Tile = ({ name, avatar, stream, video, mirrored = false, muted = false, sh
             <span className={`absolute -inset-1.5 rounded-full ring-4 ring-emerald-400/60 transition-opacity ${speaking ? 'opacity-100' : 'opacity-0'}`} />
             <Avatar name={name} src={avatar} size="lg" />
           </span>
-          {state && state !== 'connected' && <p className="text-xs text-slate-400">{state === 'failed' ? "Couldn't connect" : 'Connecting…'}</p>}
+          {state && state !== 'connected' && <p className="text-xs text-slate-400">{state === 'new' || state === 'connecting' ? 'Connecting…' : 'Reconnecting…'}</p>}
         </div>
       )}
       <span className="absolute bottom-2 left-2 flex max-w-[85%] items-center gap-1 truncate rounded-md bg-black/55 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
@@ -170,24 +170,29 @@ const HiddenAudio = ({ stream }) => {
 }
 
 // Someone started a call in one of my groups, or invited me to one
-export const GroupCallRing = ({ ring, onJoin, onDismiss }) => createPortal(
-  <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="fixed left-1/2 top-4 z-[80] w-[min(92vw,380px)] -translate-x-1/2 rounded-2xl bg-white p-4 text-slate-900 shadow-2xl ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700" role="alertdialog" aria-label="Incoming call">
+// An incoming group call, or (rejoin) a call I left or dropped out of that's still going
+export const GroupCallRing = ({ ring, onJoin, onDismiss, rejoin = false, count = 0 }) => createPortal(
+  <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="fixed left-1/2 top-4 z-[80] w-[min(92vw,380px)] -translate-x-1/2 rounded-2xl bg-white p-4 text-slate-900 shadow-2xl ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700" role="alertdialog" aria-label={rejoin ? 'Call in progress' : 'Incoming call'}>
     <div className="flex items-center gap-3">
       <span className="relative">
-        <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/40" />
-        <Avatar name={ring.from?.fullName} src={ring.from?.avatar?.url} />
+        {!rejoin && <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/40" />}
+        <Avatar name={rejoin ? ring.groupName : ring.from?.fullName} src={rejoin ? undefined : ring.from?.avatar?.url} />
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate font-semibold">{ring.groupName}</p>
         <p className="truncate text-sm text-slate-500 dark:text-slate-400">
-          {ring.from?.fullName?.split(' ')[0]} {ring.room ? 'added you to a' : 'started a group'} {ring.type} call
+          {rejoin
+            ? `${ring.type === 'video' ? 'Video' : 'Voice'} call still going${count ? ` · ${count} ${count === 1 ? 'person' : 'people'}` : ''}`
+            : `${ring.from?.fullName?.split(' ')[0]} ${ring.room ? 'added you to a' : 'started a group'} ${ring.type} call`}
         </p>
       </div>
     </div>
     <div className="mt-3 flex justify-end gap-2">
-      <button onClick={onDismiss} className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"><LuPhoneOff className="size-4" /> Decline</button>
+      <button onClick={onDismiss} className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium ${rejoin ? 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800' : 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10'}`}>
+        {rejoin ? 'Dismiss' : <><LuPhoneOff className="size-4" /> Decline</>}
+      </button>
       <button onClick={onJoin} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-500">
-        {ring.type === 'video' ? <LuVideo className="size-4" /> : <LuPhone className="size-4" />} Join
+        {ring.type === 'video' ? <LuVideo className="size-4" /> : <LuPhone className="size-4" />} {rejoin ? 'Rejoin' : 'Join'}
       </button>
     </div>
   </motion.div>,

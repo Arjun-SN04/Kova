@@ -6,6 +6,13 @@ import { attachmentLabel } from './attachments'
 // push when you're offline, so this covers the time you're online.
 
 const store = () => useConversation.getState()
+// mutedChats: { chatId: until (ISO) or null for always }
+export const isMuted = (mutedChats, chatId) => {
+  const key = String(chatId)
+  if (!mutedChats || !(key in mutedChats)) return false
+  const until = mutedChats[key]
+  return !until || new Date(until) > new Date()
+}
 const same = (a, b) => String(a) === String(b)
 
 const textOf = (m) => {
@@ -51,6 +58,8 @@ export const notifyLocally = (message, { chatId, groupId, myId }) => {
   if (looking) return // the chat list already shows it as unread
 
   const s = store()
+  // Muted chat: no notification (missed calls still show)
+  if (!message.call && isMuted(s.mutedChats, chatId)) return
   const secret = s.lockedChats.includes(String(chatId)) || s.hiddenChats.includes(String(chatId))
   const group = groupId ? s.groups.find((g) => same(g._id, groupId)) : null
   const sender = nameOf(message.senderId) || 'Someone'

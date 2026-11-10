@@ -4,7 +4,7 @@ import useConversation from '../Zustand/UserConversation'
 import WallpaperPicker from './WallpaperPicker'
 import { wallpaperName, wallpaperStyle } from '../utils/wallpapers'
 import { LuCheck, LuChevronRight, LuPalette } from 'react-icons/lu'
-import { ACCENTS, MODES, useTheme } from '../context/ThemeProvider'
+import { ACCENTS, MODES, TEXT_SIZES, useTheme } from '../context/ThemeProvider'
 
 // A tiny drawing of the chat screen in light or dark colours
 const MiniChat = ({ dark }) => (
@@ -25,7 +25,7 @@ const MiniChat = ({ dark }) => (
 )
 
 const AppearanceSettings = () => {
-  const { mode, setMode, accent, setAccent, dark } = useTheme()
+  const { mode, setMode, accent, setAccent, dark, textSize, setTextSize } = useTheme()
   const { wallpapers, setWallpapers } = useConversation()
   const [picking, setPicking] = useState(false)
   // The settings page can open on its own: load my wallpapers
@@ -79,6 +79,23 @@ const AppearanceSettings = () => {
               {accent === a.id && <LuCheck className="size-3.5 sm:size-4" />}
             </span>
             <span className="truncate max-w-full">{a.name}</span>
+          </button>
+        ))}
+      </div>
+
+      <p className="mb-2 mt-5 sm:mt-6 text-[13px] font-medium text-slate-700 dark:text-slate-300">Text size</p>
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-2" role="radiogroup" aria-label="Text size">
+        {TEXT_SIZES.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="radio"
+            aria-checked={textSize === t.id}
+            onClick={() => setTextSize(t.id)}
+            className={`flex flex-col items-center gap-1 rounded-xl border px-1.5 py-2 transition ${textSize === t.id ? 'border-slate-900 font-medium text-slate-900 dark:border-white dark:text-white' : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-800 dark:text-slate-400 dark:hover:border-slate-700'}`}
+          >
+            <span className="font-semibold leading-none" style={{ fontSize: `${(t.percent / 100) * 18}px` }} aria-hidden>Aa</span>
+            <span className="max-w-full truncate text-[11px] sm:text-xs">{t.name}</span>
           </button>
         ))}
       </div>

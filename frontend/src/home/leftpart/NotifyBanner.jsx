@@ -24,21 +24,18 @@ const NotifyBanner = () => {
   }
 
   if (!show) return null
+  // One short row, so it doesn't push the chat list down on phones
   return (
-    <div className="mx-3 mb-2 rounded-xl bg-indigo-50 p-3 ring-1 ring-indigo-100 dark:bg-indigo-500/10 dark:ring-indigo-500/20">
-      <div className="flex items-start gap-2.5">
-        <LuBell className="mt-0.5 size-4 shrink-0 text-indigo-600 dark:text-indigo-300" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold text-slate-800 dark:text-slate-100">Get notified</p>
-          <p className="text-xs text-slate-600 dark:text-slate-300">Messages and reminders, even when Kova is closed.</p>
-          <div className="mt-2 flex gap-2">
-            <button onClick={turnOn} disabled={busy} className="h-7 rounded-lg bg-indigo-600 px-3 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-60">{busy ? 'Turning on…' : 'Turn on'}</button>
-            <button onClick={dismiss} className="h-7 rounded-lg px-2 text-xs font-medium text-slate-600 hover:bg-white/60 dark:text-slate-300 dark:hover:bg-slate-800">Not now</button>
-          </div>
-          <PushHelp error={error} compact />
-        </div>
-        <button onClick={dismiss} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" aria-label="Dismiss"><LuX className="size-4" /></button>
+    <div className="mx-3 mb-2 rounded-xl bg-indigo-50 px-3 py-2 ring-1 ring-indigo-100 dark:bg-indigo-500/10 dark:ring-indigo-500/20">
+      <div className="flex items-center gap-2.5">
+        <LuBell className="size-4 shrink-0 text-indigo-600 dark:text-indigo-300" />
+        <p className="min-w-0 flex-1 text-xs leading-snug text-slate-700 dark:text-slate-200">
+          <span className="font-semibold">Get notified</span> about messages, even when Kova is closed
+        </p>
+        <button onClick={turnOn} disabled={busy} className="h-7 shrink-0 rounded-lg bg-indigo-600 px-3 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-60">{busy ? 'Turning on…' : 'Turn on'}</button>
+        <button onClick={dismiss} className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-white/60 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200" aria-label="Not now" title="Not now"><LuX className="size-4" /></button>
       </div>
+      <PushHelp error={error} compact />
     </div>
   )
 }

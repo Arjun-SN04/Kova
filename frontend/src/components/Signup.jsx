@@ -217,7 +217,7 @@ const Signup = () => {
             placeholder="6+ characters"
             autoComplete="new-password"
             error={errors.password?.message}
-            {...register("password", { required: "Password is required", minLength: { value: 6, message: "Minimum 6 characters" } })}
+            {...register("password", { required: "Password is required", minLength: { value: 8, message: "Minimum 8 characters" } })}
           />
           <Input
             label="Confirm"

@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { BrowserRouter } from 'react-router-dom'
 import AuthProvider from './context/AuthProvider.jsx'
 import SocketProvider from './context/SocketProvider.jsx'
@@ -19,6 +20,7 @@ registerServiceWorker()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
+    <ErrorBoundary>
     <BrowserRouter>
       <AuthProvider>
         <ThemeProvider>
@@ -32,5 +34,6 @@ createRoot(document.getElementById('root')).render(
         </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>
+    </ErrorBoundary>
   </StrictMode>,
 )

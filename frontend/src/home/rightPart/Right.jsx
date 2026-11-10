@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { Suspense, lazy, useEffect, useState } from 'react'
 import { AnimatePresence } from 'motion/react'
 import { LuArrowLeft, LuLock, LuUpload } from 'react-icons/lu'
 import ChatUser from './ChatUser'
@@ -11,7 +11,8 @@ import ForwardDialog from './ForwardDialog'
 import GroupInfo from '../groups/GroupInfo'
 import CommunityPage from '../groups/CommunityPage'
 import ChannelPage from '../channels/ChannelPage'
-import AiChat from '../ai/AiChat'
+// Nexa's chat (and its Markdown / document tools) is downloaded when first opened
+const AiChat = lazy(() => import('../ai/AiChat'))
 import ScheduledBar from './ScheduledBar'
 import SmartReplies from './SmartReplies'
 import CatchUp from './CatchUp'
@@ -19,6 +20,7 @@ import ChatSearch from './ChatSearch'
 import PinnedBar from './PinnedBar'
 import { loadChatTimer } from '../../utils/chatExtras'
 import Avatar from '../Avatar'
+import Loading from '../../components/Loading'
 import { LogoMark } from '../../components/ui'
 import useConversation from '../../Zustand/UserConversation'
 import { useSocket } from '../../context/SocketProvider'
@@ -33,14 +35,16 @@ const Welcome = () => {
   const onlineSet = new Set(onlineUsers.map(String))
   const online = contacts.filter((u) => onlineSet.has(String(u._id))).slice(0, 6)
   const firstName = AuthUser?.fullName?.split(' ')[0]
+  // Accounts made in the last day get a first-visit greeting, not "welcome back"
+  const [isNew] = useState(() => !!AuthUser?.createdAt && Date.now() - new Date(AuthUser.createdAt).getTime() < 86_400_000)
   const wallpaper = useWallpaper(null)
 
   return (
     <div className="chat-bg flex flex-1 flex-col items-center justify-center p-8 text-center" style={wallpaper || undefined}>
       <LogoMark className="size-14" />
-      <h2 className="mt-6 text-2xl font-semibold tracking-tight">Welcome back{firstName ? `, ${firstName}` : ''}</h2>
+      <h2 className="mt-6 text-2xl font-semibold tracking-tight">{isNew ? 'Welcome to Kova' : 'Welcome back'}{firstName ? `, ${firstName}` : ''}</h2>
       <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-        Pick a conversation from the list to start chatting.
+        {isNew ? 'Add a friend by username or QR code, or say hi to Nexa, your AI assistant.' : 'Pick a conversation from the list to start chatting.'}
       </p>
 
       {online.length > 0 && (
@@ -99,7 +103,7 @@ const Right = () => {
   const [dragging, setDragging] = useState(false)
 
   if (!selectedConversation) return <Welcome />
-  if (selectedConversation.isAi) return <AiChat />
+  if (selectedConversation.isAi) return <Suspense fallback={<div className="flex flex-1 items-center justify-center"><Loading /></div>}><AiChat /></Suspense>
   if (selectedConversation.isChannel) return <ChannelPage key={selectedConversation._id} channel={selectedConversation} />
   // Locked chat: nothing loads until the code is entered
   // (unlocked if the code was entered within the last 5 minutes, or while this chat is open)

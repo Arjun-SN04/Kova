@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { Suspense, lazy, useEffect, useState } from 'react'
 import { LuLoaderCircle, LuMapPin, LuNavigation, LuRadio } from 'react-icons/lu'
 import Sheet from '../groups/Sheet'
-import MapView from './MapView'
+// The map library (Leaflet) is only downloaded when a map is shown
+const MapView = lazy(() => import('./MapView'))
 import { getPosition, shareLocation } from '../../utils/liveLocation'
 
 const LIVE = [[15, '15 min'], [60, '1 hour'], [480, '8 hours']]
@@ -33,7 +34,7 @@ const LocationDialog = ({ chat, onClose }) => {
     <Sheet open onClose={onClose} title="Share location">
       <div className="space-y-4 pb-1">
         <div className="relative overflow-hidden rounded-2xl ring-1 ring-slate-200 dark:ring-slate-800">
-          {pos ? <MapView lat={pos.lat} lng={pos.lng} accuracy={pos.accuracy} interactive className="h-56 w-full" /> : (
+          {pos ? <Suspense fallback={<div className="h-56 w-full animate-pulse bg-slate-100 dark:bg-slate-800" />}><MapView lat={pos.lat} lng={pos.lng} accuracy={pos.accuracy} interactive className="h-56 w-full" /></Suspense> : (
             <div className="flex h-56 flex-col items-center justify-center gap-2 bg-slate-50 text-sm text-slate-500 dark:bg-slate-800/50 dark:text-slate-400">
               {error ? <><LuMapPin className="size-6" /><span className="max-w-[16rem] text-center">{error}</span></> : <><LuLoaderCircle className="size-6 animate-spin" />Finding your location…</>}
             </div>

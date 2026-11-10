@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import axios from 'axios'
+import useConversation from '../Zustand/UserConversation'
+import { resetOutbox } from '../utils/outbox'
 
 export const AuthContext = createContext()
 
@@ -39,6 +41,19 @@ const AuthProvider = ({ children }) => {
     )
     return () => axios.interceptors.response.eject(id)
   }, [])
+
+  // Signed out (any way: Log out, session ended, account deleted): forget what this browser
+  // kept for that account — drafts, messages waiting to be sent, and the offline copy of chats
+  const userId = AuthUser?._id
+  useEffect(() => {
+    if (userId) return
+    try {
+      Object.keys(localStorage).filter((k) => k === 'kova-drafts' || k.startsWith('kova-outbox:')).forEach((k) => localStorage.removeItem(k))
+    } catch { /* private mode */ }
+    useConversation.setState({ drafts: {} })
+    resetOutbox()
+    navigator.serviceWorker?.controller?.postMessage({ type: 'signed-out' })
+  }, [userId])
 
   // Refresh my saved profile from the server once per load (e.g. new username)
   useEffect(() => {

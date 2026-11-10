@@ -3,6 +3,7 @@ import axios from 'axios'
 import { LuFingerprint, LuKeyRound, LuLock, LuShieldQuestion, LuTimer } from 'react-icons/lu'
 import { useAuth } from '../context/AuthProvider'
 import Select from './ui/Select'
+import { Row, RowGroup, SectionHeader, Switch } from './security/SettingsRows'
 import { LOCK_AFTER, bioAvailable, checkPin, enableBio, getLock, removeLock, setPin, updateLock } from '../utils/appLock'
 import useConversation from '../Zustand/UserConversation'
 import { changeLockCode, verifyRecovery } from '../utils/chatExtras'
@@ -127,50 +128,29 @@ const AppLockSettings = () => {
     try { await enableBio(AuthUser) } catch { setBioError('Couldn’t set it up. Your device may not support it here.') }
   }
 
-  const row = 'flex items-center gap-3 px-4 py-3.5'
   return (
     <div className="p-4 sm:p-6">
-      <div className="flex items-start gap-3.5 sm:gap-4">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300"><LuLock className="size-5" /></div>
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold text-base sm:text-lg">App lock</p>
-          <p className="mt-0.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400">Ask for a PIN (numbers, or letters and numbers) when Kova opens on this device.</p>
-        </div>
-        <button type="button" role="switch" aria-checked={!!lock} aria-label="App lock" onClick={() => setDialog(lock ? 'off' : 'create')} className={`relative mt-1 h-6 w-11 shrink-0 rounded-full transition-colors ${lock ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
-          <span className={`absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow transition-transform ${lock ? 'translate-x-5' : ''}`} />
-        </button>
-      </div>
+      <SectionHeader
+        icon={LuLock} title="App lock"
+        on={!!lock} status={lock ? 'On' : 'Off'}
+        description="Ask for a PIN (numbers, or letters and numbers) when Kova opens on this device."
+        action={<span className="mt-1"><Switch checked={!!lock} label="App lock" onChange={() => setDialog(lock ? 'off' : 'create')} /></span>}
+      />
       {lock && (
-        <div className="mt-5 divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-          <div className="flex flex-col gap-2.5 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <LuTimer className="size-4 shrink-0 text-slate-400" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">Ask for the PIN again</p>
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">After you leave Kova (switch apps or tabs) for this long.</p>
-              </div>
-            </div>
-            <div className="w-full shrink-0 pl-7 sm:w-44 sm:pl-0">
-              <Select size="sm" value={lock.after ?? 0} onChange={(v) => updateLock(id, { after: Number(v) })} options={LOCK_AFTER} aria-label="Lock after" />
-            </div>
-          </div>
+        <RowGroup>
+          <Row
+            icon={LuTimer} title="Ask for the PIN again" description="After you leave Kova (switch apps or tabs) for this long"
+            control={<div className="sm:w-44"><Select size="sm" value={lock.after ?? 0} onChange={(v) => updateLock(id, { after: Number(v) })} options={LOCK_AFTER} aria-label="Lock after" /></div>}
+          />
           {bioOk && (
-            <div className={row}>
-              <LuFingerprint className="size-4 shrink-0 text-slate-400" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">Fingerprint or device unlock</p>
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{bioError || 'Use your fingerprint, face or device PIN instead of typing your Kova PIN.'}</p>
-              </div>
-              <button type="button" role="switch" aria-checked={!!lock.credId} aria-label="Fingerprint or device unlock" onClick={toggleBio} className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${lock.credId ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
-                <span className={`absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow transition-transform ${lock.credId ? 'translate-x-5' : ''}`} />
-              </button>
-            </div>
+            <Row
+              icon={LuFingerprint} title="Fingerprint or device unlock"
+              description={bioError || 'Use your fingerprint, face or device PIN instead of typing your Kova PIN'}
+              control={<Switch checked={!!lock.credId} label="Fingerprint or device unlock" onChange={toggleBio} />}
+            />
           )}
-          <button onClick={() => setDialog('change')} className={`${row} w-full text-left transition hover:bg-slate-50 dark:hover:bg-slate-900`}>
-            <LuKeyRound className="size-4 shrink-0 text-slate-400" />
-            <span className="text-sm font-medium">Change PIN</span>
-          </button>
-        </div>
+          <Row icon={LuKeyRound} title="Change PIN" description="Pick a new PIN for this device" onClick={() => setDialog('change')} />
+        </RowGroup>
       )}
       {dialog && <PinDialog mode={dialog} userId={id} onClose={() => setDialog(null)} />}
     </div>

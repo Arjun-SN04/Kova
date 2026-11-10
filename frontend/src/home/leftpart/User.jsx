@@ -3,16 +3,17 @@ import useConversation from '../../Zustand/UserConversation'
 import Avatar from '../Avatar'
 import { shortTime } from '../../utils/conversations'
 import { attachmentLabel } from '../../utils/attachments'
-import { LuFileText, LuImage, LuMic, LuPhone, LuPhoneMissed, LuPin, LuVideo } from 'react-icons/lu'
+import { LuFileText, LuImage, LuMic, LuPhone, LuPhoneMissed, LuPin, LuVideo, LuBellOff } from 'react-icons/lu'
 import { describeCall } from '../../utils/calls'
 import { BusinessBadge } from '../../business/BusinessInfo'
 import { LabelChip } from '../../business/CustomerPanel'
 
 // One row in the contact list.
-const User = ({ user, online, unread, preview, typing, myId, pinned = false, labels = [], lead = false, waiting = false, locked = false }) => {
+const User = ({ user, online, unread, preview, typing, myId, pinned = false, muted = false, labels = [], lead = false, waiting = false, locked = false }) => {
   const { selectedConversation, setSelectedConversation, clearUnread, setCatchUp, nexaId } = useConversation()
   const userId = user._id?.toString()
   const isSelected = selectedConversation?._id?.toString() === userId
+  const draft = useConversation((s) => s.drafts[userId])
 
   const open = () => {
     setSelectedConversation(user)
@@ -52,6 +53,7 @@ const User = ({ user, online, unread, preview, typing, myId, pinned = false, lab
           {labels.length > 2 && <span className="hidden shrink-0 text-[10px] text-slate-400 sm:inline">+{labels.length - 2}</span>}
           </div>
           {pinned && <LuPin className="size-3 shrink-0 -rotate-45 text-slate-400" title="Pinned" aria-label="Pinned" />}
+          {muted && <LuBellOff className="size-3 shrink-0 text-slate-400" title="Muted" aria-label="Muted" />}
           {preview && !locked && (
             <span className={`shrink-0 text-[11px] ${unread && !isSelected && !locked ? 'font-semibold text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>
               {shortTime(preview.createdAt)}
@@ -64,6 +66,8 @@ const User = ({ user, online, unread, preview, typing, myId, pinned = false, lab
               <span aria-hidden>&nbsp;</span>
             ) : typing ? (
               <span className="font-medium text-indigo-600 dark:text-indigo-400">{typing === 'Nexa' ? 'Nexa is thinking…' : 'typing…'}</span>
+            ) : draft && !isSelected ? (
+              <span><span className="font-medium text-emerald-600 dark:text-emerald-400">Draft: </span>{draft}</span>
             ) : preview?.call ? (
               (() => {
                 const { title, missed } = describeCall(preview.call, String(preview.senderId) === myId)
@@ -95,7 +99,7 @@ const User = ({ user, online, unread, preview, typing, myId, pinned = false, lab
           </p>
           {waiting && !unread && <span className="size-2 shrink-0 rounded-full bg-amber-500" title="Waiting for your reply" aria-label="Waiting for your reply" />}
           {unread > 0 && !isSelected && !locked && (
-            <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[11px] font-semibold text-white">
+            <span className={`flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold text-white ${muted ? 'bg-slate-400 dark:bg-slate-600' : 'bg-indigo-600'}`}>
               {unread > 99 ? '99+' : unread}
             </span>
           )}
