@@ -1,7 +1,7 @@
 import User from "../models/user.model.js"
+import { getOrCreateConversation } from "./directChat.js"
 import { Group } from "../models/group.model.js"
 import { Message } from "../models/message.model.js"
-import { Conversation } from "../models/conversation.model.js"
 import { emitToUsers } from "./notify.js"
 import { previewOf, sendPush } from "./push.js"
 import { attachLinkPreview } from "./linkPreview.js"
@@ -42,14 +42,9 @@ export const deliverText = async ({ senderId, receiverId = null, groupId = null,
     const sender = await User.findById(senderId).select("contacts")
     if (!sender?.contacts.some((c) => same(c, receiverId))) throw new Error("That person isn't in your contacts")
   }
-  let conversation = self
-    ? await Conversation.findOne({ members: { $size: 2 }, "members.0": senderId, "members.1": senderId })
-    : await Conversation.findOne({ members: { $all: [senderId, receiverId] } })
-  if (!conversation) conversation = await Conversation.create({ members: [senderId, receiverId] })
+  await getOrCreateConversation(senderId, receiverId)
 
   const msg = await Message.create({ senderId, receiverId, message: body, seen: self, ref, auto, sentBy, card, location })
-  conversation.messages.push(msg._id)
-  await conversation.save()
   emitToUsers(self ? [senderId] : [receiverId, senderId], "newMessage", msg)
   attachLinkPreview(msg)
   if (!self) {

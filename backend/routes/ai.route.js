@@ -1,5 +1,6 @@
 import express from "express"
 import secureRoute from "../middleware/secureRoute.js"
+import { aiLimit } from "../middleware/rateLimit.js"
 import { uploadSingle } from "../config/cloudinary.js"
 import {
   cancelScheduled, catchUp, clearAiMessages, getAiMessages, listScheduled, nexaInfo, remindAboutMessage,
@@ -7,7 +8,7 @@ import {
 } from "../controller/ai.controller.js"
 
 const router = express.Router()
-router.use(secureRoute)
+router.use(secureRoute, aiLimit)
 router.get("/messages", getAiMessages)
 router.post("/messages", uploadSingle("file"), sendAiMessage)
 router.delete("/messages", clearAiMessages)

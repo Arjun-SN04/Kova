@@ -15,6 +15,10 @@ const userSchema = mongoose.Schema({
         type:String,
         required:true,
     },
+    // Logins made before this time are signed out (set when the password changes)
+    passwordChangedAt:{ type:Date, default:null },
+    // "Sign out other devices": older logins without a session record stop working
+    sessionsResetAt:{ type:Date, default:null },
     confirmPassword:{
         type:String,
 
@@ -43,6 +47,10 @@ const userSchema = mongoose.Schema({
     nexaImageModel:{ type:String, default:"auto" },
     // Chats pinned to the top of my list (user or group ids, in pin order)
     pinnedChats:{ type:[String], default:[] },
+    // Chats moved out of the main list (Archived), and chats with notifications off
+    // (until: null = always)
+    archivedChats:{ type:[String], default:[] },
+    mutedChats:{ type:[{ _id:false, chat:String, until:{ type:Date, default:null } }], default:[] },
     // Chat wallpapers: { global: spec | null, chats: { [chatId]: spec } }
     // spec = { kind: "preset", id, dim } or { kind: "image", url, publicId, dim }
     wallpapers:{ type:mongoose.Schema.Types.Mixed, default:() => ({ global:null, chats:{} }) },
@@ -169,6 +177,8 @@ const canSee = (setting, ownerId, viewer) =>
 userSchema.set("toJSON", {
     transform(doc, ret) {
         delete ret.lockCode
+        delete ret.passwordChangedAt
+        delete ret.sessionsResetAt
         delete ret.securityCode
         delete ret.securityAnswer
         delete ret.dataExport
@@ -187,6 +197,8 @@ userSchema.set("toJSON", {
         delete ret.securityQuestion
         delete ret.emailDigest
         delete ret.hiddenChats
+        delete ret.archivedChats
+        delete ret.mutedChats
         delete ret.hiddenWordHash
         delete ret.wallpapers
         return ret

@@ -1,8 +1,9 @@
+import mongoose from "mongoose"
 import { attachLinkPreview } from "../utils/linkPreview.js"
 import { Conversation } from "../models/conversation.model.js"
 import { Message } from "../models/message.model.js"
 import { getReceiverSocketId, io } from "../socket/socket.js"
-import { uploadToCloudinary, deleteFromCloudinary, fileDownloadUrl } from "../config/cloudinary.js"
+import { uploadToCloudinary, deleteFromCloudinary, fileDownloadUrl, viewOnceUrl } from "../config/cloudinary.js"
 import { canSeeMessage } from "../utils/chatAccess.js"
 import { mediaAttachment, parseMedia } from "./gif.controller.js"
 import User from "../models/user.model.js"
@@ -13,6 +14,7 @@ import { previewOf, sendPush } from "../utils/push.js"
 import { clearWaitingFor, onDirectMessage } from "../utils/business.js"
 import { getNexaBot } from "../utils/nexaBot.js"
 import { maskSeen, seenShared } from "../utils/privacy.js"
+import { clientIdOf, directFilter, findConversation, getOrCreateConversation, lastMessageOf, pageOf } from "../utils/directChat.js"
 
 const zoneHeader = (req) => { try { const tz = req.headers["x-time-zone"]; new Intl.DateTimeFormat("en-US", { timeZone: tz }); return tz || "UTC" } catch { return "UTC" } }
 
@@ -70,12 +72,38 @@ const canDelete = async (userId, message) => {
 const canMessage = (me, otherId) =>
   isSelf(me._id, otherId) || (me.contacts || []).some((c) => String(c) === String(otherId))
 
-// Find the chat between two people. A self chat stores the same user twice,
-// so it needs an exact match: `$all: [me, me]` would match every chat I'm in.
-const findConversation = (a, b) =>
-  isSelf(a, b)
-    ? Conversation.findOne({ members: { $size: 2 }, "members.0": a, "members.1": a })
-    : Conversation.findOne({ members: { $all: [a, b] } })
+// "View once" asked for, on a photo or video
+export const wantsViewOnce = (body, attachment) =>
+  (body?.viewOnce === true || body?.viewOnce === "true") && ["image", "video"].includes(attachment?.kind)
+
+// Open a view-once photo / video: once per person it was sent to.
+// POST /message/view-once/:messageId -> { url, kind } (the link works for a few minutes)
+export const openViewOnce = async (req, res) => {
+  try {
+    const me = req.user._id
+    const message = await Message.findById(req.params.messageId)
+    if (!message?.viewOnce || !(await canSeeMessage(me, message))) return res.status(404).json({ error: "Not found" })
+    if (isSelf(message.senderId, me)) return res.status(403).json({ error: "View-once messages can't be opened by the sender" })
+    if ((message.viewedBy || []).some((id) => isSelf(id, me))) return res.status(410).json({ error: "You've already opened this" })
+    const url = message.attachment?.publicId ? viewOnceUrl(message.attachment) : null
+    if (!url) return res.status(410).json({ error: "This has already been opened" })
+    message.viewedBy = [...(message.viewedBy || []), me]
+    await message.save()
+    res.json({ url, kind: message.attachment.kind })
+    await notifyAudience(message, "messageEdited", message, me)
+    // One-to-one: once it's been opened the file isn't needed any more (after the link expires)
+    if (!message.groupId) {
+      const attachment = message.attachment
+      setTimeout(async () => {
+        await Message.updateOne({ _id: message._id }, { $unset: { "attachment.url": "", "attachment.publicId": "" } }).catch(() => {})
+        releaseAttachments([attachment]).catch(() => {})
+      }, 6 * 60_000)
+    }
+  } catch (error) {
+    console.log("openViewOnce error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
 
 // Messages can only be edited for this long after they are sent
 export const EDIT_WINDOW_MS = 10 * 60 * 1000
@@ -88,6 +116,13 @@ export const sendMessage = async (req, res) => {
 
     if (!canMessage(req.user, receiverId))
       return res.status(403).json({ error: "You can only message your contacts" })
+
+    // Sent again after the answer got lost: it's already saved
+    const clientId = clientIdOf(req.body)
+    if (clientId) {
+      const already = await Message.findOne({ senderId, clientId })
+      if (already) return res.status(200).json(already)
+    }
 
     const text = (message || "").trim()
     // A GIF or sticker picked in the message box
@@ -104,10 +139,8 @@ export const sendMessage = async (req, res) => {
       }
     }
 
-    let conversation = await findConversation(senderId, receiverId)
-    if (!conversation) {
-      conversation = await Conversation.create({ members: [senderId, receiverId] })
-    }
+    // The chat's settings (disappearing timer); created on the first message
+    await getOrCreateConversation(senderId, receiverId)
 
     // Upload the attachment (if any) only after the request is validated
     let attachment = mediaAttachment(media)
@@ -124,9 +157,10 @@ export const sendMessage = async (req, res) => {
     // Nexa mode: every message in this chat goes to Nexa until they type "exit"
     const askNexa = req.body.askNexa === true || req.body.askNexa === "true"
     // Notes to self are never "unread"
-    const newMessage = new Message({ senderId, receiverId, message: text, replyTo: replyTo || null, attachment, seen: self, toNexa: askNexa || undefined })
-    conversation.messages.push(newMessage._id)
-    await Promise.all([conversation.save(), newMessage.save()])
+    // View once: photos and videos only, not to myself
+    const viewOnce = !self && wantsViewOnce(req.body, attachment)
+    const newMessage = new Message({ senderId, receiverId, message: text, replyTo: replyTo || null, attachment, seen: self, toNexa: askNexa || undefined, clientId: clientId || undefined, viewOnce: viewOnce || undefined })
+    await newMessage.save()
 
     // The sender adds their own copy from the response, so don't echo a self message back
     const receiverSocketId = !self && getReceiverSocketId(receiverId)
@@ -150,16 +184,18 @@ export const sendMessage = async (req, res) => {
   }
 }
 
+// A page of the chat with one person: { messages (oldest first), more }
+// ?before=<messageId> for older messages, ?from=<messageId> to jump to an old one
 export const getMessage = async (req, res) => {
   try {
     const { id: chatUser } = req.params
     const senderId = req.user._id
-    const conversation = await findConversation(senderId, chatUser).populate("messages")
-    if (!conversation) return res.status(200).json([])
+    if (!mongoose.isValidObjectId(chatUser)) return res.status(400).json({ error: "Invalid chat" })
+    const filter = { ...directFilter(senderId, chatUser), hiddenFor: { $ne: senderId } }
+    const { messages, more } = await pageOf(Message, filter, req.query)
     // Seen indicators off on either side: my messages never show as seen
     const shared = await seenShared(senderId, chatUser)
-    const visible = visibleTo(conversation.messages, senderId)
-    res.status(200).json(shared ? visible : maskSeen(visible, senderId))
+    res.status(200).json({ messages: shared ? messages : maskSeen(messages, senderId), more })
   } catch (error) {
     console.log("getMessage error:", error)
     res.status(500).json({ error: "Internal server error" })
@@ -175,11 +211,6 @@ export const deleteMessage = async (req, res) => {
     if (!(await canDelete(userId, message)))
       return res.status(403).json({ error: "Not authorized to delete this message" })
 
-    // Remove from conversation
-    await Conversation.updateMany(
-      { messages: messageId },
-      { $pull: { messages: messageId } }
-    )
     await Message.findByIdAndDelete(messageId)
     await releaseAttachments([message.attachment])
 
@@ -230,20 +261,20 @@ export const deleteConversation = async (req, res) => {
 
     // "Clear for me": hide every message from my view only. Messages the other person
     // already cleared for themselves are removed for good (and their files freed).
+    const inChat = directFilter(userId, otherUserId)
     if (req.query.for === "me" && !isSelf(userId, otherUserId)) {
-      await Message.updateMany({ _id: { $in: conversation.messages } }, { $addToSet: { hiddenFor: userId } })
-      const gone = await Message.find({ _id: { $in: conversation.messages }, hiddenFor: { $all: [userId, otherUserId] } }).select("attachment")
+      await Message.updateMany(inChat, { $addToSet: { hiddenFor: userId } })
+      const gone = await Message.find({ ...inChat, hiddenFor: { $all: [userId, otherUserId] } }).select("attachment")
       if (gone.length) {
         const goneIds = gone.map((m) => m._id)
-        await Conversation.updateOne({ _id: conversation._id }, { $pull: { messages: { $in: goneIds } } })
         await Message.deleteMany({ _id: { $in: goneIds } })
         await releaseAttachments(gone.map((m) => m.attachment))
       }
       return res.status(200).json({ message: "Chat cleared for you" })
     }
 
-    const withFiles = await Message.find({ _id: { $in: conversation.messages }, attachment: { $ne: null } }).select("attachment")
-    await Message.deleteMany({ _id: { $in: conversation.messages } })
+    const withFiles = await Message.find({ ...inChat, attachment: { $ne: null } }).select("attachment")
+    await Message.deleteMany(inChat)
     await releaseAttachments(withFiles.map((m) => m.attachment))
     await Conversation.findByIdAndDelete(conversation._id)
     if (!isSelf(userId, otherUserId)) clearWaitingFor(userId, otherUserId)
@@ -288,12 +319,14 @@ export const getConversations = async (req, res) => {
   try {
     const userId = req.user._id
 
-    const conversations = await Conversation.find({ members: userId }).select("members messages")
-    // The newest message I haven't deleted for myself (look back over the last few)
-    const tailIds = conversations.flatMap((c) => c.messages.slice(-25))
-    const tail = await Message.find({ _id: { $in: tailIds }, hiddenFor: { $ne: userId } })
-      .select("message senderId receiverId createdAt attachment.kind attachment.name call")
-    const lastById = new Map(tail.map((m) => [m._id.toString(), m]))
+    const conversations = await Conversation.find({ members: userId }).select("members")
+    // A self chat has no "other" member: it belongs to me
+    const otherOf = (c) => (c.members.find((m) => m.toString() !== userId.toString()) || c.members[0])?.toString()
+    // The newest message in each chat that I haven't deleted for myself (one indexed lookup per chat)
+    const lasts = await Promise.all(conversations.map((c) => {
+      const other = otherOf(c)
+      return other ? lastMessageOf(directFilter(userId, other), userId, Message, "message senderId receiverId createdAt attachment.kind attachment.name call viewOnce") : null
+    }))
 
     // Only messages explicitly marked unseen count (older messages have no flag)
     const unread = await Message.aggregate([
@@ -302,13 +335,11 @@ export const getConversations = async (req, res) => {
     ])
     const unreadBySender = new Map(unread.map((u) => [u._id.toString(), u.count]))
 
-    const summary = conversations.map((c) => {
-      // A self chat has no "other" member: it belongs to me
-      const otherId = (c.members.find((m) => m.toString() !== userId.toString()) || c.members[0])?.toString()
-      const lastId = [...c.messages].reverse().slice(0, 25).map(String).find((id) => lastById.has(id))
+    const summary = conversations.map((c, i) => {
+      const otherId = otherOf(c)
       return {
         userId: otherId,
-        lastMessage: lastId ? lastById.get(lastId) || null : null,
+        lastMessage: lasts[i] || null,
         unread: unreadBySender.get(otherId) || 0,
       }
     }).filter((c) => c.userId)
@@ -334,7 +365,6 @@ export const deleteMessages = async (req, res) => {
     if (!mine.length) return res.status(403).json({ error: "You can only delete your own messages" })
     const mineIds = mine.map((m) => m._id)
 
-    await Conversation.updateMany({ messages: { $in: mineIds } }, { $pull: { messages: { $in: mineIds } } })
     await Message.deleteMany({ _id: { $in: mineIds } })
     await releaseAttachments(mine.map((m) => m.attachment))
 
@@ -372,7 +402,6 @@ export const deleteForMe = async (req, res) => {
     })
     if (gone.length) {
       const goneIds = gone.map((m) => m._id)
-      await Conversation.updateMany({ messages: { $in: goneIds } }, { $pull: { messages: { $in: goneIds } } })
       await Message.deleteMany({ _id: { $in: goneIds } })
       await releaseAttachments(gone.map((m) => m.attachment))
     }
@@ -396,8 +425,10 @@ export const forwardMessages = async (req, res) => {
 
     // You can only forward messages from your own chats and groups
     const myGroupIds = await Group.find({ members: userId }).distinct("_id")
+    // View-once messages can't be forwarded
     const originals = await Message.find({
       _id: { $in: messageIds },
+      viewOnce: { $ne: true },
       $or: [{ senderId: userId }, { receiverId: userId }, { groupId: { $in: myGroupIds } }],
     }).sort({ createdAt: 1 })
     if (!originals.length) return res.status(404).json({ error: "Messages not found" })
@@ -412,8 +443,7 @@ export const forwardMessages = async (req, res) => {
 
     for (const receiver of receivers) {
       const self = isSelf(userId, receiver._id)
-      let conversation = await findConversation(userId, receiver._id)
-      if (!conversation) conversation = await Conversation.create({ members: [userId, receiver._id] })
+      const conversation = await getOrCreateConversation(userId, receiver._id)
 
       // insertMany skips the save hook, so apply this chat's disappearing timer here
       const secs = conversation.disappearAfter || 0
@@ -427,8 +457,6 @@ export const forwardMessages = async (req, res) => {
         expiresAt: secs ? new Date(Date.now() + secs * 1000) : null,
       }))
       await Message.insertMany(copies)
-      conversation.messages.push(...copies.map((c) => c._id))
-      await conversation.save()
 
       const socketId = !self && getReceiverSocketId(receiver._id)
       if (socketId) copies.forEach((c) => io.to(socketId).emit("newMessage", c))

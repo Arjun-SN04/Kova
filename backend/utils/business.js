@@ -1,11 +1,11 @@
 import User from "../models/user.model.js"
+import { directFilter } from "./directChat.js"
 import { BusinessSettings } from "../models/business.model.js"
 import { Customer } from "../models/customer.model.js"
 import { Product } from "../models/product.model.js"
 import { Order } from "../models/order.model.js"
 import { Booking } from "../models/booking.model.js"
 import { Message } from "../models/message.model.js"
-import { Conversation } from "../models/conversation.model.js"
 import { emitToUsers } from "./notify.js"
 import { sendPush } from "./push.js"
 import { askGroq, groqConfigured } from "./groq.js"
@@ -141,9 +141,7 @@ export const sendAsBusiness = (ownerId, customerId, text, extra = {}) =>
 
 // The latest messages between a business and a customer, as text for Nexa
 const recentLines = async (ownerId, customerId, count = 12) => {
-  const conv = await Conversation.findOne({ members: { $all: [ownerId, customerId] } }).select("messages")
-  if (!conv) return []
-  const msgs = await Message.find({ _id: { $in: conv.messages.slice(-count) } }).sort({ createdAt: 1 })
+  const msgs = (await Message.find(directFilter(ownerId, customerId)).sort({ createdAt: -1 }).limit(count)).reverse()
   return msgs.map((m) => `${same(m.senderId, ownerId) ? "Business" : "Customer"}: ${m.message || (m.card ? `[${m.card.kind} card]` : m.attachment ? `[${m.attachment.kind || "file"}]` : "")}`)
 }
 

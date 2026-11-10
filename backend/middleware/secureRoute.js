@@ -1,10 +1,10 @@
-import jwt from "jsonwebtoken"
-import User from "../models/user.model.js"
-import Createtoken from "../jwt/token.js"
+import Createtoken, { SESSION_DAYS, adoptOldLogin, userFromSession } from "../jwt/token.js"
 import { runAsViewer } from "../utils/viewer.js"
 
 // Renew the login cookie at most once a day, so active users stay logged in.
 const RENEW_AFTER_SECONDS = 24 * 60 * 60
+// "Last active" on the Devices list is updated at most this often
+const SEEN_EVERY_MS = 5 * 60 * 1000
 
 const secureRoute = async (req, res, next) => {
   try {
@@ -12,21 +12,31 @@ const secureRoute = async (req, res, next) => {
     if (!token) {
       return res.status(401).json({ error: "No token unauthorzed access" })
     }
-    const decoded = jwt.verify(token, process.env.token)
-    if (!decoded) {
-      return res.status(401).json({ error: "token not decoded" })
+    const session = await userFromSession(token)
+    if (!session) {
+      res.clearCookie("jwt")
+      return res.status(401).json({ error: "Your session has ended. Please sign in again." })
     }
-    const user = await User.findById(decoded.user_id).select("-password")
-    if (!user) {
-      return res.status(401).json({ error: "user not found" })
-    }
+    const { user, decoded, session: device } = session
     // Scheduled for deletion: signed out everywhere until they sign in again (which cancels it)
     if (user.deletion?.scheduledFor) {
       res.clearCookie("jwt")
       return res.status(401).json({ error: "This account is scheduled for deletion. Sign in to keep it.", code: "deleting" })
     }
-    if (Date.now() / 1000 - decoded.iat > RENEW_AFTER_SECONDS) {
-      Createtoken(user._id, res)
+    if (!device) {
+      // A login from before devices were tracked: give it a session (shows in Devices)
+      req.sid = await adoptOldLogin(user._id, token, req, res)
+    } else {
+      req.sid = device.sid
+      const now = Date.now()
+      if (now / 1000 - decoded.iat > RENEW_AFTER_SECONDS) {
+        Createtoken(user._id, res, device.sid)
+        device.expiresAt = new Date(now + SESSION_DAYS * 24 * 3600_000)
+      }
+      if (now - device.lastSeenAt.getTime() > SEEN_EVERY_MS || device.isModified()) {
+        device.lastSeenAt = new Date(now)
+        device.save().catch(() => {})
+      }
     }
     req.user = user
   } catch (error) {

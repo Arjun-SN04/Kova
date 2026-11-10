@@ -1,8 +1,10 @@
 import mongoose from "mongoose";
+import { encryptedFields } from "../utils/fieldCrypto.js"
 
 // A field called "type" needs a different type key so Mongoose doesn't misread it
 const callInfoSchema = new mongoose.Schema(
-  { type: String, status: String, duration: Number },
+  // status: answered | missed | declined (one-to-one), ongoing | ended (group calls, with callId)
+  { type: String, status: String, duration: Number, callId: String },
   { _id: false, typeKey: "$type" },
 )
 
@@ -44,6 +46,12 @@ const messageSchema = new mongoose.Schema({
   ref: { type: refSchema, default: null },
   // True when this message was forwarded from another chat
   forwarded: { type: Boolean, default: false },
+  // View-once photo / video: the file's link is never sent with the message; each person
+  // it was sent to can open it once (POST /message/view-once/:id), and `viewedBy` records who did
+  viewOnce: { type: Boolean, default: undefined },
+  viewedBy: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], default: undefined },
+  // Set by the app when sending, so a retry after a lost answer returns the same message
+  clientId: { type: String, default: undefined },
   // Disappearing messages: deleted (with its file) at this time, unless someone keeps it
   expiresAt: { type: Date, default: null, index: true },
   kept: { type: Boolean, default: false },
@@ -98,8 +106,26 @@ messageSchema.pre("save", async function () {
 })
 
 messageSchema.index({ "card.orderId": 1 }, { sparse: true })
+// Loading a chat page by page (newest first): one-to-one chats, Nexa's answers in them, groups
+messageSchema.index({ senderId: 1, receiverId: 1, createdAt: -1 })
+messageSchema.index({ botChat: 1, createdAt: -1 }, { sparse: true })
+messageSchema.index({ groupId: 1, createdAt: -1 })
+messageSchema.index({ senderId: 1, clientId: 1 }, { sparse: true })
 
 // Who deleted a message "for me" is private
-messageSchema.set("toJSON", { transform: (doc, ret) => { delete ret.hiddenFor; return ret } })
+messageSchema.set("toJSON", {
+  transform: (doc, ret) => {
+    delete ret.hiddenFor
+    // View once: only what the bubble needs, never the link to the file
+    if (ret.viewOnce && ret.attachment) {
+      const { kind, width, height, duration } = ret.attachment
+      ret.attachment = { kind, width, height, duration }
+    }
+    return ret
+  },
+})
+
+// Chat text is stored encrypted (utils/fieldCrypto.js)
+messageSchema.plugin(encryptedFields, { model: "Message", fields: ["message", "transcript"] })
 
 export const Message = mongoose.model("Message", messageSchema)

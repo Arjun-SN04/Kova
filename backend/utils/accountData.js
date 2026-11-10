@@ -1,3 +1,4 @@
+import mongoose from "mongoose"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -113,7 +114,7 @@ export const buildExport = async (userId) => {
       if (msgs.length) await addChat(`group_${safeName(g.name)}_${String(g._id).slice(-4)}`, g.name, msgs)
     }
 
-    const nexa = await AiMessage.find({ user: userId }).sort({ createdAt: 1 }).lean()
+    const nexa = await AiMessage.find({ user: userId }).sort({ createdAt: 1 }) // not lean: loading decrypts it
     json("nexa.json", nexa.map((m) => ({ time: m.createdAt, role: m.role, text: m.content ?? m.text ?? m.message })))
     const statuses = await Status.find({ user: userId }).lean()
     json("status.json", statuses.map((s) => ({ time: s.createdAt, text: s.text, media: s.media?.url || s.attachment?.url || null })))
@@ -177,6 +178,7 @@ export const purgeUser = async (userId) => {
   await Message.deleteMany({ senderId: id })
   await Message.updateMany({ "reactions.userId": id }, { $pull: { reactions: { userId: id } } })
   await Conversation.deleteMany({ members: id })
+  await mongoose.model("Session").deleteMany({ user: id })
 
   // Groups: leave; hand admin to someone else; delete empty groups
   for (const g of await Group.find({ members: id })) {
@@ -249,7 +251,8 @@ const unreadFor = async (user) => {
   for (const d of direct) {
     if (skip.has(String(d._id))) continue
     const sender = await User.findById(d._id).select("fullName")
-    if (sender) chats.push({ name: sender.fullName, count: d.count, preview: previewOf(d.last), at: d.last.createdAt })
+    // aggregate returns raw (encrypted) data; hydrate decrypts it
+    if (sender) chats.push({ name: sender.fullName, count: d.count, preview: previewOf(Message.hydrate(d.last)), at: d.last.createdAt })
   }
   for (const g of await Group.find({ members: user._id }).select("name reads")) {
     if (skip.has(String(g._id))) continue

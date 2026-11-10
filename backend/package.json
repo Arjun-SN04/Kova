@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "puter:login": "node scripts/puter-login.js"
+    "puter:login": "node scripts/puter-login.js",
+    "encrypt:messages": "node scripts/encrypt-messages.js",
+    "test": "node --test tests/*.test.js",
+    "drop:conversation-lists": "node scripts/drop-conversation-lists.js"
   },
   "keywords": [],
   "author": "",
@@ -21,6 +24,8 @@
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.4",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "mammoth": "^1.13.0",
     "mongoose": "^9.1.5",

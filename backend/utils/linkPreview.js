@@ -1,5 +1,8 @@
 import dns from "node:dns/promises"
 import net from "node:net"
+import http from "node:http"
+import https from "node:https"
+import zlib from "node:zlib"
 import { Message } from "../models/message.model.js"
 
 // Link previews: for the first link in a message, read the page's title, description,
@@ -29,6 +32,8 @@ const privateIp = (ip) => {
   if (v.startsWith("::ffff:")) return privateV4(v.slice(7))
   return v === "::1" || v === "::" || v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe8") || v.startsWith("fe9") || v.startsWith("fea") || v.startsWith("feb")
 }
+// Checked again when connecting (see safeLookup), so a domain that answers with a public
+// address here and a private one a moment later still can't reach the private one
 const safeUrl = async (raw) => {
   let u
   try { u = new URL(raw) } catch { return null }
@@ -36,37 +41,70 @@ const safeUrl = async (raw) => {
   if (u.port && !["80", "443"].includes(u.port)) return null
   const host = u.hostname.replace(/^\[|\]$/g, "")
   if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return null
-  const addrs = net.isIP(host) ? [{ address: host }] : await dns.lookup(host, { all: true }).catch(() => [])
-  if (!addrs.length || addrs.some((a) => privateIp(a.address))) return null
+  if (net.isIP(host)) return privateIp(host) ? null : u
   return u
 }
+
+// DNS lookup for the actual connection: refuse if any address is private.
+// The connection then uses exactly the addresses that were checked.
+const safeLookup = (hostname, options, callback) => {
+  dns.lookup(hostname, { all: true }).then((addrs) => {
+    if (!addrs.length || addrs.some((a) => privateIp(a.address))) {
+      return callback(Object.assign(new Error("blocked address"), { code: "EBLOCKED" }))
+    }
+    if (options?.all) callback(null, addrs)
+    else callback(null, addrs[0].address, addrs[0].family)
+  }, callback)
+}
+
+const HEADERS = {
+  "User-Agent": "Mozilla/5.0 (compatible; KovaBot/1.0; +link-preview)",
+  Accept: "text/html,application/xhtml+xml",
+  "Accept-Encoding": "gzip, deflate, br",
+}
+
+// One GET with no redirects followed: { status, headers, body } (body = readable stream)
+const get = (u) => new Promise((resolve, reject) => {
+  const lib = u.protocol === "https:" ? https : http
+  const req = lib.get(u, { headers: HEADERS, lookup: safeLookup, timeout: TIMEOUT }, (res) => {
+    const enc = String(res.headers["content-encoding"] || "").toLowerCase()
+    const body = enc === "gzip" ? res.pipe(zlib.createGunzip())
+      : enc === "deflate" ? res.pipe(zlib.createInflate())
+      : enc === "br" ? res.pipe(zlib.createBrotliDecompress())
+      : res
+    resolve({ status: res.statusCode, headers: res.headers, body, close: () => res.destroy() })
+  })
+  req.on("timeout", () => req.destroy(new Error("timeout")))
+  req.on("error", reject)
+})
 
 // Fetch with manual redirects (each hop checked again), reading at most MAX_BYTES of HTML
 const fetchHtml = async (raw) => {
   let url = raw
+  const deadline = Date.now() + TIMEOUT
   for (let hop = 0; hop < 4; hop++) {
     const u = await safeUrl(url)
     if (!u) return null
-    const res = await fetch(u, {
-      redirect: "manual",
-      signal: AbortSignal.timeout(TIMEOUT),
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; KovaBot/1.0; +link-preview)", Accept: "text/html,application/xhtml+xml" },
-    })
-    if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
-      url = new URL(res.headers.get("location"), u).toString()
-      continue
+    const res = await get(u).catch(() => null)
+    if (!res) return null
+    try {
+      if (res.status >= 300 && res.status < 400 && res.headers.location) {
+        url = new URL(res.headers.location, u).toString()
+        continue
+      }
+      if (res.status < 200 || res.status >= 300 || !/text\/html|xhtml/i.test(res.headers["content-type"] || "")) return null
+      const chunks = []
+      let size = 0
+      for await (const chunk of res.body) {
+        chunks.push(chunk); size += chunk.length
+        if (size >= MAX_BYTES || Date.now() > deadline) break
+      }
+      return { html: Buffer.concat(chunks).toString("utf8").slice(0, MAX_BYTES), finalUrl: u }
+    } catch {
+      return null
+    } finally {
+      res.close()
     }
-    if (!res.ok || !/text\/html|xhtml/i.test(res.headers.get("content-type") || "")) return null
-    const reader = res.body.getReader()
-    const chunks = []
-    let size = 0
-    while (size < MAX_BYTES) {
-      const { done, value } = await reader.read()
-      if (done) break
-      chunks.push(value); size += value.length
-    }
-    reader.cancel().catch(() => {})
-    return { html: Buffer.concat(chunks).toString("utf8"), finalUrl: u }
   }
   return null
 }

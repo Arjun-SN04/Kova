@@ -3,6 +3,9 @@ import User from "../models/user.model.js"
 import { issueCode, useCode } from "../utils/securityCode.js"
 import { hashAnswer, proveRecovery, questionOk } from "../utils/recovery.js"
 import { emitToUsers } from "../utils/notify.js"
+import { passwordError } from "../utils/password.js"
+import { disconnectUser } from "../socket/socket.js"
+import { endSessions } from "../jwt/token.js"
 
 const fail = (res, status, error) => res.status(status).json({ error })
 
@@ -24,13 +27,18 @@ export const resetPassword = async (req, res) => {
   try {
     const email = String(req.body.email || "").trim()
     const password = String(req.body.password || "")
-    if (password.length < 6) return fail(res, 400, "Use at least 6 characters")
+    const badPassword = passwordError(password)
+    if (badPassword) return fail(res, 400, badPassword)
     const me = await User.findOne({ email, isBot: { $ne: true } }).select("password securityCode")
     if (!me) return fail(res, 400, "That code has expired. Send a new one.")
     const check = await useCode(me, "password", req.body.otp)
     if (!check.ok) return fail(res, 400, check.error)
     me.password = await bcrypt.hash(password, 10)
+    // Whoever was signed in before (maybe with a stolen login) is signed out everywhere
+    me.passwordChangedAt = new Date()
     await me.save()
+    await endSessions(me._id)
+    disconnectUser(me._id)
     res.json({ ok: true })
   } catch (error) {
     console.log("resetPassword error:", error)

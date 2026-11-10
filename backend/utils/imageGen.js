@@ -191,8 +191,10 @@ export const generateImage = async (prompt, shape = "square", preferred = "auto"
         if (e?.status === 429) break // a limit won't clear in a second
       }
     }
-    const why = last?.status === 429 ? ` ${reasonOf(last).replace(/\.?$/, ".")}` : ""
-    throw err(`${chosen.label} couldn't make this picture right now.${why} Try again, or pick Auto with the wand button at the top of the Nexa chat.`, last?.status === 429 ? 429 : 502, `${chosen.id}: ${reasonOf(last)}`)
+    // code tells the picture card what to offer: retry, or another model
+    const limited = last?.status === 429
+    const message = limited ? `${chosen.label} has used up its free pictures for today.` : `${chosen.label} couldn't make this picture right now.`
+    throw Object.assign(err(message, limited ? 429 : 502, `${chosen.id}: ${reasonOf(last)}`), { code: limited ? "model_limit" : "model_failed" })
   }
   const attempts = all.filter((p) => p.available !== false)
   const failures = []

@@ -1,14 +1,16 @@
-import Createtoken from "../jwt/token.js"
+import Createtoken, { endSessions, startSession, userFromSession } from "../jwt/token.js"
+import { Session } from "../models/session.model.js"
+import { passwordError } from "../utils/password.js"
 import User from "../models/user.model.js"
 import bcrypt from "bcryptjs"
 import { io } from "../socket/socket.js"
-import { getReceiverSocketId, presenceOf, setActivityHidden } from "../socket/socket.js"
+import { getReceiverSocketId, presenceOf, setActivityHidden, createSocketToken, disconnectSession, disconnectUser } from "../socket/socket.js"
 import { uploadToCloudinary, deleteFromCloudinary } from "../config/cloudinary.js"
 import { RESERVED_USERNAMES, USERNAME_RE, USERNAME_RULES, normalizeUsername, newInviteToken, suggestUsernames } from "../utils/username.js"
 
 // Never send password hashes, contact lists or invite tokens to the browser
 const publicUser = (user) => {
-  const { password, confirmPassword, __v, contacts, inviteToken, pinnedChats, starred, lockCode, lockCodeKind, hiddenChats, hiddenWordHash, securityCode, securityAnswer, dataExport, deletion, stickers, ...rest } = user.toObject ? user.toObject() : user
+  const { password, confirmPassword, passwordChangedAt, sessionsResetAt, __v, contacts, inviteToken, pinnedChats, starred, lockCode, lockCodeKind, hiddenChats, archivedChats, mutedChats, hiddenWordHash, securityCode, securityAnswer, dataExport, deletion, stickers, ...rest } = user.toObject ? user.toObject() : user
   return rest
 }
 
@@ -65,6 +67,8 @@ export const signup = async (req, res) => {
   try {
     const usernameError = await checkUsername(username)
     if (usernameError) return res.status(400).json({ error: usernameError })
+    const badPassword = passwordError(password)
+    if (badPassword) return res.status(400).json({ error: badPassword })
     if (password !== confirmPassword)
       return res.status(400).json({ error: "Passwords do not match" })
     const existing = await User.findOne({ email })
@@ -73,7 +77,7 @@ export const signup = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10)
     const newUser = new User({ fullName, email, username, password: hashedPassword, inviteToken: newInviteToken() })
     await newUser.save()
-    Createtoken(newUser._id, res)
+    await startSession(newUser._id, req, res)
     return res.status(201).json({ message: "Signed up successfully", newUser: publicUser(newUser) })
   } catch (error) {
     console.log(error)
@@ -81,17 +85,20 @@ export const signup = async (req, res) => {
   }
 }
 
+// Compared against when the email isn't found, so the reply takes as long as a real check
+const DUMMY_HASH = bcrypt.hashSync("not-a-real-password", 10)
+
 export const login = async (req, res) => {
   const { email, password } = req.body
   try {
-    const user = await User.findOne({ email })
-    if (!user) return res.status(400).json({ error: "User not found" })
-    const isMatch = await bcrypt.compare(password, user.password)
-    if (!isMatch) return res.status(400).json({ error: "Invalid password" })
+    const user = await User.findOne({ email: String(email || "").trim(), isBot: { $ne: true } })
+    // Same answer (and about the same time) whether or not the email has an account
+    const isMatch = await bcrypt.compare(String(password || ""), user?.password || DUMMY_HASH)
+    if (!user || !isMatch) return res.status(400).json({ error: "Invalid email or password" })
     // Signing in during the 30 days cancels a scheduled account deletion
     const restored = !!user.deletion?.scheduledFor
     if (restored) { user.deletion = undefined; await user.save() }
-    Createtoken(user._id, res)
+    await startSession(user._id, req, res)
     return res.status(200).json({ message: "Logged in successfully", user: publicUser(user), restored })
   } catch (error) {
     console.log(error)
@@ -99,8 +106,14 @@ export const login = async (req, res) => {
   }
 }
 
-export const logout = (req, res) => {
+export const logout = async (req, res) => {
   try {
+    // This device's session ends (it disappears from Devices)
+    const session = await userFromSession(req.cookies.jwt).catch(() => null)
+    if (session?.session) {
+      await Session.deleteOne({ _id: session.session._id })
+      disconnectSession(session.session.sid)
+    }
     res.clearCookie("jwt")
     res.status(200).json({ message: "Logged out successfully" })
   } catch (error) {
@@ -140,15 +153,81 @@ export const updateProfile = async (req, res) => {
     if (currentPassword && newPassword) {
       const isMatch = await bcrypt.compare(currentPassword, user.password)
       if (!isMatch) return res.status(400).json({ error: "Current password is incorrect" })
+      const badPassword = passwordError(newPassword)
+      if (badPassword) return res.status(400).json({ error: badPassword })
       user.password = await bcrypt.hash(newPassword, 10)
+      // Signs out every other device; this one gets a fresh login below
+      user.passwordChangedAt = new Date()
     }
 
     await user.save()
+    if (currentPassword && newPassword) {
+      // Every other device is signed out; this one carries on with a fresh cookie
+      await endSessions(user._id, { except: req.sid })
+      Createtoken(user._id, res, req.sid)
+      disconnectUser(user._id, { exceptSession: req.sid })
+    }
     const updatedUser = publicUser(user)
     if (fullName || username !== null || about !== null) emitToContacts(user, "userUpdated", updatedUser)
     res.status(200).json({ message: "Profile updated successfully", user: updatedUser })
   } catch (error) {
     console.log(error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// Short-lived pass for the realtime connection (the socket can't use the login cookie)
+export const socketToken = (req, res) => {
+  res.set("Cache-Control", "no-store")
+  res.json({ token: createSocketToken(req.user._id, req.sid) })
+}
+
+// ── Devices (signed-in sessions) ──
+// GET /user/sessions -> { sessions: [{ sid, device, ip, lastSeenAt, createdAt, current }] }
+export const listSessions = async (req, res) => {
+  try {
+    const sessions = await Session.find({ user: req.user._id }).sort({ lastSeenAt: -1 }).limit(50)
+    res.json({
+      sessions: sessions.map((s) => ({
+        sid: s.sid, device: s.device, lastSeenAt: s.lastSeenAt, createdAt: s.createdAt, current: s.sid === req.sid,
+        // Only part of the address: enough to recognise a network, not to locate someone
+        ip: String(s.ip || "").replace(/^::ffff:/, "").replace(/(\d+\.\d+)\.\d+\.\d+$/, "$1.x.x"),
+      })),
+    })
+  } catch (error) {
+    console.log("listSessions error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// DELETE /user/sessions/:sid — sign out one other device
+export const endSession = async (req, res) => {
+  try {
+    const { sid } = req.params
+    if (sid === req.sid) return res.status(400).json({ error: "Use Log out to sign out of this device" })
+    const gone = await Session.findOneAndDelete({ user: req.user._id, sid: String(sid) })
+    if (!gone) return res.status(404).json({ error: "That device is already signed out" })
+    // Logins older than sessions (no record) could stand for this device: end those too
+    await User.updateOne({ _id: req.user._id }, { $set: { sessionsResetAt: new Date() } })
+    disconnectSession(gone.sid)
+    res.json({ ok: true })
+  } catch (error) {
+    console.log("endSession error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// POST /user/sessions/sign-out-others — every device except this one
+export const endOtherSessions = async (req, res) => {
+  try {
+    const { deletedCount } = await endSessions(req.user._id, { except: req.sid })
+    await User.updateOne({ _id: req.user._id }, { $set: { sessionsResetAt: new Date() } })
+    // This device's cookie must be newer than the reset
+    Createtoken(req.user._id, res, req.sid)
+    disconnectUser(req.user._id, { exceptSession: req.sid })
+    res.json({ ok: true, signedOut: deletedCount })
+  } catch (error) {
+    console.log("endOtherSessions error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 }

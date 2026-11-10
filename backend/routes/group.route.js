@@ -3,7 +3,7 @@ import secureRoute from "../middleware/secureRoute.js"
 import { uploadAvatarSingle, uploadSingle } from "../config/cloudinary.js"
 import {
   listGroups, createGroup, getGroup, updateGroup, addMembers, removeMember, setAdmin, joinGroup,
-  deleteGroup, getGroupMessages, sendGroupMessage, markGroupRead, updateGroupAvatar, listGroupInvites, answerGroupInvite, getInviteLink, removeInviteLink, previewInviteLink, joinByLink, listJoinRequests, answerJoinRequest } from "../controller/group.controller.js"
+  deleteGroup, getGroupMessages, sendGroupMessage, markGroupRead, groupMessageInfo, updateGroupAvatar, listGroupInvites, answerGroupInvite, getInviteLink, removeInviteLink, previewInviteLink, joinByLink, listJoinRequests, answerJoinRequest } from "../controller/group.controller.js"
 
 const router = express.Router()
 router.use(secureRoute)
@@ -26,6 +26,7 @@ router.post("/:id/join", joinGroup)
 router.get("/:id/messages", getGroupMessages)
 router.post("/:id/messages", uploadSingle("file"), sendGroupMessage)
 router.put("/:id/read", markGroupRead)
+router.get("/:id/messages/:messageId/info", groupMessageInfo)
 router.get("/:id/link", getInviteLink)
 router.post("/:id/link", getInviteLink)
 router.delete("/:id/link", removeInviteLink)

@@ -16,6 +16,7 @@ export const seenShared = async (a, b) => {
 
 // Show messages `viewer` sent as not seen yet (used when seen indicators are off)
 export const maskSeen = (messages, viewer) => messages.map((m) => {
-  const o = m.toObject ? m.toObject() : m
+  // toJSON, not toObject: it also hides what a message must never show (view-once links)
+  const o = m.toJSON ? m.toJSON() : m
   return same(o.senderId, viewer) && !same(o.receiverId, viewer) ? { ...o, seen: false } : o
 })

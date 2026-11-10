@@ -1,4 +1,5 @@
 import mongoose from "mongoose"
+import { directFilter } from "../utils/directChat.js"
 import User from "../models/user.model.js"
 import { BusinessSettings } from "../models/business.model.js"
 import { Customer } from "../models/customer.model.js"
@@ -318,10 +319,11 @@ export const listCustomers = async (req, res) => {
     // Only people who are customers (they messaged, ordered or booked), never the owner's other chats
     const records = await Customer.find({ business: owner._id }).populate("internalNotes.by", "fullName")
     const ids = records.map((r) => r.customer)
-    const conversations = await Conversation.find({ members: owner._id, $and: [{ members: { $in: ids } }] }).select("members messages")
-    const others = conversations
-      .map((c) => ({ id: String(c.members.find((m) => !same(m, owner._id)) || ""), last: c.messages[c.messages.length - 1] }))
-      .filter((c) => c.id)
+    const conversations = await Conversation.find({ members: owner._id, $and: [{ members: { $in: ids } }] }).select("members")
+    const others = await Promise.all(conversations
+      .map((c) => String(c.members.find((m) => !same(m, owner._id)) || ""))
+      .filter(Boolean)
+      .map(async (id) => ({ id, last: (await Message.findOne(directFilter(owner._id, id)).sort({ createdAt: -1 }).select("_id"))?._id || null })))
     // Customers with no chat yet (e.g. booked from the business page) still show up
     for (const r of records) if (!others.some((o) => o.id === String(r.customer))) others.push({ id: String(r.customer), last: null })
     const [users, lasts, unread, orderStats] = await Promise.all([
@@ -444,9 +446,7 @@ export const getCustomerChat = async (req, res) => {
   try {
     const { owner, role } = req.biz
     if (!(await isCustomer(owner._id, req.params.customerId))) return fail(res, 404, "Customer not found")
-    const conv = await Conversation.findOne({ members: { $all: [owner._id, req.params.customerId] } }).select("messages")
-    const ids = conv ? conv.messages.slice(-150) : []
-    const messages = await Message.find({ _id: { $in: ids } }).sort({ createdAt: 1 })
+    const messages = (await Message.find(directFilter(owner._id, req.params.customerId)).sort({ createdAt: -1 }).limit(150)).reverse()
     // Opening a customer's chat from the inbox counts as reading it
     if (messages.length) {
       const updated = await Message.updateMany({ receiverId: owner._id, senderId: req.params.customerId, seen: false }, { $set: { seen: true } })

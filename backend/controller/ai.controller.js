@@ -709,12 +709,14 @@ export const createAiImage = async (req, res) => {
     const today = new Date().toISOString().slice(0, 10)
     const use = imageUse.get(String(req.user._id))
     const count = use?.day === today ? use.count : 0
-    if (count >= IMAGES_PER_DAY) return res.status(429).json({ error: `You've reached today's limit of ${IMAGES_PER_DAY} images. Try again tomorrow.` })
+    if (count >= IMAGES_PER_DAY) return res.status(429).json({ error: `You've reached today's limit of ${IMAGES_PER_DAY} images. Try again tomorrow.`, code: "user_limit" })
 
     drawing.add(actionId)
     try {
       const { prompt, shape, ref, editPrompt } = message.actions[index]
-      const made = await generateImage(prompt, shape, req.user.nexaImageModel, { referenceUrl: ref || null, editPrompt })
+      // "Use another model" on the card asks for Auto just this once
+      const model = req.body.model === "auto" ? "auto" : req.user.nexaImageModel
+      const made = await generateImage(prompt, shape, model, { referenceUrl: ref || null, editPrompt })
       imageUse.set(String(req.user._id), { day: today, count: count + 1 })
       const stored = await uploadToCloudinary({ buffer: made.buffer, mimetype: made.mimetype, originalname: "nexa-image" }, { subfolder: "ai-images", transformation: made.transformation })
 
@@ -736,7 +738,7 @@ export const createAiImage = async (req, res) => {
   } catch (error) {
     if (error.cause) console.log("createAiImage error:", error.cause)
     else if (!error.status) console.log("createAiImage error:", error?.message || error)
-    res.status(error.status || 500).json({ error: error.status ? error.message : "Couldn't create the image" })
+    res.status(error.status || 500).json({ error: error.status ? error.message : "Couldn't create the image", ...(error.code ? { code: error.code } : {}) })
   }
 }
 

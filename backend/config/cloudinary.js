@@ -142,6 +142,18 @@ export const uploadAvatarSingle = (field) => (req, res, next) =>
 
 // A short-lived signed link for a stored file. Cloudinary blocks plain links to PDF/ZIP
 // files on many accounts (401), but signed API downloads always work.
+// A link to a view-once photo / video that stops working after a few minutes
+export const viewOnceUrl = (attachment, minutes = 5) => {
+  if (!attachment?.publicId) return null
+  ensureConfig()
+  const format = String(attachment.url || "").split("?")[0].split(".").pop() || ""
+  return cloudinary.utils.private_download_url(attachment.publicId, format, {
+    resource_type: attachment.resourceType || "image",
+    type: "upload",
+    expires_at: Math.floor(Date.now() / 1000) + minutes * 60,
+  })
+}
+
 export const fileDownloadUrl = (attachment, minutes = 60) => {
   if (!attachment?.publicId || attachment.resourceType !== "raw") return attachment?.url || null
   ensureConfig()

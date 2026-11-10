@@ -1,4 +1,6 @@
 import fs from "node:fs"
+import { endSessions } from "../jwt/token.js"
+import { disconnectUser } from "../socket/socket.js"
 import bcrypt from "bcryptjs"
 import User from "../models/user.model.js"
 import { buildExport, exportFile, scheduleDeletion } from "../utils/accountData.js"
@@ -70,6 +72,9 @@ export const deleteAccount = async (req, res) => {
       return fail(res, 400, "Your password isn't right")
     }
     const scheduledFor = await scheduleDeletion(me)
+    // Signed out everywhere (signing in again cancels the deletion)
+    await endSessions(me._id)
+    disconnectUser(me._id)
     res.clearCookie("jwt")
     res.json({ scheduledFor })
   } catch (error) {

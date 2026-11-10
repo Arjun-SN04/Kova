@@ -3,7 +3,7 @@ import { PushSubscription } from "../models/pushSubscription.model.js"
 import { getReceiverSocketId } from "../socket/socket.js"
 
 // Web push: notifications on phones/desktops even when Kova is closed.
-// Keys: VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT (backend/.env and Render).
+// Keys: VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT (backend/.env; ./deploy.sh --env sends it to the VM).
 
 let ready = null
 const setup = () => {
@@ -24,8 +24,21 @@ const isOnline = (userId) => !!getReceiverSocketId(String(userId))
 // that chat get a plain "New message" with no name or text.
 export const sendPush = async (userIds, payload, { onlyOffline = true, chatId = null } = {}) => {
   if (!setup()) return
-  const targets = [...new Set(userIds.map(String))].filter((id) => !onlyOffline || !isOnline(id))
+  let targets = [...new Set(userIds.map(String))].filter((id) => !onlyOffline || !isOnline(id))
   if (!targets.length) return
+  // Chat messages ("chat-<id>" / "group-<id>"): people who muted that chat get nothing
+  const chatOfTag = /^(?:chat|group)-([a-f\d]{24})$/i.exec(payload.tag || "")?.[1]
+  const mutedChat = chatId || chatOfTag
+  if (mutedChat && !payload.urgent) {
+    const { default: User } = await import("../models/user.model.js")
+    const muted = await User.find({
+      _id: { $in: targets },
+      mutedChats: { $elemMatch: { chat: String(mutedChat), $or: [{ until: null }, { until: { $gt: new Date() } }] } },
+    }).select("_id")
+    const skip = new Set(muted.map((u) => String(u._id)))
+    targets = targets.filter((id) => !skip.has(id))
+    if (!targets.length) return
+  }
   const subs = await PushSubscription.find({ user: { $in: targets } })
   const base = { icon: "/icon-192.png", badge: "/icon-192.png", url: "/" }
   const body = JSON.stringify({ ...base, ...payload })
@@ -48,6 +61,7 @@ export const sendPush = async (userIds, payload, { onlyOffline = true, chatId = 
 
 // Short preview of a chat message for a notification
 export const previewOf = (m) => {
+  if (m.viewOnce) return m.attachment?.kind === "video" ? "🎥 View-once video" : "📷 View-once photo"
   if (m.poll) return `📊 ${m.poll.question}`
   if (m.message) return m.message.length > 140 ? `${m.message.slice(0, 137)}…` : m.message
   const kind = m.attachment?.kind

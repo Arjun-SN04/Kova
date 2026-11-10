@@ -1,4 +1,5 @@
 import mongoose from "mongoose"
+import { encryptedFields } from "../utils/fieldCrypto.js"
 
 // One message in a user's private chat with Nexa
 const aiMessageSchema = new mongoose.Schema({
@@ -28,5 +29,8 @@ aiMessageSchema.pre("save", async function () {
   const secs = me?.nexaDisappearAfter ?? 86400
   if (secs > 0) this.expiresAt = new Date(Date.now() + secs * 1000)
 })
+
+// Chat text is stored encrypted (utils/fieldCrypto.js)
+aiMessageSchema.plugin(encryptedFields, { model: "AiMessage", fields: ["content", "doc.text"] })
 
 export const AiMessage = mongoose.model("AiMessage", aiMessageSchema)

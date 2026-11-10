@@ -5,6 +5,7 @@ import mongoose from "mongoose"
 import userRoutes from "./routes/user.routes.js"
 import cors from "cors"
 import cookieParser from "cookie-parser"
+import helmet from "helmet"
 import messageRoutes from "./routes/message.route.js"
 import contactRoutes from "./routes/contact.route.js"
 import groupRoutes from "./routes/group.route.js"
@@ -25,19 +26,26 @@ import { startScheduler } from "./utils/scheduler.js"
 import { startAgenda } from "./utils/agenda.js"
 import { startDisappearing } from "./utils/disappear.js"
 import { startAccountJobs } from "./utils/accountData.js"
-import { app, server } from "./socket/socket.js"
+import { app, io, server } from "./socket/socket.js"
+import { checkEncryptionKey } from "./utils/fieldCrypto.js"
+import { Message } from "./models/message.model.js"
 
 dotenv.config()
 
-// Use public DNS so the MongoDB Atlas (mongodb+srv) lookup works even if the local router DNS is flaky
-dns.setServers(["8.8.8.8", "1.1.1.1"])
+// Optional: set DNS_SERVERS=8.8.8.8,1.1.1.1 when the local router's DNS can't resolve
+// MongoDB Atlas (mongodb+srv). Servers use their own DNS when it isn't set.
+const dnsServers = String(process.env.DNS_SERVERS || "").split(",").map((s) => s.trim()).filter(Boolean)
+if (dnsServers.length) dns.setServers(dnsServers)
 const port = process.env.PORT || 3000
 const mongo_uri = process.env.MONGODB_URI
 
-mongoose.connect(mongo_uri)
-  .then(() => { console.log("Connected to MongoDB"); startScheduler(); startAgenda(); startDisappearing(); startBusiness(); startEvents(); startAccountJobs() })
-  .catch((err) => console.log("MongoDB connection error:", err))
+// Chats are stored encrypted: without the key nothing can be read or saved, so stop here
+try { checkEncryptionKey() } catch (err) { console.error(err.message); process.exit(1) }
 
+// Requests come through Vercel's /api rewrite and then nginx, so the visitor's address is
+// two hops back in X-Forwarded-For. Rate limits need it. Override with TRUST_PROXY if that changes.
+app.set("trust proxy", Number(process.env.TRUST_PROXY ?? 2))
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }))
 app.use(express.json())
 app.use(cookieParser())
 
@@ -79,6 +87,36 @@ app.get("/", (req, res) => {
   res.send("Kova API is running")
 })
 
+// Start taking requests only once the database is there; without it nothing works
+try {
+  await mongoose.connect(mongo_uri)
+  console.log("Connected to MongoDB")
+} catch (err) {
+  console.error("MongoDB connection error:", err)
+  process.exit(1)
+}
+// Group calls live in memory: after a restart none are going on any more
+Message.updateMany({ "call.status": "ongoing" }, { $set: { "call.status": "ended" } }).catch(() => {})
+startScheduler(); startAgenda(); startDisappearing(); startBusiness(); startEvents(); startAccountJobs()
+
 server.listen(port, () => {
   console.log(`Server running on port ${port}`)
 })
+
+// A promise nobody handled: log it instead of crashing a server everyone is using
+process.on("unhandledRejection", (err) => console.error("Unhandled promise rejection:", err))
+// A thrown error nobody caught leaves the app in an unknown state: log it and restart (Docker restarts us)
+process.on("uncaughtException", (err) => { console.error("Uncaught exception:", err); shutdown("uncaughtException", 1) })
+
+// On stop / restart: finish requests in flight and close the database cleanly
+let stopping = false
+const shutdown = (signal, code = 0) => {
+  if (stopping) return
+  stopping = true
+  console.log(`${signal}: shutting down`)
+  setTimeout(() => process.exit(code || 1), 10_000).unref() // don't hang forever
+  // Closes the sockets and the HTTP server, then the database
+  io.close(() => mongoose.disconnect().finally(() => process.exit(code)))
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"))
+process.on("SIGINT", () => shutdown("SIGINT"))

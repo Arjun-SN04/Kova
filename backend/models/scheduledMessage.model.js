@@ -1,4 +1,5 @@
 import mongoose from "mongoose"
+import { encryptedFields } from "../utils/fieldCrypto.js"
 
 const { ObjectId } = mongoose.Schema.Types
 
@@ -23,5 +24,8 @@ const scheduledMessageSchema = new mongoose.Schema({
 }, { timestamps: true })
 
 scheduledMessageSchema.index({ status: 1, sendAt: 1 })
+
+// Chat text is stored encrypted (utils/fieldCrypto.js)
+scheduledMessageSchema.plugin(encryptedFields, { model: "ScheduledMessage", fields: ["text"] })
 
 export const ScheduledMessage = mongoose.model("ScheduledMessage", scheduledMessageSchema)

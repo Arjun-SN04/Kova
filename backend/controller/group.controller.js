@@ -1,4 +1,6 @@
 import { attachLinkPreview } from "../utils/linkPreview.js"
+import { wantsViewOnce } from "./message.controller.js"
+import { clientIdOf, pageOf } from "../utils/directChat.js"
 import crypto from "node:crypto"
 import { Group } from "../models/group.model.js"
 import { Community } from "../models/community.model.js"
@@ -65,6 +67,17 @@ export const broadcastGroup = async (groupId) => {
 
 const markRead = (groupId, userIds) =>
   Group.updateOne({ _id: groupId }, { $set: Object.fromEntries(userIds.map((id) => [`reads.${id}`, new Date()])) })
+
+// When each member last read the group, for "Seen by" on my messages: { userId: date }.
+// Like one-to-one chats, people with seen indicators off are left out, and if I turned
+// them off I don't see anyone's.
+const readsFor = async (group, viewerId) => {
+  const people = await User.find({ _id: { $in: group.members } }).select("privacy")
+  const viewer = people.find((u) => sameId(u._id, viewerId))
+  if (viewer?.privacy?.seen === false) return {}
+  const sharing = new Set(people.filter((u) => u.privacy?.seen !== false).map((u) => String(u._id)))
+  return Object.fromEntries([...(group.reads || new Map()).entries()].filter(([id]) => sharing.has(id) && !sameId(id, viewerId)))
+}
 
 // Delete a group and its messages (and their files), and tell its members
 export const destroyGroup = async (group) => {
@@ -343,10 +356,13 @@ export const getGroupMessages = async (req, res) => {
   try {
     const group = await loadMemberGroup(req, res)
     if (!group?._id) return
-    const messages = await Message.find({ groupId: group._id, hiddenFor: { $ne: req.user._id } }).sort({ createdAt: 1 })
+    // A page at a time: ?before=<id> for older ones, ?from=<id> to jump to an old one
+    const { messages, more } = await pageOf(Message, { groupId: group._id, hiddenFor: { $ne: req.user._id } }, req.query)
     const senderIds = [...new Set(messages.map((m) => String(m.senderId)))]
     const people = await User.find({ _id: { $in: senderIds } }).select(MEMBER_FIELDS)
-    res.status(200).json({ messages, people })
+    // Seen info rides along with the first page only
+    const reads = req.query.before ? undefined : await readsFor(group, req.user._id)
+    res.status(200).json({ messages, people, more, reads })
   } catch (error) {
     console.log("getGroupMessages error:", error)
     fail(res, 500, "Internal server error")
@@ -359,6 +375,13 @@ export const sendGroupMessage = async (req, res) => {
     if (!group?._id) return
     const me = req.user._id
     if ((group.announcement || group.adminsOnly) && !isAdmin(group, me)) return fail(res, 403, group.announcement ? "Only admins can post announcements" : "Only admins can send messages in this group")
+
+    // Sent again after the answer got lost: it's already saved
+    const clientId = clientIdOf(req.body)
+    if (clientId) {
+      const already = await Message.findOne({ senderId: me, clientId })
+      if (already) return res.status(200).json(already)
+    }
 
     const { message, replyTo } = req.body
     const text = (message || "").trim()
@@ -383,7 +406,7 @@ export const sendGroupMessage = async (req, res) => {
 
     // Nexa mode: every message goes to Nexa until they type "exit"
     const askNexa = req.body.askNexa === true || req.body.askNexa === "true"
-    const newMessage = await Message.create({ senderId: me, groupId: group._id, message: text, replyTo: replyTo || null, attachment, toNexa: askNexa || undefined })
+    const newMessage = await Message.create({ senderId: me, groupId: group._id, message: text, replyTo: replyTo || null, attachment, toNexa: askNexa || undefined, clientId: clientIdOf(req.body) || undefined, viewOnce: wantsViewOnce(req.body, attachment) || undefined })
     group.reads.set(String(me), new Date())
     group.updatedAt = new Date()
     await group.save()
@@ -408,8 +431,40 @@ export const markGroupRead = async (req, res) => {
     if (!group?._id) return
     await markRead(group._id, [req.user._id])
     res.status(200).json({ ok: true })
+    // Live "Seen by" for the others (not if I turned seen indicators off)
+    if (req.user.privacy?.seen !== false) emitToUsers(group.members, "groupRead", { groupId: String(group._id), userId: String(req.user._id), at: new Date() }, req.user._id)
   } catch (error) {
     console.log("markGroupRead error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// Message info for my message in a group: who has seen it and who hasn't yet
+// GET /groups/:id/messages/:messageId/info -> { seen: [{ _id, fullName, avatar, at }], waiting: [...], hidden }
+export const groupMessageInfo = async (req, res) => {
+  try {
+    const group = await loadMemberGroup(req, res)
+    if (!group?._id) return
+    const message = await Message.findOne({ _id: req.params.messageId, groupId: group._id }).select("senderId createdAt")
+    if (!message) return fail(res, 404, "Message not found")
+    if (!sameId(message.senderId, req.user._id)) return fail(res, 403, "Only for your own messages")
+    const others = group.members.filter((m) => !sameId(m, req.user._id))
+    const users = await User.find({ _id: { $in: others } }).select("fullName avatar privacy")
+    // With my seen indicators off, or theirs, it isn't shown (they're only counted)
+    const iShare = req.user.privacy?.seen !== false
+    const seen = [], waiting = []
+    let hidden = 0
+    for (const u of users) {
+      if (!iShare || u.privacy?.seen === false) { hidden++; continue }
+      const at = group.reads?.get(String(u._id))
+      const row = { _id: String(u._id), fullName: u.fullName, avatar: u.avatar }
+      if (at && at >= message.createdAt) seen.push({ ...row, at })
+      else waiting.push(row)
+    }
+    seen.sort((a, b) => b.at - a.at)
+    res.status(200).json({ seen, waiting, hidden, sentAt: message.createdAt })
+  } catch (error) {
+    console.log("groupMessageInfo error:", error)
     fail(res, 500, "Internal server error")
   }
 }

@@ -32,7 +32,6 @@ const sweepChats = async () => {
   if (!due.length) return
   const ids = due.map((m) => m._id)
   await Message.deleteMany({ _id: { $in: ids } })
-  await model("Conversation").updateMany({ messages: { $in: ids } }, { $pull: { messages: { $in: ids } } })
   // Files: only delete ones no other message still uses (forwards share files)
   const { releaseAttachments, notifyAudience } = await import("../controller/message.controller.js")
   await releaseAttachments(due.filter((m) => m.attachment).map((m) => m.attachment))

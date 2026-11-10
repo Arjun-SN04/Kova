@@ -1,7 +1,7 @@
 import User from "../models/user.model.js"
+import { directFilter } from "./directChat.js"
 import { Group } from "../models/group.model.js"
 import { Message } from "../models/message.model.js"
-import { Conversation } from "../models/conversation.model.js"
 
 const same = (a, b) => String(a) === String(b)
 
@@ -42,11 +42,8 @@ export const readChat = async (userId, chatId, { count = 30, timeZone = "UTC" } 
     const self = same(chatId, userId)
     const me = await User.findById(userId).select("contacts")
     if (!self && !me?.contacts.some((c) => same(c, chatId))) return null
-    const conv = self
-      ? await Conversation.findOne({ members: { $size: 2 }, "members.0": userId, "members.1": userId })
-      : await Conversation.findOne({ members: { $all: [userId, chatId] } })
     name = self ? "Message yourself" : (await User.findById(chatId).select("fullName"))?.fullName
-    messages = conv ? await Message.find({ _id: { $in: conv.messages.slice(-n) } }).sort({ createdAt: -1 }) : []
+    messages = await Message.find({ ...directFilter(userId, chatId), hiddenFor: { $ne: userId } }).sort({ createdAt: -1 }).limit(n)
   }
   messages.reverse()
   const ids = [...new Set(messages.map((m) => String(m.senderId)))]

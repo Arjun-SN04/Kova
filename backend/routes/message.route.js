@@ -1,14 +1,15 @@
 import express from "express"
-import { openFile, getMessage, sendMessage, deleteMessage, editMessage, deleteConversation, markSeen, getConversations, deleteMessages, deleteForMe, forwardMessages, reactToMessage } from "../controller/message.controller.js"
+import { openFile, openViewOnce, getMessage, sendMessage, deleteMessage, editMessage, deleteConversation, markSeen, getConversations, deleteMessages, deleteForMe, forwardMessages, reactToMessage } from "../controller/message.controller.js"
 import { shareLocation, stopLocation, updateLocation } from "../controller/location.controller.js"
 import secureRoute from "../middleware/secureRoute.js"
-import { closePoll, createPoll, getChatTimer, getPrefs, keepMessage, lockChat, hideChat, setHiddenWord, verifyLockCode, changeLockCode, resetLockedChats, listStarred, searchMessages, pinChat, pinMessage, setChatTimer, starMessage, votePoll } from "../controller/messageExtras.controller.js"
+import { closePoll, createPoll, getChatTimer, getPrefs, keepMessage, lockChat, hideChat, setHiddenWord, verifyLockCode, changeLockCode, resetLockedChats, listStarred, searchMessages, chatMedia, exportChat, muteChat, archiveChat, pinChat, pinMessage, setChatTimer, starMessage, votePoll } from "../controller/messageExtras.controller.js"
 import { uploadSingle } from "../config/cloudinary.js"
 
 const router = express.Router()
 router.post("/send/:id", secureRoute, uploadSingle("file"), sendMessage)
 router.get("/get/:id", secureRoute, getMessage)
 router.get("/file/:messageId", secureRoute, openFile)
+router.post("/view-once/:messageId", secureRoute, openViewOnce)
 router.delete("/delete/:messageId", secureRoute, deleteMessage)
 router.put("/edit/:messageId", secureRoute, editMessage)
 router.delete("/conversation/:id", secureRoute, deleteConversation)
@@ -22,6 +23,8 @@ router.put("/pin/:messageId", secureRoute, pinMessage)
 router.put("/star/:messageId", secureRoute, starMessage)
 router.get("/starred", secureRoute, listStarred)
 router.get("/search", secureRoute, searchMessages)
+router.get("/media/:chatId", secureRoute, chatMedia)
+router.get("/export/:chatId", secureRoute, exportChat)
 router.post("/location", secureRoute, shareLocation)
 router.put("/location/:messageId", secureRoute, updateLocation)
 router.put("/location/:messageId/stop", secureRoute, stopLocation)
@@ -30,6 +33,8 @@ router.put("/vote/:messageId", secureRoute, votePoll)
 router.put("/poll/:messageId/close", secureRoute, closePoll)
 router.get("/prefs", secureRoute, getPrefs)
 router.put("/pin-chat/:chatId", secureRoute, pinChat)
+router.put("/mute-chat/:chatId", secureRoute, muteChat)
+router.put("/archive-chat/:chatId", secureRoute, archiveChat)
 router.put("/lock-chat/:chatId", secureRoute, lockChat)
 router.put("/hide-chat/:chatId", secureRoute, hideChat)
 router.put("/hidden-word", secureRoute, setHiddenWord)

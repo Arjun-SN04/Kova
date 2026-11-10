@@ -1,4 +1,6 @@
+import mongoose from "mongoose"
 import crypto from "node:crypto"
+import { directFilter, getOrCreateConversation } from "../utils/directChat.js"
 import bcrypt from "bcryptjs"
 import { Message } from "../models/message.model.js"
 import { Conversation } from "../models/conversation.model.js"
@@ -109,6 +111,7 @@ export const listStarred = async (req, res) => {
 
 // ── Search every chat I'm in (newest first). Locked and hidden chats are left out. ──
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+const SEARCH_DEPTH = 5000
 export const searchMessages = async (req, res) => {
   try {
     const q = String(req.query.q || "").trim().slice(0, 100)
@@ -119,15 +122,28 @@ export const searchMessages = async (req, res) => {
     const groups = await Group.find({ members: meId }).select("name avatar announcement")
     const groupIds = groups.filter((g) => !skip.has(String(g._id))).map((g) => g._id)
     const re = new RegExp(escapeRe(q), "i")
-    const found = await Message.find({
+    // ?chat=<id>[&group=1]: only that chat (search inside an open chat, which may be locked)
+    const chat = String(req.query.chat || "")
+    let where = { $or: [{ groupId: { $in: groupIds } }, { groupId: null, senderId: meId }, { groupId: null, receiverId: meId }] }
+    if (chat) {
+      if (!mongoose.isValidObjectId(chat)) return res.json({ items: [] })
+      if (req.query.group === "1") {
+        if (!groups.some((g) => same(g._id, chat))) return res.json({ items: [] })
+        where = { groupId: new mongoose.Types.ObjectId(chat) }
+      } else where = directFilter(meId, chat)
+      skip.clear()
+    }
+    // Text is stored encrypted, so the database can't match it: load my recent messages
+    // (they decrypt as they load) and match here. Covers the newest SEARCH_DEPTH messages.
+    const recent = await Message.find({
       $and: [
-        { $or: [{ groupId: { $in: groupIds } }, { groupId: null, senderId: meId }, { groupId: null, receiverId: meId }] },
-        { $or: [{ message: re }, { transcript: re }, { "attachment.name": re }] },
+        where,
         { $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] },
       ],
       hiddenFor: { $ne: meId },
       call: null,
-    }).sort({ createdAt: -1 }).limit(120).select("message transcript attachment senderId receiverId groupId createdAt poll")
+    }).sort({ createdAt: -1 }).limit(SEARCH_DEPTH).select("message transcript attachment senderId receiverId groupId createdAt poll")
+    const found = recent.filter((m) => re.test(m.message || "") || re.test(m.transcript || "") || re.test(m.attachment?.name || "")).slice(0, 120)
     const otherOf = (m) => (same(m.senderId, meId) ? m.receiverId : m.senderId)
     const visible = found.filter((m) => (m.groupId ? true : !skip.has(String(otherOf(m))))).slice(0, 40)
     const peopleIds = [...new Set(visible.flatMap((m) => [m.senderId, m.receiverId]).filter(Boolean).map(String))]
@@ -150,6 +166,96 @@ export const searchMessages = async (req, res) => {
   } catch (error) {
     console.log("searchMessages error:", error)
     fail(res, 500, "Internal server error")
+  }
+}
+
+// ── Media, links and docs of one chat (for the info panel; the chat itself loads page by page) ──
+// GET /message/media/:chatId[?group=1] -> { messages } newest first
+const URL_IN_TEXT = /https?:\/\/\S/i
+export const chatMedia = async (req, res) => {
+  try {
+    const meId = req.user._id
+    const { chatId } = req.params
+    if (!mongoose.isValidObjectId(chatId)) return fail(res, 400, "Invalid chat")
+    let where
+    if (req.query.group === "1") {
+      if (!(await Group.exists({ _id: chatId, members: meId }))) return fail(res, 404, "Group not found")
+      where = { groupId: new mongoose.Types.ObjectId(chatId) }
+    } else where = directFilter(meId, chatId)
+    const base = { $and: [where, { hiddenFor: { $ne: meId } }, { call: null }] }
+    const fields = "message attachment linkPreview senderId receiverId groupId botChat createdAt viewOnce"
+    // Files come straight from the database. Links are inside encrypted text, so look
+    // through recent messages here (they decrypt as they load).
+    const [files, recent] = await Promise.all([
+      Message.find({ ...base, attachment: { $ne: null }, viewOnce: { $ne: true } }).sort({ createdAt: -1 }).limit(1000).select(fields),
+      Message.find({ ...base, attachment: null }).sort({ createdAt: -1 }).limit(3000).select(fields),
+    ])
+    const links = recent.filter((m) => m.linkPreview || URL_IN_TEXT.test(m.message || ""))
+    const messages = [...files, ...links].sort((a, b) => b.createdAt - a.createdAt)
+    res.json({ messages })
+  } catch (error) {
+    console.log("chatMedia error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// ── Export one chat as a text file ──
+// GET /message/export/:chatId[?group=1] -> "Chat with Priya.txt"
+const zoneOf = (req) => { try { const tz = String(req.headers["x-time-zone"] || req.query.tz || "UTC"); new Intl.DateTimeFormat("en-US", { timeZone: tz }); return tz } catch { return "UTC" } }
+const EXPORT_MAX = 50_000
+export const exportChat = async (req, res) => {
+  try {
+    const meId = req.user._id
+    const { chatId } = req.params
+    if (!mongoose.isValidObjectId(chatId)) return fail(res, 400, "Invalid chat")
+    let where, title
+    const names = new Map([[String(meId), req.user.fullName]])
+    if (req.query.group === "1") {
+      const g = await Group.findOne({ _id: chatId, members: meId }).select("name")
+      if (!g) return fail(res, 404, "Group not found")
+      where = { groupId: g._id }
+      title = g.name
+    } else {
+      const self = same(chatId, meId)
+      const other = self ? null : await User.findById(chatId).select("fullName")
+      if (!self && (!other || !req.user.contacts?.some((c) => same(c, chatId)))) return fail(res, 404, "Chat not found")
+      where = directFilter(meId, chatId)
+      title = self ? "Message yourself" : other.fullName
+      if (other) names.set(String(other._id), other.fullName)
+    }
+    const timeZone = zoneOf(req)
+    const fmt = new Intl.DateTimeFormat("en-GB", { timeZone, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+    const safeName = title.replace(/[^\p{L}\p{N} ._-]/gu, "").trim().slice(0, 60) || "chat"
+    res.setHeader("Content-Type", "text/plain; charset=utf-8")
+    res.setHeader("Content-Disposition", `attachment; filename="Kova chat - ${safeName.replace(/"/g, "")}.txt"; filename*=UTF-8''${encodeURIComponent(`Kova chat - ${safeName}.txt`)}`)
+    res.setHeader("Cache-Control", "no-store")
+    res.write(`Kova chat: ${title}\nExported ${fmt.format(new Date())} (${timeZone})\n\n`)
+    const nameOf = async (id) => {
+      const key = String(id)
+      if (!names.has(key)) names.set(key, (await User.findById(key).select("fullName"))?.fullName || "Someone")
+      return names.get(key)
+    }
+    let count = 0
+    const cursor = Message.find({ ...where, hiddenFor: { $ne: meId } }).sort({ createdAt: 1 }).limit(EXPORT_MAX).cursor()
+    for await (const m of cursor) {
+      const who = await nameOf(m.senderId)
+      const parts = []
+      if (m.call) parts.push(`[${m.call.type || "voice"} call${m.call.duration ? `, ${Math.round(m.call.duration / 60)} min` : ""}]`)
+      else if (m.viewOnce) parts.push(`[view-once ${m.attachment?.kind === "video" ? "video" : "photo"}]`)
+      else if (m.attachment) parts.push(`[${m.attachment.kind || "file"}${m.attachment.name ? `: ${m.attachment.name}` : ""}] ${m.attachment.url || ""}`.trim())
+      if (m.poll) parts.push(`[poll] ${m.poll.question}: ${m.poll.options.map((o) => `${o.text} (${o.votes.length})`).join(", ")}`)
+      else if (m.location) parts.push(`[location] https://maps.google.com/?q=${m.location.lat},${m.location.lng}`)
+      if (m.message && !m.call && !m.poll) parts.push(m.message)
+      if (!parts.length) continue
+      res.write(`[${fmt.format(m.createdAt)}] ${who}: ${parts.join(" ")}\n`)
+      count++
+    }
+    if (count >= EXPORT_MAX) res.write(`\n(Only the first ${EXPORT_MAX} messages are included.)\n`)
+    res.end()
+  } catch (error) {
+    console.log("exportChat error:", error)
+    if (!res.headersSent) fail(res, 500, "Internal server error")
+    else res.end()
   }
 }
 
@@ -177,13 +283,8 @@ export const createPollMessage = async (user, { chatId, isGroup, question, optio
   const me = await User.findById(user._id).select("contacts")
   const self = same(chatId, user._id)
   if (!self && !me.contacts.some((c) => same(c, chatId))) throw Object.assign(new Error("You can only message your contacts"), { status: 403 })
-  let conversation = self
-    ? await Conversation.findOne({ members: { $size: 2 }, "members.0": user._id, "members.1": user._id })
-    : await Conversation.findOne({ members: { $all: [user._id, chatId] } })
-  if (!conversation) conversation = await Conversation.create({ members: [user._id, chatId] })
+  await getOrCreateConversation(user._id, chatId)
   const msg = await Message.create({ senderId: user._id, receiverId: chatId, message: `📊 ${q}`, poll, seen: self })
-  conversation.messages.push(msg._id)
-  await conversation.save()
   emitToUsers([user._id, chatId], "newMessage", msg)
   if (!self) sendPush([chatId], { title: user.fullName || "Kova", body: `📊 ${q}`, tag: `chat-${user._id}` }).catch(() => {})
   return msg
@@ -245,8 +346,8 @@ export const closePoll = async (req, res) => {
 const MAX_PINNED_CHATS = 5
 export const getPrefs = async (req, res) => {
   try {
-    const me = await User.findById(req.user._id).select("pinnedChats starred lockedChats lockCode lockCodeKind wallpapers hiddenChats hiddenWordHash securityQuestion")
-    res.json({ pinnedChats: me.pinnedChats, starred: me.starred.map(String), lockedChats: me.lockedChats, hasLockCode: !!me.lockCode, lockCodeKind: me.lockCodeKind || "numeric", securityQuestion: me.securityQuestion || null, hiddenChats: me.hiddenChats, hiddenWordHash: me.hiddenWordHash, wallpapers: me.wallpapers || { global: null, chats: {} } })
+    const me = await User.findById(req.user._id).select("pinnedChats starred lockedChats lockCode lockCodeKind wallpapers hiddenChats hiddenWordHash securityQuestion archivedChats mutedChats")
+    res.json({ archivedChats: me.archivedChats || [], mutedChats: activeMutes(me), pinnedChats: me.pinnedChats, starred: me.starred.map(String), lockedChats: me.lockedChats, hasLockCode: !!me.lockCode, lockCodeKind: me.lockCodeKind || "numeric", securityQuestion: me.securityQuestion || null, hiddenChats: me.hiddenChats, hiddenWordHash: me.hiddenWordHash, wallpapers: me.wallpapers || { global: null, chats: {} } })
   } catch (error) {
     console.log("getPrefs error:", error)
     fail(res, 500, "Internal server error")
@@ -271,6 +372,62 @@ export const pinChat = async (req, res) => {
     res.json({ pinnedChats: me.pinnedChats })
   } catch (error) {
     console.log("pinChat error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// ── Mute and archive ──
+// { chatId: until (ISO date) or null for "always" }, without mutes that ran out
+const activeMutes = (me) => Object.fromEntries((me.mutedChats || [])
+  .filter((m) => !m.until || m.until > new Date())
+  .map((m) => [m.chat, m.until ? m.until.toISOString() : null]))
+
+const isMyChat = async (me, chatId) =>
+  same(chatId, me._id) || (me.contacts || []).some((c) => same(c, chatId)) || !!(await Group.exists({ _id: chatId, members: me._id }))
+
+const MUTE_FOR = { "8h": 8 * 3600_000, "1w": 7 * 24 * 3600_000, always: null }
+
+// PUT /message/mute-chat/:chatId { duration: "8h" | "1w" | "always" | "off" }
+export const muteChat = async (req, res) => {
+  try {
+    const chatId = String(req.params.chatId)
+    const { duration } = req.body
+    if (duration !== "off" && !(duration in MUTE_FOR)) return fail(res, 400, "Choose 8 hours, 1 week, always or off")
+    const me = await User.findById(req.user._id).select("mutedChats contacts")
+    if (!(await isMyChat(me, chatId))) return fail(res, 404, "Chat not found")
+    me.mutedChats = (me.mutedChats || []).filter((m) => m.chat !== chatId && (!m.until || m.until > new Date()))
+    if (duration !== "off") me.mutedChats.push({ chat: chatId, until: MUTE_FOR[duration] ? new Date(Date.now() + MUTE_FOR[duration]) : null })
+    await me.save()
+    const mutedChats = activeMutes(me)
+    emitToUsers([me._id], "prefsUpdated", { mutedChats })
+    res.json({ mutedChats })
+  } catch (error) {
+    console.log("muteChat error:", error)
+    fail(res, 500, "Internal server error")
+  }
+}
+
+// PUT /message/archive-chat/:chatId { archived } — also takes { ids: [...] } for several at once
+export const archiveChat = async (req, res) => {
+  try {
+    const ids = (Array.isArray(req.body.ids) ? req.body.ids : [req.params.chatId]).map(String).slice(0, 200)
+    const archive = req.body.archived !== false
+    const me = await User.findById(req.user._id).select("archivedChats pinnedChats contacts")
+    const set = new Set(me.archivedChats || [])
+    for (const id of ids) {
+      if (archive) {
+        if (!(await isMyChat(me, id))) continue
+        set.add(id)
+      } else set.delete(id)
+    }
+    me.archivedChats = [...set]
+    // An archived chat isn't pinned in the main list any more
+    if (archive) me.pinnedChats = me.pinnedChats.filter((id) => !set.has(id))
+    await me.save()
+    emitToUsers([me._id], "prefsUpdated", { archivedChats: me.archivedChats, pinnedChats: me.pinnedChats })
+    res.json({ archivedChats: me.archivedChats, pinnedChats: me.pinnedChats })
+  } catch (error) {
+    console.log("archiveChat error:", error)
     fail(res, 500, "Internal server error")
   }
 }

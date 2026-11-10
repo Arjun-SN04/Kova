@@ -30,7 +30,7 @@ const CONVERSATIONS = [
       { from: 1, text: "Hey Arjun! All good, just finished a project. You?" },
       { from: 0, text: "Same here, wrapped up the NexChat app deployment today 🚀" },
       { from: 1, text: "Wow that's awesome! Is it live?" },
-      { from: 0, text: "Yep! Running on Vercel + Render. Works like a charm ✅" },
+      { from: 0, text: "Yep! Running on Vercel + Oracle Cloud. Works like a charm ✅" },
       { from: 1, text: "Send me the link, I wanna check it out!" },
       { from: 0, text: "kova-im.vercel.app — try logging in!" },
       { from: 1, text: "Looks super clean 😍 Love the dark mode" },

@@ -1,6 +1,6 @@
 import { Call } from "../models/call.model.js"
+import { getOrCreateConversation } from "./directChat.js"
 import { Message } from "../models/message.model.js"
-import { Conversation } from "../models/conversation.model.js"
 import { emitToUsers } from "./notify.js"
 
 const LABELS = {
@@ -25,10 +25,7 @@ export const logCall = async ({ caller, callee, type, status, startedAt, answere
       // A missed call is unread for the person who missed it; anything else isn't
       seen: status !== "missed",
     })
-    let conversation = await Conversation.findOne({ members: { $all: [caller, callee] } })
-    if (!conversation) conversation = await Conversation.create({ members: [caller, callee] })
-    conversation.messages.push(message._id)
-    await conversation.save()
+    await getOrCreateConversation(caller, callee)
 
     emitToUsers([caller, callee], "newMessage", message)
     emitToUsers([caller, callee], "callLogged", call)

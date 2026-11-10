@@ -1,5 +1,5 @@
 import { Group } from "../models/group.model.js"
-import { Conversation } from "../models/conversation.model.js"
+import { findConversation } from "./directChat.js"
 import User from "../models/user.model.js"
 import { Message } from "../models/message.model.js"
 import { getNexaBot } from "./nexaBot.js"
@@ -327,10 +327,7 @@ ${chat?.lines.join("\n") || "(none)"}`, `${sender.fullName}: ${question}`, sourc
       reply = "- Sorry, I can't answer right now. Try again in a minute."
     }
 
-    let conversation = self
-      ? await Conversation.findOne({ members: { $size: 2 }, "members.0": me, "members.1": me })
-      : await Conversation.findOne({ members: { $all: [me, other] } })
-    if (!conversation) return
+    if (!(await findConversation(me, other))) return
     const msg = await Message.create({
       senderId: bot._id,
       receiverId: me,
@@ -341,8 +338,6 @@ ${chat?.lines.join("\n") || "(none)"}`, `${sender.fullName}: ${question}`, sourc
       attachment,
       seen: true,
     })
-    conversation.messages.push(msg._id)
-    await conversation.save()
     emitToUsers(people, "newMessage", msg)
   } finally {
     typing("stopTyping")
